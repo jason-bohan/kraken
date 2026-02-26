@@ -36,7 +36,7 @@ from kraken_connection import (
 PAIR           = "SOLUSD"      # SOL trading pair on Kraken
 ASSET          = "SOL"         # base asset name in balance
 QUOTE          = "USDT"        # quote currency (change to ZUSD if using USD)
-PROFIT_PCT     = 0.10          # 10% profit target — realistic for SOL volatility, covers fees
+PROFIT_PCT     = 0.05          # 5% profit target — realistic for SOL volatility, covers fees
 STOP_PCT       = 0.40          # 40% stop loss — SOL historically volatile, give it room
 RSI_PERIOD     = 14            # RSI lookback periods
 RSI_OVERSOLD   = 40            # enter when RSI below this
