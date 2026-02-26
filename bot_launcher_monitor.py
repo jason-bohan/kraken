@@ -163,8 +163,50 @@ def get_market_data(symbol: str, config: dict) -> dict:
         print(f"  ⚠️ Error getting {symbol} data: {e}")
         return None
 
+def get_portfolio_value() -> dict:
+    """Calculate total portfolio value in USD."""
+    try:
+        balances = get_balance()
+        portfolio_value = 0.0
+        holdings = {}
+        
+        # Get current prices for all assets
+        prices = {}
+        for symbol, config in ASSETS.items():
+            ticker = get_ticker(config["pair"])
+            if ticker:
+                prices[symbol] = float(ticker.get("c", [0])[0])
+            else:
+                prices[symbol] = 0.0
+        
+        # Calculate USD value of each asset
+        for symbol, config in ASSETS.items():
+            asset_balance = float(balances.get(config["asset"], 0))
+            usd_balance = float(balances.get(config["quote"], 0))
+            
+            asset_value_usd = asset_balance * prices.get(symbol, 0)
+            total_usd_for_asset = usd_balance + asset_value_usd
+            
+            holdings[symbol] = {
+                "usd_balance": usd_balance,
+                "asset_balance": asset_balance,
+                "asset_value_usd": asset_value_usd,
+                "total_usd": total_usd_for_asset,
+                "price": prices.get(symbol, 0)
+            }
+            
+            portfolio_value += total_usd_for_asset
+        
+        return {
+            "total_usd": portfolio_value,
+            "holdings": holdings
+        }
+        
+    except Exception as e:
+        print(f"  ⚠️ Error calculating portfolio value: {e}")
+        return {"total_usd": 0.0, "holdings": {}}
+
 def check_balance_requirements(config: dict) -> tuple[bool, dict]:
-    """Check if we have sufficient balance to trade."""
     try:
         balances = get_balance()
         usd_balance = float(balances.get(config["quote"], 0))
@@ -322,8 +364,22 @@ def monitor(dry_run: bool = False):
             ts = datetime.now().strftime("%H:%M:%S")
             print(f"\n[{ts}] Cycle {cycle} - Checking conditions...")
             
+            # Get portfolio value once per cycle
+            portfolio = get_portfolio_value()
+            print(f"\n💼 Portfolio Total: ${portfolio['total_usd']:.2f} USD")
+            
             for symbol, config in ASSETS.items():
                 print(f"\n📊 {symbol}:")
+                
+                # Use portfolio data for balance info
+                holding = portfolio['holdings'].get(symbol, {})
+                usd_balance = holding.get('usd_balance', 0)
+                asset_balance = holding.get('asset_balance', 0)
+                asset_value_usd = holding.get('asset_value_usd', 0)
+                total_for_symbol = holding.get('total_usd', 0)
+                
+                # Show detailed balance info
+                print(f"  💰 Balance: ${usd_balance:.2f} USD + {asset_balance:.6f} {symbol} (${asset_value_usd:.2f}) = ${total_for_symbol:.2f}")
                 
                 # Check market data
                 market_data = get_market_data(symbol, config)
@@ -333,8 +389,9 @@ def monitor(dry_run: bool = False):
                 
                 # Check balance requirements
                 can_trade, balance_info = check_balance_requirements(config)
+                
                 if not can_trade:
-                    print(f"  💰 Insufficient balance: ${balance_info.get('usd_balance', 0):.2f} USD, {balance_info.get('asset_balance', 0):.6f} {symbol}")
+                    print(f"  ⚠️ Insufficient for trading (min: ${config['min_usd']})")
                     continue
                 
                 # Check entry conditions
