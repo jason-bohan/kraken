@@ -211,24 +211,31 @@ def get_trade_size(price: float, dry_run: bool) -> float:
     if available < MAX_TRADE_USD:
         available = available * 0.5  # Use half if low
     
-    if available < 1.0:
+    # Calculate volume in SOL
+    volume = round(available / price, 6)
+    
+    # Enforce Kraken's 0.02 SOL minimum
+    if volume < MIN_SOL_VOLUME:
         return 0.0
     
-    return round(available / price, 6)
+    return volume
 
 
-def place_trade(pair: str, side: str, volume: float, dry_run: bool) -> bool:
-    """Place a trade."""
+def place_trade(pair: str, side: str, volume: float, price: float, dry_run: bool) -> bool:
+    """Place a trade with both volume and cost."""
     if dry_run:
-        print(f"  [DRY] {'BUY' if side == 'buy' else 'SELL'} {volume} {pair}")
+        est_cost = volume * price
+        print(f"  [DRY] {'BUY' if side == 'buy' else 'SELL'} {volume} {pair} (~${est_cost:.2f})")
         return True
     
     if not KRANKEN_AVAILABLE:
         return False
     
-    ok, result = place_order(pair, side, "market", volume)
+    # Send both volume AND cost for Kraken market orders
+    cost_usd = round(volume * price, 2)
+    ok, result = place_order(pair, side, "market", volume=volume, cost=cost_usd)
     if ok:
-        tg(f"📊 *Correlation trade* {side.upper()} {volume} {pair}")
+        tg(f"📊 *Correlation trade* {side.upper()} {volume} {pair} (~${cost_usd:.2f})")
     return ok
 
 
@@ -286,13 +293,13 @@ def run(dry_run: bool = False):
                     # Take profit
                     if pnl_pct >= PROFIT_PCT:
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.1f}%")
-                        place_trade(pair, "sell" if side == "buy" else "buy", volume, dry_run)
+                        place_trade(pair, "sell" if side == "buy" else "buy", volume, current_price, dry_run)
                         position = None
                     
                     # Stop loss
                     elif pnl_pct <= -STOP_PCT:
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.1f}%")
-                        place_trade(pair, "sell" if side == "buy" else "buy", volume, dry_run)
+                        place_trade(pair, "sell" if side == "buy" else "buy", volume, current_price, dry_run)
                         position = None
             
             # Check for new signals
@@ -307,7 +314,7 @@ def run(dry_run: bool = False):
                         
                         if volume > 0:
                             print(f"  🎯 CORRELATION BUY: {pair} RSI={rsi:.0f} @ ${price:.4f}")
-                            ok = place_trade(pair, "buy", volume, dry_run)
+                            ok = place_trade(pair, "buy", volume, price, dry_run)
                             if ok or dry_run:
                                 position = {
                                     "pair": pair,
