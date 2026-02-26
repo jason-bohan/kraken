@@ -23,22 +23,20 @@ from kraken_connection import (
 )
 
 # ─────────────────────────────────────────────
-# SETTINGS
+# SETTINGS — OPTIMIZED FOR WIN RATE
 # ─────────────────────────────────────────────
 PAIR         = "SOLUSDT"       # SOL trading pair on Kraken
 ASSET        = "SOL"           # asset name in balance
 QUOTE        = "USDT"          # quote currency (change to ZUSD if using USD)
-PROFIT_PCT   = 0.01            # 1% profit target
-STOP_PCT     = 0.40            # 40% stop loss — cut if catastrophic drop
+PROFIT_PCT   = 0.05            # 5% profit target (room for fees)
+STOP_PCT     = 0.15            # 15% stop loss — cut early
 RSI_PERIOD   = 14              # RSI lookback
-RSI_OVERSOLD = 40              # enter when RSI below this (relaxed for frequent trades)
-DIP_MIN      = 0.20            # enter only when dip is AT LEAST 20% from recent high
-DIP_MAX      = 0.30            # stop entering if dip exceeds 30% (too risky, could be crash)
-MIN_TRADE    = 10.0            # minimum USD value per trade (Kraken min ~$10)
-RESERVE_USD  = 2.0             # keep this much USD in reserve, don't trade it all
-CHECK_SECS   = 60              # seconds between scans
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT  = os.getenv("TELEGRAM_CHAT_ID", "")
+RSI_OVERSOLD = 30              # enter when RSI below 30 (stricter)
+DIP_MIN      = 0.10            # enter only when dip is AT LEAST 10% from recent high
+DIP_MAX      = 0.18            # stop entering if dip exceeds 18% (avoid crashes)
+MIN_TRADE    = 10.0            # minimum USD value per trade
+RESERVE_USD  = 5.0             # keep $5 USD reserve
+CHECK_SECS   = 120             # seconds between scans (slower = fewer false signals)
 
 
 # ─────────────────────────────────────────────
@@ -153,8 +151,7 @@ def run(dry_run: bool = False):
     print(f"  SOL Swing Bot — Kraken  {mode}")
     print(f"  Profit target : +{PROFIT_PCT*100:.1f}%")
     print(f"  Stop loss     : -{STOP_PCT*100:.1f}%")
-    print(f"  RSI entry     : below {RSI_OVERSOLD}")
-    print(f"  Dip entry     : -20% to -30% from recent high")
+    print(f"  RSI entry     : below {RSI_OVERSOLD} AND dip 10-18%")
     print(f"  Check every   : {CHECK_SECS}s")
     print("=" * 55)
     tg(f"🤖 *SOL Swing Bot started* ({mode})")
@@ -225,11 +222,9 @@ def run(dry_run: bool = False):
                 rsi_signal = rsi <= RSI_OVERSOLD
                 dip_signal = DIP_MIN <= dip_from_high <= DIP_MAX
 
-                if rsi_signal or dip_signal:
-                    reason = []
-                    if rsi_signal: reason.append(f"RSI {rsi:.1f}")
-                    if dip_signal: reason.append(f"confirmed dip -{dip_from_high*100:.1f}% (in 20-30% zone)")
-                    print(f"  🎯 ENTRY signal: {', '.join(reason)}")
+                # STRICTER ENTRY: Both RSI AND dip must confirm (AND, not OR)
+                if rsi_signal and dip_signal:
+                    print(f"  🎯 ENTRY signal: RSI {rsi:.1f} + dip -{dip_from_high*100:.1f}%")
 
                     volume = get_trade_size(price, dry_run)
                     if volume <= 0:
@@ -257,7 +252,7 @@ def run(dry_run: bool = False):
                             print(f"  [DRY] Would buy {volume} SOL @ ${price:.2f}")
                             tg(f"🔵 *DRY BUY* SOL {volume} @ ${price:.2f}")
                 else:
-                    print(f"  💤 No signal (RSI {rsi:.1f} > {RSI_OVERSOLD}, dip {dip_from_high*100:.1f}% not in 20-30% zone)")
+                    print(f"  💤 No signal (need RSI < {RSI_OVERSOLD} AND dip 10-18%)")
 
             # P&L summary every 10 cycles
             if cycle % 10 == 0:
