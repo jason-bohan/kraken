@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
 SOL Swing Bot — Kraken
-Strategy: Buy SOL dips using RSI + price drop, sell on 1% gain, cut at 40% loss.
-Entry zone: 20-30% dip from recent high (confirmed pullback, not a crash).
-Runs continuously, checks every 60 seconds.
+Strategy: Two modes working together:
+  1. SOL MODE: If you already hold SOL, treat it as an open position.
+               Sell when +1% profit from session start price, buy back on 20-30% dip.
+  2. USD MODE: If you have USDT/USD, buy SOL on dips, sell on +1% profit.
+
+Entry zone: RSI below 40 OR 20-30% dip from recent high.
+Stop loss: -40% from entry.
 
 Usage:
     python3 sol_swing_bot.py          # live trading
@@ -18,10 +22,9 @@ NOTE: If API fields change, temporarily add to get_sol_data():
 """
 
 import os
-import sys
 import time
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 from kraken_connection import (
     get_balance, get_ticker, get_ohlc,
     place_order, get_open_orders, cancel_order
@@ -30,18 +33,20 @@ from kraken_connection import (
 # ─────────────────────────────────────────────
 # SETTINGS
 # ─────────────────────────────────────────────
-PAIR         = "SOLUSDT"       # SOL trading pair on Kraken
-ASSET        = "SOL"           # asset name in balance
-QUOTE        = "USDT"          # quote currency (change to ZUSD if using USD)
-PROFIT_PCT   = 0.01            # 1% profit target — frequent small wins
-STOP_PCT     = 0.40            # 40% stop loss — SOL historically volatile, give it room
-RSI_PERIOD   = 14              # RSI lookback periods
-RSI_OVERSOLD = 40              # enter when RSI below this
-DIP_MIN      = 0.20            # only enter when SOL is AT LEAST 20% below recent high
-DIP_MAX      = 0.30            # skip entry if drop exceeds 30% (possible crash, not bounce)
-MIN_TRADE    = 10.0            # minimum USD value per trade (Kraken minimum ~$10)
-RESERVE_USD  = 2.0             # keep this much USD in reserve, don't trade it all
-CHECK_SECS   = 60              # seconds between scans
+PAIR           = "SOLUSDT"     # SOL trading pair on Kraken
+ASSET          = "SOL"         # base asset name in balance
+QUOTE          = "USDT"        # quote currency (change to ZUSD if using USD)
+PROFIT_PCT     = 0.01          # 1% profit target — frequent small wins
+STOP_PCT       = 0.40          # 40% stop loss — SOL historically volatile, give it room
+RSI_PERIOD     = 14            # RSI lookback periods
+RSI_OVERSOLD   = 40            # enter when RSI below this
+DIP_MIN        = 0.20          # only enter when SOL is AT LEAST 20% below recent high
+DIP_MAX        = 0.30          # skip entry if drop exceeds 30% (possible crash, not bounce)
+MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
+MIN_TRADE_SOL  = 0.05          # minimum SOL to sell per trade
+RESERVE_USD    = 2.0           # keep this much USD in reserve
+RESERVE_SOL    = 0.05          # keep this much SOL in reserve (don't sell everything)
+CHECK_SECS     = 60            # seconds between scans
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT  = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -70,11 +75,10 @@ def calculate_rsi(closes: list, period: int = 14) -> float:
     """
     RSI from a list of closing prices.
     Returns float 0-100. Below 30 = oversold, above 70 = overbought.
-
     NOTE: To debug, print(closes[-period:]) to see recent prices used.
     """
     if len(closes) < period + 1:
-        return 50.0  # neutral if not enough data
+        return 50.0
 
     gains, losses = [], []
     for i in range(1, period + 1):
@@ -98,11 +102,10 @@ def calculate_rsi(closes: list, period: int = 14) -> float:
 
 def get_sol_data() -> tuple:
     """
-    Fetch current SOL price and RSI.
+    Fetch current SOL price, RSI, and recent high.
     Returns (price: float, rsi: float, recent_high: float)
 
-    NOTE: Uses 5-min candles. To switch timeframe change interval=5 below.
-    To rediscover candle fields: print(get_ohlc("SOLUSDT", 5)[0])
+    NOTE: Uses 5-min candles. To rediscover fields: print(get_ohlc("SOLUSDT", 5)[0])
     Candle format: [time, open, high, low, close, vwap, volume, count]
     """
     ticker = get_ticker(PAIR)
@@ -111,7 +114,6 @@ def get_sol_data() -> tuple:
 
     price = float(ticker.get("a", [0])[0])  # ask price
 
-    # OHLC for RSI (5-min candles)
     candles = get_ohlc(PAIR, interval=5)
     if not candles or len(candles) < RSI_PERIOD + 5:
         return price, 50.0, price
@@ -120,7 +122,7 @@ def get_sol_data() -> tuple:
     highs  = [float(c[2]) for c in candles]  # index 2 = high
 
     rsi = calculate_rsi(closes, RSI_PERIOD)
-    recent_high = max(highs[-20:])  # highest price in last 20 candles (~100 min)
+    recent_high = max(highs[-20:])  # highest in last 20 candles (~100 min)
 
     return price, rsi, recent_high
 
@@ -128,24 +130,34 @@ def get_sol_data() -> tuple:
 # ─────────────────────────────────────────────
 # TRADE SIZING
 # ─────────────────────────────────────────────
-def get_trade_size(price: float, dry_run: bool) -> float:
-    """
-    Calculate how much SOL to buy based on available USD.
-    Uses all available USD minus reserve.
-    Returns volume in SOL (rounded to 4 decimal places — Kraken minimum).
-    """
+def get_buy_size(price: float, dry_run: bool) -> float:
+    """How much SOL to BUY with available USD."""
     if dry_run:
-        return round(MIN_TRADE / price, 4)
+        return round(MIN_TRADE_USD / price, 4)
 
     balances = get_balance()
     usd = float(balances.get(QUOTE, balances.get("ZUSD", 0)))
     available = max(0, usd - RESERVE_USD)
 
-    if available < MIN_TRADE:
+    if available < MIN_TRADE_USD:
         return 0.0
 
-    volume = available / price
-    return round(volume, 4)
+    return round(available / price, 4)
+
+
+def get_sell_size(dry_run: bool) -> float:
+    """How much SOL to SELL from existing holdings."""
+    if dry_run:
+        return 0.05  # simulate selling 0.05 SOL
+
+    balances = get_balance()
+    sol = float(balances.get(ASSET, 0))
+    available = max(0, sol - RESERVE_SOL)
+
+    if available < MIN_TRADE_SOL:
+        return 0.0
+
+    return round(available, 4)
 
 
 # ─────────────────────────────────────────────
@@ -163,8 +175,26 @@ def run(dry_run: bool = False):
     print("=" * 55)
     tg(f"🤖 *SOL Swing Bot started* ({mode})")
 
-    position = None  # holds entry_price, volume, entry_time when in a trade
+    # position tracks an active trade: entry_price, volume, mode ("buy" or "sell")
+    position = None
     cycle    = 0
+
+    # On startup, check if we already hold SOL and treat it as an open position
+    if not dry_run:
+        balances = get_balance()
+        sol_held = float(balances.get(ASSET, 0))
+        if sol_held > RESERVE_SOL:
+            ticker = get_ticker(PAIR)
+            start_price = float(ticker.get("a", [0])[0]) if ticker else 0
+            if start_price > 0:
+                position = {
+                    "entry_price": start_price,
+                    "volume": round(sol_held - RESERVE_SOL, 4),
+                    "entry_time": datetime.now().strftime("%H:%M:%S"),
+                    "mode": "sell"   # we're holding SOL, looking to sell it
+                }
+                print(f"  📦 Found existing SOL: {sol_held} — tracking as open position @ ${start_price:.2f}")
+                tg(f"📦 *Existing SOL detected* {sol_held} @ ${start_price:.2f} — watching to sell")
 
     while True:
         try:
@@ -183,73 +213,149 @@ def run(dry_run: bool = False):
 
             # ── MANAGE OPEN POSITION ──────────────────────
             if position:
-                entry   = position["entry_price"]
-                volume  = position["volume"]
-                pnl_pct = (price - entry) / entry
-                pnl_usd = (price - entry) * volume
+                entry    = position["entry_price"]
+                volume   = position["volume"]
+                pos_mode = position["mode"]
+                pnl_pct  = (price - entry) / entry
+                pnl_usd  = (price - entry) * volume
 
-                print(f"  📦 Holding {volume} SOL | Entry ${entry:.2f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.2f})")
+                print(f"  📦 [{pos_mode.upper()}] {volume} SOL | Entry ${entry:.2f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.2f})")
 
-                # Take profit at +1%
-                if pnl_pct >= PROFIT_PCT:
-                    print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
-                    if not dry_run:
-                        ok, result = place_order(PAIR, "sell", "market", volume)
-                        if not ok:
-                            print(f"  ❌ Sell failed: {result}")
+                # ── SELL MODE: holding SOL, waiting for price to rise ──
+                if pos_mode == "sell":
+
+                    # Take profit: price rose +1% — sell SOL for USDT
+                    if pnl_pct >= PROFIT_PCT:
+                        print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
+                        if not dry_run:
+                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            if not ok:
+                                print(f"  ❌ Sell failed: {result}")
+                            else:
+                                tg(f"💰 *SOL sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
+                                position = None  # now holding USDT, look to buy dip
                         else:
-                            tg(f"💰 *SOL sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
+                            print(f"  [DRY] Would sell {volume} SOL")
                             position = None
-                    else:
-                        print(f"  [DRY] Would sell {volume} SOL")
-                        tg(f"🔵 *DRY SELL* SOL +{pnl_pct*100:.2f}% @ ${price:.2f}")
-                        position = None
 
-                # Stop loss at -40%
-                elif pnl_pct <= -STOP_PCT:
-                    print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
-                    if not dry_run:
-                        ok, result = place_order(PAIR, "sell", "market", volume)
-                        if not ok:
-                            print(f"  ❌ Stop sell failed: {result}")
+                    # Stop loss: price dropped -40% — cut and hold USDT
+                    elif pnl_pct <= -STOP_PCT:
+                        print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
+                        if not dry_run:
+                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            if not ok:
+                                print(f"  ❌ Stop sell failed: {result}")
+                            else:
+                                tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
+                                position = None
                         else:
-                            tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
+                            print(f"  [DRY] Would stop-sell {volume} SOL")
                             position = None
+
                     else:
-                        print(f"  [DRY] Would stop-sell {volume} SOL")
-                        tg(f"🔵 *DRY STOP* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
-                        position = None
+                        print(f"  ⏳ Holding SOL... waiting for +{PROFIT_PCT*100:.1f}% to sell")
 
-                else:
-                    print(f"  ⏳ Holding... waiting for +{PROFIT_PCT*100:.1f}% or -{STOP_PCT*100:.1f}%")
+                # ── BUY MODE: holding USDT, waiting for price to fall ──
+                elif pos_mode == "buy":
 
-            # ── LOOK FOR ENTRY ────────────────────────────
+                    # Take profit: price dropped to dip zone — already bought, now hold and wait to sell
+                    if pnl_pct >= PROFIT_PCT:
+                        print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
+                        if not dry_run:
+                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            if not ok:
+                                print(f"  ❌ Sell failed: {result}")
+                            else:
+                                tg(f"💰 *SOL sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
+                                position = None
+                        else:
+                            print(f"  [DRY] Would sell {volume} SOL")
+                            position = None
+
+                    elif pnl_pct <= -STOP_PCT:
+                        print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
+                        if not dry_run:
+                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            if not ok:
+                                print(f"  ❌ Stop sell failed: {result}")
+                            else:
+                                tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
+                                position = None
+                        else:
+                            print(f"  [DRY] Would stop-sell {volume} SOL")
+                            position = None
+
+                    else:
+                        print(f"  ⏳ Bought SOL... waiting for +{PROFIT_PCT*100:.1f}% to sell")
+
+            # ── NO POSITION — LOOK FOR ENTRY ─────────────
             else:
-                rsi_signal = rsi <= RSI_OVERSOLD
-                dip_signal = DIP_MIN <= dip_from_high <= DIP_MAX
+                balances    = get_balance() if not dry_run else {}
+                sol_bal     = float(balances.get(ASSET, 0)) if not dry_run else 0
+                usd_bal     = float(balances.get(QUOTE, balances.get("ZUSD", 0))) if not dry_run else 0
+                has_sol     = sol_bal > RESERVE_SOL
+                has_usd     = usd_bal > MIN_TRADE_USD + RESERVE_USD
 
-                # Either RSI oversold OR confirmed dip in 20-30% zone triggers entry
-                if rsi_signal or dip_signal:
+                rsi_signal  = rsi <= RSI_OVERSOLD
+                dip_signal  = DIP_MIN <= dip_from_high <= DIP_MAX
+                rsi_high    = rsi >= 70   # overbought — good time to sell SOL
+                rip_signal  = dip_from_high < 0.05  # price near recent high — sell opportunity
+
+                # SELL signal: SOL is near its high or RSI overbought — sell existing SOL
+                if has_sol and (rsi_high or rip_signal):
+                    reason = []
+                    if rsi_high:   reason.append(f"RSI overbought {rsi:.1f}")
+                    if rip_signal: reason.append(f"near high (only {dip_from_high*100:.1f}% below)")
+                    reason_str = ", ".join(reason)
+
+                    volume = get_sell_size(dry_run)
+                    if volume <= 0:
+                        print(f"  ⚠️ Not enough SOL to sell (need >{MIN_TRADE_SOL} above reserve)")
+                    else:
+                        print(f"  🎯 SELL signal: {reason_str}")
+                        print(f"  💸 Selling {volume} SOL @ ${price:.2f} (${volume*price:.2f})")
+                        if not dry_run:
+                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            if ok:
+                                position = {
+                                    "entry_price": price,
+                                    "volume": volume,
+                                    "entry_time": ts,
+                                    "mode": "buy"  # sold SOL, now watching to buy dip
+                                }
+                                tg(f"💸 *SOL sold* {volume} @ ${price:.2f} | {reason_str} — waiting for dip to rebuy")
+                            else:
+                                print(f"  ❌ Sell failed: {result}")
+                        else:
+                            position = {
+                                "entry_price": price,
+                                "volume": volume,
+                                "entry_time": ts,
+                                "mode": "buy"
+                            }
+                            print(f"  [DRY] Would sell {volume} SOL @ ${price:.2f}")
+
+                # BUY signal: dip in 20-30% zone or RSI oversold — buy SOL with USD
+                elif has_usd and (rsi_signal or dip_signal):
                     reason = []
                     if rsi_signal: reason.append(f"RSI {rsi:.1f}")
                     if dip_signal: reason.append(f"dip -{dip_from_high*100:.1f}% (20-30% zone)")
                     reason_str = ", ".join(reason)
 
-                    print(f"  🎯 ENTRY signal: {reason_str}")
-
-                    volume = get_trade_size(price, dry_run)
+                    volume = get_buy_size(price, dry_run)
                     if volume <= 0:
-                        print(f"  ⚠️ Not enough USD (need ${MIN_TRADE:.0f}+), skipping")
+                        print(f"  ⚠️ Not enough USD (need ${MIN_TRADE_USD:.0f}+), skipping")
                     else:
-                        cost = volume * price
-                        print(f"  🛒 Buying {volume} SOL @ ${price:.2f} (${cost:.2f})")
+                        print(f"  🎯 BUY signal: {reason_str}")
+                        print(f"  🛒 Buying {volume} SOL @ ${price:.2f} (${volume*price:.2f})")
                         if not dry_run:
                             ok, result = place_order(PAIR, "buy", "market", volume)
                             if ok:
                                 position = {
                                     "entry_price": price,
                                     "volume": volume,
-                                    "entry_time": ts
+                                    "entry_time": ts,
+                                    "mode": "sell"  # bought SOL, now watching to sell
                                 }
                                 tg(f"🛒 *SOL bought* {volume} @ ${price:.2f} | {reason_str}")
                             else:
@@ -258,12 +364,17 @@ def run(dry_run: bool = False):
                             position = {
                                 "entry_price": price,
                                 "volume": volume,
-                                "entry_time": ts
+                                "entry_time": ts,
+                                "mode": "sell"
                             }
                             print(f"  [DRY] Would buy {volume} SOL @ ${price:.2f}")
-                            tg(f"🔵 *DRY BUY* SOL {volume} @ ${price:.2f} | {reason_str}")
+
+                # SOL held but no sell signal yet — just monitor
+                elif has_sol:
+                    print(f"  👀 Holding {sol_bal:.4f} SOL — waiting for sell signal (RSI≥70 or near high)")
+
                 else:
-                    print(f"  💤 No signal (RSI {rsi:.1f} > {RSI_OVERSOLD}, dip {dip_from_high*100:.1f}% not in 20-30% zone)")
+                    print(f"  💤 No signal & no balance to trade with")
 
             # P&L summary every 10 cycles
             if cycle % 10 == 0:
