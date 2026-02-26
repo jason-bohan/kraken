@@ -246,8 +246,10 @@ def check_entry_conditions(symbol: str, config: dict, market_data: dict) -> dict
         }
 
 def launch_bot(symbol: str, config: dict, signal_info: dict, dry_run: bool = False) -> bool:
-    """Launch a trading bot in a new terminal."""
-    bot_file = config["bot_file"]
+    """Print command to launch a trading bot."""
+    # Get absolute path to bot file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    bot_file = os.path.join(script_dir, config["bot_file"])
     
     # Check cooldown
     now = time.time()
@@ -260,37 +262,34 @@ def launch_bot(symbol: str, config: dict, signal_info: dict, dry_run: bool = Fal
         return True
     
     try:
-        # Launch bot in new terminal window
-        if sys.platform == "win32":
-            # Windows
-            cmd = f'start cmd /k "python {bot_file}"'
-            subprocess.Popen(cmd, shell=True)
-        elif sys.platform == "darwin":
-            # macOS
-            cmd = f'osascript -e \'tell app "Terminal" to do script "python {bot_file}"\''
-            subprocess.Popen(cmd, shell=True)
-        else:
-            # Linux
-            cmd = f'gnome-terminal -- python {bot_file}'
-            subprocess.Popen(cmd, shell=True)
+        # Print the command to run instead of launching terminal
+        cmd = f'python "{bot_file}"'
+        print(f"\n" + "="*60)
+        print(f"🚀 {symbol} BOT LAUNCH COMMAND:")
+        print(f"   Signal: {signal_info['type'].upper()} - {signal_info['reason']}")
+        print(f"   Price: ${signal_info['price']:.2f}")
+        print(f"   RSI: {signal_info['rsi']:.1f}")
+        print(f"   Dip: {signal_info['dip']*100:.1f}%")
+        print(f"\n   RUN THIS COMMAND:")
+        print(f"   {cmd}")
+        print(f"="*60)
+        
+        # Send notification
+        msg = f"🤖 *{symbol} Bot Signal Detected*\n"
+        msg += f"Signal: {signal_info['type'].upper()}\n"
+        msg += f"Reason: {signal_info['reason']}\n"
+        msg += f"Price: ${signal_info['price']:.2f}\n"
+        msg += f"Command: `{cmd}`"
+        tg(msg)
         
         # Update tracking
         running_bots.add(symbol)
         last_launch_time[symbol] = now
         
-        print(f"  🚀 Launched {symbol} bot: {signal_info['type'].upper()} signal - {signal_info['reason']}")
-        
-        # Send notification
-        msg = f"🤖 *{symbol} Bot Launched*\n"
-        msg += f"Signal: {signal_info['type'].upper()}\n"
-        msg += f"Reason: {signal_info['reason']}\n"
-        msg += f"Price: ${signal_info['price']:.2f}"
-        tg(msg)
-        
         return True
         
     except Exception as e:
-        print(f"  ❌ Failed to launch {symbol} bot: {e}")
+        print(f"  ❌ Failed to prepare {symbol} bot command: {e}")
         return False
 
 # ─────────────────────────────────────────────
@@ -382,7 +381,7 @@ if __name__ == "__main__":
     
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dry", action="store_true", help="Dry run — monitor but don't launch bots")
+    parser.add_argument("--dry", action="store_true", help="Dry run — monitor but don't print launch commands")
     args = parser.parse_args()
     
     # Start monitoring
