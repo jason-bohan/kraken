@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 SOL Swing Bot — Kraken
-Strategy: Buy SOL dips using RSI + price drop, sell on 1% gain, cut at 5% loss.
+Strategy: Buy SOL dips using RSI + price drop, sell on 1% gain, cut at 40% loss.
+Entry zone: 20-30% dip from recent high (confirmed pullback, not a crash).
 Runs continuously, checks every 60 seconds.
 
 Usage:
@@ -10,6 +11,10 @@ Usage:
 
 Requires kraken_connection.py in same folder.
 .env needs: KRAKEN_API_KEY, KRAKEN_API_SECRET
+
+NOTE: If API fields change, temporarily add to get_sol_data():
+    print(f"Ticker keys: {list(ticker.keys())}")
+    print(f"Candle sample: {candles[0]}")
 """
 
 import os
@@ -23,20 +28,22 @@ from kraken_connection import (
 )
 
 # ─────────────────────────────────────────────
-# SETTINGS — OPTIMIZED FOR WIN RATE
+# SETTINGS
 # ─────────────────────────────────────────────
 PAIR         = "SOLUSDT"       # SOL trading pair on Kraken
 ASSET        = "SOL"           # asset name in balance
 QUOTE        = "USDT"          # quote currency (change to ZUSD if using USD)
-PROFIT_PCT   = 0.05            # 5% profit target (room for fees)
-STOP_PCT     = 0.15            # 15% stop loss — cut early
-RSI_PERIOD   = 14              # RSI lookback
-RSI_OVERSOLD = 30              # enter when RSI below 30 (stricter)
-DIP_MIN      = 0.10            # enter only when dip is AT LEAST 10% from recent high
-DIP_MAX      = 0.18            # stop entering if dip exceeds 18% (avoid crashes)
-MIN_TRADE    = 10.0            # minimum USD value per trade
-RESERVE_USD  = 5.0             # keep $5 USD reserve
-CHECK_SECS   = 120             # seconds between scans (slower = fewer false signals)
+PROFIT_PCT   = 0.01            # 1% profit target — frequent small wins
+STOP_PCT     = 0.40            # 40% stop loss — SOL historically volatile, give it room
+RSI_PERIOD   = 14              # RSI lookback periods
+RSI_OVERSOLD = 40              # enter when RSI below this
+DIP_MIN      = 0.20            # only enter when SOL is AT LEAST 20% below recent high
+DIP_MAX      = 0.30            # skip entry if drop exceeds 30% (possible crash, not bounce)
+MIN_TRADE    = 10.0            # minimum USD value per trade (Kraken minimum ~$10)
+RESERVE_USD  = 2.0             # keep this much USD in reserve, don't trade it all
+CHECK_SECS   = 60              # seconds between scans
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT  = os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 # ─────────────────────────────────────────────
@@ -63,7 +70,7 @@ def calculate_rsi(closes: list, period: int = 14) -> float:
     """
     RSI from a list of closing prices.
     Returns float 0-100. Below 30 = oversold, above 70 = overbought.
-    
+
     NOTE: To debug, print(closes[-period:]) to see recent prices used.
     """
     if len(closes) < period + 1:
@@ -93,24 +100,23 @@ def get_sol_data() -> tuple:
     """
     Fetch current SOL price and RSI.
     Returns (price: float, rsi: float, recent_high: float)
-    
+
     NOTE: Uses 5-min candles. To switch timeframe change interval=5 below.
     To rediscover candle fields: print(get_ohlc("SOLUSDT", 5)[0])
     Candle format: [time, open, high, low, close, vwap, volume, count]
     """
-    # Current price from ticker
     ticker = get_ticker(PAIR)
     if not ticker:
         return None, None, None
 
     price = float(ticker.get("a", [0])[0])  # ask price
 
-    # OHLC for RSI (5-min candles, last 100)
+    # OHLC for RSI (5-min candles)
     candles = get_ohlc(PAIR, interval=5)
     if not candles or len(candles) < RSI_PERIOD + 5:
         return price, 50.0, price
 
-    closes = [float(c[4]) for c in candles]  # index 4 = close price
+    closes = [float(c[4]) for c in candles]  # index 4 = close
     highs  = [float(c[2]) for c in candles]  # index 2 = high
 
     rsi = calculate_rsi(closes, RSI_PERIOD)
@@ -151,13 +157,13 @@ def run(dry_run: bool = False):
     print(f"  SOL Swing Bot — Kraken  {mode}")
     print(f"  Profit target : +{PROFIT_PCT*100:.1f}%")
     print(f"  Stop loss     : -{STOP_PCT*100:.1f}%")
-    print(f"  RSI entry     : below {RSI_OVERSOLD} AND dip 10-18%")
+    print(f"  RSI entry     : below {RSI_OVERSOLD}")
+    print(f"  Dip entry     : -{DIP_MIN*100:.0f}% to -{DIP_MAX*100:.0f}% from recent high")
     print(f"  Check every   : {CHECK_SECS}s")
     print("=" * 55)
     tg(f"🤖 *SOL Swing Bot started* ({mode})")
 
-    # State
-    position = None   # dict with entry_price, volume, entry_time when in a trade
+    position = None  # holds entry_price, volume, entry_time when in a trade
     cycle    = 0
 
     while True:
@@ -177,14 +183,14 @@ def run(dry_run: bool = False):
 
             # ── MANAGE OPEN POSITION ──────────────────────
             if position:
-                entry    = position["entry_price"]
-                volume   = position["volume"]
-                pnl_pct  = (price - entry) / entry
-                pnl_usd  = (price - entry) * volume
+                entry   = position["entry_price"]
+                volume  = position["volume"]
+                pnl_pct = (price - entry) / entry
+                pnl_usd = (price - entry) * volume
 
                 print(f"  📦 Holding {volume} SOL | Entry ${entry:.2f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.2f})")
 
-                # Take profit
+                # Take profit at +1%
                 if pnl_pct >= PROFIT_PCT:
                     print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                     if not dry_run:
@@ -199,7 +205,7 @@ def run(dry_run: bool = False):
                         tg(f"🔵 *DRY SELL* SOL +{pnl_pct*100:.2f}% @ ${price:.2f}")
                         position = None
 
-                # Stop loss
+                # Stop loss at -40%
                 elif pnl_pct <= -STOP_PCT:
                     print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                     if not dry_run:
@@ -222,9 +228,14 @@ def run(dry_run: bool = False):
                 rsi_signal = rsi <= RSI_OVERSOLD
                 dip_signal = DIP_MIN <= dip_from_high <= DIP_MAX
 
-                # STRICTER ENTRY: Both RSI AND dip must confirm (AND, not OR)
-                if rsi_signal and dip_signal:
-                    print(f"  🎯 ENTRY signal: RSI {rsi:.1f} + dip -{dip_from_high*100:.1f}%")
+                # Either RSI oversold OR confirmed dip in 20-30% zone triggers entry
+                if rsi_signal or dip_signal:
+                    reason = []
+                    if rsi_signal: reason.append(f"RSI {rsi:.1f}")
+                    if dip_signal: reason.append(f"dip -{dip_from_high*100:.1f}% (20-30% zone)")
+                    reason_str = ", ".join(reason)
+
+                    print(f"  🎯 ENTRY signal: {reason_str}")
 
                     volume = get_trade_size(price, dry_run)
                     if volume <= 0:
@@ -240,7 +251,7 @@ def run(dry_run: bool = False):
                                     "volume": volume,
                                     "entry_time": ts
                                 }
-                                tg(f"🛒 *SOL bought* {volume} @ ${price:.2f} | {', '.join(reason)}")
+                                tg(f"🛒 *SOL bought* {volume} @ ${price:.2f} | {reason_str}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")
                         else:
@@ -250,9 +261,9 @@ def run(dry_run: bool = False):
                                 "entry_time": ts
                             }
                             print(f"  [DRY] Would buy {volume} SOL @ ${price:.2f}")
-                            tg(f"🔵 *DRY BUY* SOL {volume} @ ${price:.2f}")
+                            tg(f"🔵 *DRY BUY* SOL {volume} @ ${price:.2f} | {reason_str}")
                 else:
-                    print(f"  💤 No signal (need RSI < {RSI_OVERSOLD} AND dip 10-18%)")
+                    print(f"  💤 No signal (RSI {rsi:.1f} > {RSI_OVERSOLD}, dip {dip_from_high*100:.1f}% not in 20-30% zone)")
 
             # P&L summary every 10 cycles
             if cycle % 10 == 0:
