@@ -27,7 +27,8 @@ import argparse
 from datetime import datetime
 from kraken_connection import (
     get_balance, get_ticker, get_ohlc,
-    place_order, get_open_orders, cancel_order
+    place_order, get_open_orders, cancel_order,
+    calculate_order_size
 )
 
 # ─────────────────────────────────────────────
@@ -131,33 +132,48 @@ def get_eth_data() -> tuple:
 # TRADE SIZING
 # ─────────────────────────────────────────────
 def get_buy_size(price: float, dry_run: bool) -> float:
-    """How much ETH to BUY with available USD."""
+    """How much ETH to BUY with available USD using dynamic minimums."""
     if dry_run:
-        return round(MIN_TRADE_USD / price, 4)
-
+        # For dry run, use a reasonable test amount
+        order_info = calculate_order_size(PAIR, price, available_usd=100.0)
+        return order_info['volume'] if order_info['can_afford'] else 0.0
+    
     balances = get_balance()
-    usd = float(balances.get(QUOTE, balances.get("ZUSD", 0)))
-    available = max(0, usd - RESERVE_USD)
-
-    if available < MIN_TRADE_USD:
+    available_usd = float(balances.get(QUOTE, 0)) - RESERVE_USD
+    
+    if available_usd <= 0:
         return 0.0
-
-    return round(available / price, 4)
+    
+    order_info = calculate_order_size(PAIR, price, available_usd=available_usd)
+    if not order_info['can_afford']:
+        print(f"  ⚠️ {order_info.get('error', 'Cannot afford order')}")
+        return 0.0
+    
+    return order_info['volume']
 
 
 def get_sell_size(dry_run: bool) -> float:
-    """How much ETH to SELL from existing holdings."""
+    """How much ETH to SELL from existing holdings using dynamic minimums."""
     if dry_run:
-        return 0.05  # simulate selling 0.05 ETH
-
+        # For dry run, simulate selling minimum amount
+        min_info = calculate_order_size(PAIR, 3000, available_asset=0.01)  # rough price
+        return min_info.get('volume', 0.01)
+    
     balances = get_balance()
-    sol = float(balances.get(ASSET, 0))
-    available = max(0, sol - RESERVE_ETH)
-
-    if available < MIN_TRADE_ETH:
+    available_eth = float(balances.get(ASSET, 0)) - RESERVE_ETH
+    
+    if available_eth <= 0:
         return 0.0
-
-    return round(available, 4)
+    
+    price = float(get_ticker(PAIR).get("c", [0])[0])
+    order_info = calculate_order_size(PAIR, price, available_asset=available_eth)
+    
+    if not order_info['can_afford']:
+        print(f"  ⚠️ {order_info.get('error', 'Cannot sell')}")
+        return 0.0
+    
+    # Sell all available above minimum
+    return available_eth
 
 
 # ─────────────────────────────────────────────

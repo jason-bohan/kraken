@@ -207,6 +207,46 @@ def get_min_order_info(pair: str) -> dict:
     }
 
 
+def calculate_order_size(pair: str, price: float, available_usd: float = None, available_asset: float = None) -> dict:
+    """
+    Calculate optimal order size based on minimum requirements and available balance.
+    
+    For buying: provide available_usd (USD balance)
+    For selling: provide available_asset (asset balance)
+    
+    Returns dict with:
+        - volume: float (amount of base asset)
+        - cost: float (total cost in quote currency)
+        - can_afford: bool (if balance is sufficient)
+    """
+    min_info = get_min_order_info(pair)
+    if not min_info:
+        return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'No min order info'}
+    
+    min_volume = min_info['ordermin']
+    min_cost = min_info['costmin']
+    
+    if available_usd is not None:  # Buying
+        # Use the larger of minimum cost or cost from minimum volume
+        cost_from_min_volume = min_volume * price
+        required_cost = max(min_cost, cost_from_min_volume)
+        
+        if available_usd >= required_cost:
+            volume = required_cost / price
+            return {'volume': volume, 'cost': required_cost, 'can_afford': True}
+        else:
+            return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'Insufficient USD'}
+    
+    elif available_asset is not None:  # Selling
+        if available_asset >= min_volume:
+            cost = available_asset * price
+            return {'volume': available_asset, 'cost': cost, 'can_afford': True}
+        else:
+            return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'Insufficient asset balance'}
+    
+    return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'Invalid parameters'}
+
+
 def get_orderbook(pair: str, count: int = 10) -> dict:
     path = f"/0/public/Depth?pair={pair}&count={count}"
     try:

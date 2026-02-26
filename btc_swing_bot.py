@@ -2,9 +2,9 @@
 """
 BTC Swing Bot — Kraken
 Strategy: Two modes working together:
-  1. BTC MODE: If you already hold SOL, treat it as an open position.
-               Sell when +1% profit from session start price, buy back on 15-25% dip.
-  2. USD MODE (buy BTC on dips): If you have USDT/USD, buy SOL on dips, sell on +1% profit.
+  1. BTC MODE: If you already hold BTC, treat it as an open position.
+               Sell when +5% profit from session start price, buy back on 15-25% dip.
+  2. USD MODE (buy BTC on dips): If you have USDT/USD, buy BTC on dips, sell on +5% profit.
 
 Entry zone: RSI below 40 OR 20-30% dip from recent high.
 Stop loss: -40% from entry.
@@ -27,7 +27,8 @@ import argparse
 from datetime import datetime
 from kraken_connection import (
     get_balance, get_ticker, get_ohlc,
-    place_order, get_open_orders, cancel_order
+    place_order, get_open_orders, cancel_order,
+    calculate_order_size
 )
 
 # ─────────────────────────────────────────────
@@ -131,33 +132,48 @@ def get_btc_data() -> tuple:
 # TRADE SIZING
 # ─────────────────────────────────────────────
 def get_buy_size(price: float, dry_run: bool) -> float:
-    """How much SOL to BUY with available USD."""
+    """How much BTC to BUY with available USD using dynamic minimums."""
     if dry_run:
-        return round(MIN_TRADE_USD / price, 4)
-
+        # For dry run, use a reasonable test amount
+        order_info = calculate_order_size(PAIR, price, available_usd=100.0)
+        return order_info['volume'] if order_info['can_afford'] else 0.0
+    
     balances = get_balance()
-    usd = float(balances.get(QUOTE, balances.get("ZUSD", 0)))
-    available = max(0, usd - RESERVE_USD)
-
-    if available < MIN_TRADE_USD:
+    available_usd = float(balances.get(QUOTE, 0)) - RESERVE_USD
+    
+    if available_usd <= 0:
         return 0.0
-
-    return round(available / price, 4)
+    
+    order_info = calculate_order_size(PAIR, price, available_usd=available_usd)
+    if not order_info['can_afford']:
+        print(f"  ⚠️ {order_info.get('error', 'Cannot afford order')}")
+        return 0.0
+    
+    return order_info['volume']
 
 
 def get_sell_size(dry_run: bool) -> float:
-    """How much SOL to SELL from existing holdings."""
+    """How much BTC to SELL from existing holdings using dynamic minimums."""
     if dry_run:
-        return 0.05  # simulate selling 0.05 SOL
-
+        # For dry run, simulate selling minimum amount
+        min_info = calculate_order_size(PAIR, 50000, available_asset=0.001)  # rough price
+        return min_info.get('volume', 0.001)
+    
     balances = get_balance()
-    sol = float(balances.get(ASSET, 0))
-    available = max(0, sol - RESERVE_BTC)
-
-    if available < MIN_TRADE_BTC:
+    available_btc = float(balances.get(ASSET, 0)) - RESERVE_BTC
+    
+    if available_btc <= 0:
         return 0.0
-
-    return round(available, 4)
+    
+    price = float(get_ticker(PAIR).get("c", [0])[0])
+    order_info = calculate_order_size(PAIR, price, available_asset=available_btc)
+    
+    if not order_info['can_afford']:
+        print(f"  ⚠️ {order_info.get('error', 'Cannot sell')}")
+        return 0.0
+    
+    # Sell all available above minimum
+    return available_btc
 
 
 # ─────────────────────────────────────────────
@@ -219,7 +235,7 @@ def run(dry_run: bool = False):
                 pnl_pct  = (price - entry) / entry
                 pnl_usd  = (price - entry) * volume
 
-                print(f"  📦 [{pos_mode.upper()}] {volume} SOL | Entry ${entry:.2f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.2f})")
+                print(f"  📦 [{pos_mode.upper()}] {volume} BTC | Entry ${entry:.2f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.2f})")
 
                 # ── SELL MODE: holding SOL, waiting for price to rise ──
                 if pos_mode == "sell":
@@ -235,7 +251,7 @@ def run(dry_run: bool = False):
                                 tg(f"💰 *BTC sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
                                 position = None  # now holding USDT, look to buy dip
                         else:
-                            print(f"  [DRY] Would sell {volume} SOL")
+                            print(f"  [DRY] Would sell {volume} BTC")
                             position = None
 
                     # Stop loss: price dropped -40% — cut and hold USDT
@@ -246,7 +262,7 @@ def run(dry_run: bool = False):
                             if not ok:
                                 print(f"  ❌ Stop sell failed: {result}")
                             else:
-                                tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
+                                tg(f"🛑 *Stop loss* BTC {pnl_pct*100:.2f}% @ ${price:.2f}")
                                 position = None
                         else:
                             print(f"  [DRY] Would stop-sell {volume} SOL")
@@ -269,7 +285,7 @@ def run(dry_run: bool = False):
                                 tg(f"💰 *BTC sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
                                 position = None
                         else:
-                            print(f"  [DRY] Would sell {volume} SOL")
+                            print(f"  [DRY] Would sell {volume} BTC")
                             position = None
 
                     elif pnl_pct <= -STOP_PCT:
@@ -279,7 +295,7 @@ def run(dry_run: bool = False):
                             if not ok:
                                 print(f"  ❌ Stop sell failed: {result}")
                             else:
-                                tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
+                                tg(f"🛑 *Stop loss* BTC {pnl_pct*100:.2f}% @ ${price:.2f}")
                                 position = None
                         else:
                             print(f"  [DRY] Would stop-sell {volume} SOL")
@@ -310,7 +326,7 @@ def run(dry_run: bool = False):
 
                     volume = get_sell_size(dry_run)
                     if volume <= 0:
-                        print(f"  ⚠️ Not enough SOL to sell (need >{MIN_TRADE_BTC} above reserve)")
+                        print(f"  ⚠️ Not enough BTC to sell (need >{MIN_TRADE_BTC} above reserve)")
                     else:
                         print(f"  🎯 SELL signal: {reason_str}")
                         print(f"  💸 Selling BTC @ ${price:.2f} (${volume*price:.2f})")
@@ -367,7 +383,7 @@ def run(dry_run: bool = False):
                                 "entry_time": ts,
                                 "mode": "sell"
                             }
-                            print(f"  [DRY] Would buy {volume} SOL @ ${price:.2f}")
+                            print(f"  [DRY] Would buy {volume} BTC @ ${price:.2f}")
 
                 # SOL held but no sell signal yet — just monitor
                 elif has_btc:
