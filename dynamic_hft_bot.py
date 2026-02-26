@@ -36,22 +36,22 @@ import requests as req
 BASE_URL = "https://api.kraken.com"
 
 # ─────────────────────────────────────────────
-# SETTINGS
+# SETTINGS — FIXED FOR BETTER WIN RATE
 # ─────────────────────────────────────────────
-TOP_N            = 5            # number of pairs to trade at once
+TOP_N            = 10           # number of pairs to trade at once
 RESCAN_SECS      = 900          # rescan for new top pairs every 15 min
 CHECK_SECS       = 30           # how often each pair thread checks price
-PROFIT_PCT       = 0.03         # 3% profit target — aggressive
-STOP_PCT         = 0.10         # 10% stop loss — cut fast
-RSI_OVERSOLD     = 35           # entry RSI threshold
+PROFIT_PCT       = 0.05         # 5% profit target (increased from 3%)
+STOP_PCT         = 0.07         # 7% stop loss (tightened from 10%)
+RSI_OVERSOLD     = 30           # entry RSI threshold (tighter from 35)
 DIP_MIN          = 0.10         # enter on 10%+ dip
-DIP_MAX          = 0.20         # skip if drop > 20% (crash territory)
+DIP_MAX          = 0.15         # skip if drop > 15% (crash territory)
 RSI_PERIOD       = 14
 MAX_USD_PER_PAIR = 2.0          # max $ to risk per pair
-MAX_TOTAL_USD    = 10.0         # hard cap: never risk more than $10 total
-MIN_VOLUME_USD   = 500_000      # skip pairs with < $500k 24h volume (illiquid)
-MIN_VOLATILITY   = 0.03         # skip pairs with < 3% 24h swing (boring)
-RESERVE_USD      = 1.0          # always keep $1 in reserve
+MAX_TOTAL_USD    = 5.0         # hard cap: reduced from $10
+MIN_VOLUME_USD   = 1_000_000   # skip pairs with < $1M 24h volume (was 500k)
+MIN_VOLATILITY   = 0.05         # skip pairs with < 5% 24h swing (increased from 3%)
+RESERVE_USD      = 5.0          # always keep $5 in reserve (increased from $1)
 DRY_START_BAL    = 50.0         # default fake starting balance for dry run
 DEBUG_PAIRS      = False        # set True to print all pair scores during scan
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
@@ -403,17 +403,15 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 bal_str = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
                 print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}%{bal_str}")
 
-                if rsi_signal or dip_signal:
-                    reason = []
-                    if rsi_signal: reason.append(f"RSI {rsi:.0f}")
-                    if dip_signal: reason.append(f"dip -{dip*100:.1f}%")
+                if rsi_signal and dip_signal:
+                    reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
 
                     volume = get_trade_size(pair, price, dry_run)
                     if volume <= 0:
                         print(f"  [{ts}] ⚠️ {pair} signal but no budget left")
                     else:
                         cost = volume * price
-                        print(f"  [{ts}] 🎯 {pair} ENTRY: {', '.join(reason)} | Buying {volume} @ ${price:.4f} (${cost:.2f})")
+                        print(f"  [{ts}] 🎯 {pair} ENTRY: {reason} | Buying {volume} @ ${price:.4f} (${cost:.2f})")
 
                         if dry_run:
                             ok = dry_buy(pair, volume, price)
@@ -436,7 +434,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                                     positions[pair] = position
                                 with deployed_lock:
                                     deployed_usd += cost
-                                tg(f"🛒 *{pair}* buy @ ${price:.4f} | {', '.join(reason)}")
+                                tg(f"🛒 *{pair}* buy @ ${price:.4f} | {reason}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")
 

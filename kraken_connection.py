@@ -199,18 +199,22 @@ def place_order(
     pair: str,
     side: str,           # "buy" or "sell"
     order_type: str,     # "market" or "limit"
-    volume: float,       # amount of base currency
-    price: float = None, # required for limit orders
-    validate: bool = False  # True = dry run, won't actually place
+    volume: float = None,       # amount of base currency
+    price: float = None,      # required for limit orders
+    cost: float = None,       # for USD-based orders (e.g., $1 = cost="1")
+    validate: bool = False     # True = dry run, won't actually place
 ) -> tuple[bool, dict]:
     """
     Place a spot order on Kraken.
     
     Examples:
-        place_order("SOLUSD", "buy", "market", 0.5)
-        place_order("XBTUSD", "buy", "limit", 0.001, price=50000)
-        place_order("ETHUSD", "sell", "limit", 0.1, price=3500, validate=True)  # dry run
+        place_order("SOLUSD", "buy", "market", volume=0.5)
+        place_order("XBTUSD", "buy", "limit", volume=0.001, price=50000)
+        place_order("SOLUSD", "buy", "market", cost=1.00)  # Buy $1 worth
+        place_order("ETHUSD", "sell", "limit", volume=0.1, price=3500, validate=True)
     
+    Use 'cost' for dollar-based orders, 'volume' for amount-based.
+    For market orders, specify BOTH cost and a minimum volume estimate.
     Returns (success: bool, result_dict)
     """
     path = "/0/private/AddOrder"
@@ -218,8 +222,20 @@ def place_order(
         "pair": pair,
         "type": side,
         "ordertype": order_type,
-        "volume": str(volume),
     }
+    
+    # Kraken requires BOTH cost AND volume for market orders
+    if cost is not None:
+        data["cost"] = str(cost)
+    if volume is not None:
+        data["volume"] = str(volume)
+    else:
+        # If only cost provided, estimate volume (rough)
+        if cost is not None and price:
+            data["volume"] = str(float(cost) / price)
+        elif cost is not None:
+            return False, {"error": "For cost-based orders without price, must also provide volume"}
+    
     if price is not None:
         data["price"] = str(price)
     if validate:
