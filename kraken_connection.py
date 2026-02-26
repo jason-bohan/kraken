@@ -175,10 +175,39 @@ def get_ohlc(pair: str, interval: int = 1) -> list:
     return []
 
 
+def get_asset_pairs() -> dict:
+    """
+    Get all tradable asset pairs with their minimum order sizes.
+    Returns dict with pair info including 'ordermin', 'costmin'.
+    """
+    path = "/0/public/AssetPairs"
+    try:
+        res = requests.get(BASE_URL + path, timeout=8)
+        if res.status_code == 200:
+            body = res.json()
+            if body.get("error"):
+                print(f"  ⚠️ AssetPairs error: {body['error']}")
+                return {}
+            return body.get("result", {})
+    except Exception as e:
+        print(f"  ⚠️ AssetPairs exception: {e}")
+    return {}
+
+
+def get_min_order_info(pair: str) -> dict:
+    """
+    Get minimum order requirements for a specific pair.
+    Returns {'ordermin': float, 'costmin': float} or empty dict.
+    """
+    pairs = get_asset_pairs()
+    pair_info = pairs.get(pair, {})
+    return {
+        'ordermin': float(pair_info.get('ordermin', 0)),
+        'costmin': float(pair_info.get('costmin', 0))
+    }
+
+
 def get_orderbook(pair: str, count: int = 10) -> dict:
-    """
-    Get order book. Returns {"asks": [[price, volume, timestamp], ...], "bids": [...]}
-    """
     path = f"/0/public/Depth?pair={pair}&count={count}"
     try:
         res = requests.get(BASE_URL + path, timeout=8)
