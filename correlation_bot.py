@@ -22,7 +22,7 @@ import requests as req
 
 # We'll import kraken functions after checking they're available
 try:
-    from kraken_connection import get_balance, get_ticker, get_ohlc, place_order
+    from kraken_connection import get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
     KRANKEN_AVAILABLE = True
 except:
     KRANKEN_AVAILABLE = False
@@ -44,9 +44,7 @@ BUY_ONLY_MODE = True  # Only buy, no shorting
 CHECK_SECS = 30
 PROFIT_PCT = 0.05  # 5%
 STOP_PCT = 0.10    # 10%
-MAX_TRADE_USD = 2.0  # Use $2 per trade (works with small balance)
-MIN_SOL_VOLUME = 0.02  # Kraken minimum is 0.02 SOL (~ $1.40)
-RESERVE_USD = 5.0
+RESERVE_USD = 5.0  # Keep this much USD in reserve
 DRY_BALANCE = 50.0
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -196,46 +194,43 @@ def check_correlation_signal(analysis: dict) -> tuple:
     return None, []
 
 
-def get_trade_size(price: float, dry_run: bool) -> float:
-    """Calculate trade size in units."""
-    if dry_run:
-        return round(MAX_TRADE_USD / price, 6)
-    
+def get_trade_size(pair: str, price: float, dry_run: bool) -> tuple:
+    """Calculate trade size using dynamic minimums from Kraken."""
     if not KRANKEN_AVAILABLE:
-        return 0.0
+        return 0, 0
     
-    balances = get_balance()
-    usd = float(balances.get("ZUSD", 0))
-    available = max(0, usd - RESERVE_USD)
+    if dry_run:
+        # Use max USD for dry run
+        available = MAX_TRADE_USD
+    else:
+        balances = get_balance()
+        usd = float(balances.get("ZUSD", 0))
+        available = max(0, usd - RESERVE_USD)
     
-    if available < MAX_TRADE_USD:
-        available = available * 0.5  # Use half if low
+    if available < 1.0:
+        return 0, 0
     
-    # Calculate volume in SOL
-    volume = round(available / price, 6)
+    # Use dynamic order sizing
+    order_info = calculate_order_size(pair, price, available)
     
-    # Enforce Kraken's 0.02 SOL minimum
-    if volume < MIN_SOL_VOLUME:
-        return 0.0
+    if not order_info['can_afford']:
+        return 0, 0
     
-    return volume
+    return order_info['volume'], order_info['cost']
 
 
-def place_trade(pair: str, side: str, volume: float, price: float, dry_run: bool) -> bool:
+def place_trade(pair: str, side: str, volume: float, cost: float, dry_run: bool) -> bool:
     """Place a trade with both volume and cost."""
     if dry_run:
-        est_cost = volume * price
-        print(f"  [DRY] {'BUY' if side == 'buy' else 'SELL'} {volume} {pair} (~${est_cost:.2f})")
+        print(f"  [DRY] {'BUY' if side == 'buy' else 'SELL'} {volume} {pair} (~${cost:.2f})")
         return True
     
     if not KRANKEN_AVAILABLE:
         return False
     
-    # Send both volume AND cost for Kraken market orders
-    cost_usd = round(volume * price, 2)
-    ok, result = place_order(pair, side, "market", volume=volume, cost=cost_usd)
+    ok, result = place_order(pair, side, "market", volume=volume, cost=cost)
     if ok:
-        tg(f"📊 *Correlation trade* {side.upper()} {volume} {pair} (~${cost_usd:.2f})")
+        tg(f"📊 *Correlation trade* {side.upper()} {volume} {pair} (~${cost:.2f})")
     return ok
 
 
@@ -281,25 +276,27 @@ def run(dry_run: bool = False):
                 
                 ticker = get_ticker_data(pair)
                 if ticker:
-                    current_price = float(ticker.get("a", [0])[0])  # ask
-                    
+                    # Use bid for selling (what you can actually get)
                     if side == "buy":
-                        pnl_pct = (current_price - entry) / entry
+                        current_price = float(ticker.get("b", [0])[0])  # bid
                     else:
-                        pnl_pct = (entry - current_price) / entry
+                        current_price = float(ticker.get("a", [0])[0])  # ask
+                    
+                    pnl_pct = (current_price - entry) / entry if side == "buy" else (entry - current_price) / entry
+                    sell_cost = round(volume * current_price, 2)
                     
                     print(f"  📦 Position: {side.upper()} {volume} {pair} @ ${entry:.4f} | PnL: {pnl_pct*100:+.1f}%")
                     
                     # Take profit
                     if pnl_pct >= PROFIT_PCT:
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.1f}%")
-                        place_trade(pair, "sell" if side == "buy" else "buy", volume, current_price, dry_run)
+                        place_trade(pair, "sell" if side == "buy" else "buy", volume, sell_cost, dry_run)
                         position = None
                     
                     # Stop loss
                     elif pnl_pct <= -STOP_PCT:
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.1f}%")
-                        place_trade(pair, "sell" if side == "buy" else "buy", volume, current_price, dry_run)
+                        place_trade(pair, "sell" if side == "buy" else "buy", volume, sell_cost, dry_run)
                         position = None
             
             # Check for new signals
@@ -310,11 +307,11 @@ def run(dry_run: bool = False):
                     ticker = get_ticker_data(pair)
                     if ticker:
                         price = float(ticker.get("a", [0])[0])
-                        volume = get_trade_size(price, dry_run)
+                        volume, cost = get_trade_size(pair, price, dry_run)
                         
                         if volume > 0:
-                            print(f"  🎯 CORRELATION BUY: {pair} RSI={rsi:.0f} @ ${price:.4f}")
-                            ok = place_trade(pair, "buy", volume, price, dry_run)
+                            print(f"  🎯 CORRELATION BUY: {pair} RSI={rsi:.0f} @ ${price:.4f} (~${cost:.2f})")
+                            ok = place_trade(pair, "buy", volume, cost)
                             if ok or dry_run:
                                 position = {
                                     "pair": pair,
@@ -323,7 +320,7 @@ def run(dry_run: bool = False):
                                     "side": "buy",
                                     "entry_time": ts
                                 }
-                                tg(f"🎯 *Correlation BUY* {pair} RSI={rsi:.0f} @ ${price:.4f}")
+                                tg(f"🎯 *Correlation BUY* {pair} RSI={rsi:.0f} @ ${price:.4f} (~${cost:.2f})")
                 
                 elif signal_type == "sell_overbought" and not BUY_ONLY_MODE:
                     # Sell the strongest (highest RSI) - SKIPPED IN BUY_ONLY_MODE
