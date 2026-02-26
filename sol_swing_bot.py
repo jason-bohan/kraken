@@ -4,7 +4,7 @@ SOL Swing Bot — Kraken
 Strategy: Two modes working together:
   1. SOL MODE: If you already hold SOL, treat it as an open position.
                Sell when +1% profit from session start price, buy back on 20-30% dip.
-  2. USD MODE: If you have USDT/USD, buy SOL on dips, sell on +1% profit.
+  2. USD MODE: If you have ZUSD/USD, buy SOL on dips, sell on +1% profit.
 
 Entry zone: RSI below 40 OR 20-30% dip from recent high.
 Stop loss: -40% from entry.
@@ -31,22 +31,22 @@ from kraken_connection import (
 )
 
 # ─────────────────────────────────────────────
-# SETTINGS
+# SETTINGS — OPTIMIZED FOR WIN RATE
 # ─────────────────────────────────────────────
-PAIR           = "SOLUSDT"     # SOL trading pair on Kraken
+PAIR           = "SOLZUSD"     # SOL trading pair on Kraken
 ASSET          = "SOL"         # base asset name in balance
-QUOTE          = "USDT"        # quote currency (change to ZUSD if using USD)
-PROFIT_PCT     = 0.01          # 1% profit target — frequent small wins
-STOP_PCT       = 0.40          # 40% stop loss — SOL historically volatile, give it room
+QUOTE          = "ZUSD"        # quote currency
+PROFIT_PCT     = 0.05          # 5% profit target (room for fees)
+STOP_PCT       = 0.15          # 15% stop loss — cut early
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 40            # enter when RSI below this
-DIP_MIN        = 0.20          # only enter when SOL is AT LEAST 20% below recent high
-DIP_MAX        = 0.30          # skip entry if drop exceeds 30% (possible crash, not bounce)
-MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
+RSI_OVERSOLD   = 30            # enter when RSI below 30 (stricter)
+DIP_MIN        = 0.10          # enter only when dip is AT LEAST 10% from recent high
+DIP_MAX        = 0.18          # stop entering if dip exceeds 18% (avoid crashes)
+MIN_TRADE_USD  = 10.0          # minimum USD value per trade
 MIN_TRADE_SOL  = 0.05          # minimum SOL to sell per trade
-RESERVE_USD    = 2.0           # keep this much USD in reserve
-RESERVE_SOL    = 0.05          # keep this much SOL in reserve (don't sell everything)
-CHECK_SECS     = 60            # seconds between scans
+RESERVE_USD    = 5.0           # keep $5 USD reserve
+RESERVE_SOL    = 0.05          # keep SOL reserve
+CHECK_SECS     = 120            # seconds between scans (slower = fewer false signals)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT  = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -105,7 +105,7 @@ def get_sol_data() -> tuple:
     Fetch current SOL price, RSI, and recent high.
     Returns (price: float, rsi: float, recent_high: float)
 
-    NOTE: Uses 5-min candles. To rediscover fields: print(get_ohlc("SOLUSDT", 5)[0])
+    NOTE: Uses 5-min candles. To rediscover fields: print(get_ohlc("SOLZUSD", 5)[0])
     Candle format: [time, open, high, low, close, vwap, volume, count]
     """
     ticker = get_ticker(PAIR)
@@ -224,7 +224,7 @@ def run(dry_run: bool = False):
                 # ── SELL MODE: holding SOL, waiting for price to rise ──
                 if pos_mode == "sell":
 
-                    # Take profit: price rose +1% — sell SOL for USDT
+                    # Take profit: price rose +1% — sell SOL for ZUSD
                     if pnl_pct >= PROFIT_PCT:
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                         if not dry_run:
@@ -233,12 +233,12 @@ def run(dry_run: bool = False):
                                 print(f"  ❌ Sell failed: {result}")
                             else:
                                 tg(f"💰 *SOL sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
-                                position = None  # now holding USDT, look to buy dip
+                                position = None  # now holding ZUSD, look to buy dip
                         else:
                             print(f"  [DRY] Would sell {volume} SOL")
                             position = None
 
-                    # Stop loss: price dropped -40% — cut and hold USDT
+                    # Stop loss: price dropped -40% — cut and hold ZUSD
                     elif pnl_pct <= -STOP_PCT:
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                         if not dry_run:
@@ -255,7 +255,7 @@ def run(dry_run: bool = False):
                     else:
                         print(f"  ⏳ Holding SOL... waiting for +{PROFIT_PCT*100:.1f}% to sell")
 
-                # ── BUY MODE: holding USDT, waiting for price to fall ──
+                # ── BUY MODE: holding ZUSD, waiting for price to fall ──
                 elif pos_mode == "buy":
 
                     # Take profit: price dropped to dip zone — already bought, now hold and wait to sell
@@ -335,12 +335,10 @@ def run(dry_run: bool = False):
                             }
                             print(f"  [DRY] Would sell {volume} SOL @ ${price:.2f}")
 
-                # BUY signal: dip in 20-30% zone or RSI oversold — buy SOL with USD
-                elif has_usd and (rsi_signal or dip_signal):
-                    reason = []
-                    if rsi_signal: reason.append(f"RSI {rsi:.1f}")
-                    if dip_signal: reason.append(f"dip -{dip_from_high*100:.1f}% (20-30% zone)")
-                    reason_str = ", ".join(reason)
+                # BUY signal: RSI < 30 AND dip 10-18% — both must confirm (AND, not OR)
+                elif has_usd and rsi_signal and dip_signal:
+                    reason = f"RSI {rsi:.1f} + dip -{dip_from_high*100:.1f}%"
+                    reason_str = reason
 
                     volume = get_buy_size(price, dry_run)
                     if volume <= 0:
@@ -374,7 +372,7 @@ def run(dry_run: bool = False):
                     print(f"  👀 Holding {sol_bal:.4f} SOL — waiting for sell signal (RSI≥70 or near high)")
 
                 else:
-                    print(f"  💤 No signal & no balance to trade with")
+                    print(f"  💤 No signal (need RSI < {RSI_OVERSOLD} AND dip 10-18%)")
 
             # P&L summary every 10 cycles
             if cycle % 10 == 0:
