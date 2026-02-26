@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Bot Launcher Monitor — Kraken
+🤖 Bot Launcher Monitor — Kraken 🎯
 Monitors market conditions and automatically launches swing bots when requirements are met.
 
 Features:
-- Monitors BTC, ETH, SOL for entry conditions
-- Launches bots in new terminals when signals are detected
-- Prevents duplicate bot instances
-- Configurable monitoring intervals
-- Telegram notifications for bot launches
+- 📊 Monitors BTC, ETH, SOL for entry conditions
+- 🚀 Launches bots in new terminals when signals are detected
+- 🛡️ Prevents duplicate bot instances
+- ⏱️ Configurable monitoring intervals
+- 📱 Telegram notifications for bot launches
 
 Usage:
     python3 bot_launcher_monitor.py          # start monitoring
@@ -31,7 +31,7 @@ from kraken_connection import get_ticker, get_ohlc, get_balance
 from kraken_connection import calculate_order_size
 
 # ─────────────────────────────────────────────
-# CONFIGURATION
+# 🎛️ CONFIGURATION
 # ─────────────────────────────────────────────
 
 # Assets to monitor
@@ -45,7 +45,8 @@ ASSETS = {
         "dip_min": 0.15,
         "dip_max": 0.25,
         "rsi_overbought": 70,
-        "min_usd": 50.0  # minimum USD to start trading
+        "min_usd": 50.0,
+        "emoji": "₿"
     },
     "ETH": {
         "pair": "ETHUSD",
@@ -56,7 +57,8 @@ ASSETS = {
         "dip_min": 0.15,
         "dip_max": 0.25,
         "rsi_overbought": 70,
-        "min_usd": 30.0
+        "min_usd": 30.0,
+        "emoji": "Ξ"
     },
     "SOL": {
         "pair": "SOLUSD",
@@ -67,20 +69,21 @@ ASSETS = {
         "dip_min": 0.20,
         "dip_max": 0.30,
         "rsi_overbought": 70,
-        "min_usd": 20.0
+        "min_usd": 20.0,
+        "emoji": "◎"
     }
 }
 
-# Monitoring settings
+# 🎛️ Monitoring settings
 CHECK_INTERVAL = 60          # seconds between checks
 RSI_PERIOD = 14             # RSI lookback
 LAUNCH_COOLDOWN = 300       # seconds between same bot launches (5 min)
 
-# Telegram settings
+# 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Track running bots and last launch times
+# 📈 Track running bots and last launch times
 running_bots = set()
 last_launch_time = {}
 
@@ -226,8 +229,8 @@ def check_entry_conditions(symbol: str, config: dict, market_data: dict) -> dict
         }
     elif sell_signal:
         reasons = []
-        if rsi_overbought: reasons.append(f"RSI {rsi:.1f}")
-        if near_high: reasons.append(f"near high")
+        if rsi_overbought: reasons.append(f"RSI {rsi:.1f} 🔥")
+        if near_high: reasons.append(f"near high ⚡")
         return {
             "signal": True,
             "type": "sell", 
@@ -239,7 +242,7 @@ def check_entry_conditions(symbol: str, config: dict, market_data: dict) -> dict
     else:
         return {
             "signal": False,
-            "reason": f"RSI {rsi:.1f}, dip {dip*100:.1f}%",
+            "reason": f"RSI {rsi:.1f} | dip {dip*100:.1f}%",
             "price": price,
             "rsi": rsi,
             "dip": dip
