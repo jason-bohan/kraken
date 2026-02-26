@@ -1,0 +1,331 @@
+#!/usr/bin/env python3
+"""
+kraken_connection.py — Kraken API auth + helpers
+Mirrors the structure of kalshi_connection.py for easy swapping.
+
+Auth method: HMAC-SHA512
+Signature = base64( HMAC-SHA512( uri_path + SHA256(nonce + post_data), base64decode(api_secret) ) )
+
+To rediscover available fields on any response, add temporarily:
+    print(f"Keys: {list(response.json().keys())}")
+    print(f"Raw: {response.json()}")
+
+.env keys needed:
+    KRAKEN_API_KEY=your_public_api_key
+    KRAKEN_API_SECRET=your_private_api_secret
+"""
+
+import os
+import time
+import hmac
+import base64
+import hashlib
+import urllib.parse
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BASE_URL = "https://api.kraken.com"
+
+
+# ─────────────────────────────────────────────
+# CORE AUTH
+# ─────────────────────────────────────────────
+
+def get_kraken_signature(uri_path: str, data: dict, secret: str) -> str:
+    """
+    Build the API-Sign header value.
+    Formula: base64( HMAC-SHA512( uri_path + SHA256(nonce + postdata), base64decode(secret) ) )
+    
+    NOTE: nonce must be in data dict before calling this.
+    NOTE: secret is your KRAKEN_API_SECRET (base64-encoded string from Kraken dashboard).
+    """
+    post_data = urllib.parse.urlencode(data)
+    encoded = (str(data["nonce"]) + post_data).encode()
+    message = uri_path.encode() + hashlib.sha256(encoded).digest()
+    mac = hmac.new(base64.b64decode(secret), message, hashlib.sha512)
+    return base64.b64encode(mac.digest()).decode()
+
+
+def get_kraken_headers(uri_path: str, data: dict) -> dict:
+    """
+    Build auth headers for a private Kraken API call.
+    Injects nonce into data dict automatically.
+    
+    Usage:
+        data = {"pair": "XBTUSD"}
+        headers = get_kraken_headers("/0/private/Balance", data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data)
+    """
+    api_key = os.getenv("KRAKEN_API_KEY")
+    api_secret = os.getenv("KRAKEN_API_SECRET")
+
+    if not api_key or not api_secret:
+        raise RuntimeError("Missing KRAKEN_API_KEY or KRAKEN_API_SECRET in .env")
+
+    # Nonce: always-increasing integer. Millisecond timestamp works perfectly.
+    data["nonce"] = str(int(time.time() * 1000))
+
+    sig = get_kraken_signature(uri_path, data, api_secret)
+
+    return {
+        "API-Key": api_key,
+        "API-Sign": sig,
+    }
+
+
+# ─────────────────────────────────────────────
+# ACCOUNT
+# ─────────────────────────────────────────────
+
+def get_balance() -> dict:
+    """
+    Returns dict of all asset balances, e.g. {"ZUSD": "1234.56", "XXBT": "0.5"}
+    Kraken asset names: ZUSD = USD, XXBT = BTC, XETH = ETH, etc.
+    """
+    path = "/0/private/Balance"
+    data = {}
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        if res.status_code == 200:
+            body = res.json()
+            if body.get("error"):
+                print(f"  ⚠️ Balance error: {body['error']}")
+                return {}
+            return body.get("result", {})
+    except Exception as e:
+        print(f"  ⚠️ Balance exception: {e}")
+    return {}
+
+
+def get_usd_balance() -> float:
+    """Convenience: return USD balance as float."""
+    balances = get_balance()
+    return float(balances.get("ZUSD", 0))
+
+
+def get_trade_balance(base_asset: str = "ZUSD") -> dict:
+    """
+    Extended balance info: equity, margin, free margin, etc.
+    Useful for margin accounts.
+    """
+    path = "/0/private/TradeBalance"
+    data = {"asset": base_asset}
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        if res.status_code == 200:
+            body = res.json()
+            if body.get("error"):
+                print(f"  ⚠️ TradeBalance error: {body['error']}")
+                return {}
+            return body.get("result", {})
+    except Exception as e:
+        print(f"  ⚠️ TradeBalance exception: {e}")
+    return {}
+
+
+# ─────────────────────────────────────────────
+# MARKET DATA (public — no auth needed)
+# ─────────────────────────────────────────────
+
+def get_ticker(pair: str) -> dict:
+    """
+    Get current ticker for a pair, e.g. "XBTUSD", "ETHUSD", "SOLUSD"
+    Returns dict with keys: a (ask), b (bid), c (last trade), v (volume), etc.
+    
+    NOTE: To rediscover ticker fields:
+        print(get_ticker("XBTUSD"))
+    """
+    path = f"/0/public/Ticker?pair={pair}"
+    try:
+        res = requests.get(BASE_URL + path, timeout=8)
+        if res.status_code == 200:
+            body = res.json()
+            if body.get("error"):
+                print(f"  ⚠️ Ticker error: {body['error']}")
+                return {}
+            result = body.get("result", {})
+            # Kraken sometimes returns the pair with a different key name
+            # e.g. "XBTUSD" → "XXBTZUSD". Grab first value to be safe.
+            return next(iter(result.values()), {})
+    except Exception as e:
+        print(f"  ⚠️ Ticker exception: {e}")
+    return {}
+
+
+def get_ohlc(pair: str, interval: int = 1) -> list:
+    """
+    Get OHLC candles. interval in minutes: 1, 5, 15, 30, 60, 240, 1440, 10080, 21600
+    Returns list of [time, open, high, low, close, vwap, volume, count]
+    """
+    path = f"/0/public/OHLC?pair={pair}&interval={interval}"
+    try:
+        res = requests.get(BASE_URL + path, timeout=8)
+        if res.status_code == 200:
+            body = res.json()
+            result = body.get("result", {})
+            # Remove the "last" key, keep only the candle list
+            candles = [v for k, v in result.items() if k != "last"]
+            return candles[0] if candles else []
+    except Exception as e:
+        print(f"  ⚠️ OHLC exception: {e}")
+    return []
+
+
+def get_orderbook(pair: str, count: int = 10) -> dict:
+    """
+    Get order book. Returns {"asks": [[price, volume, timestamp], ...], "bids": [...]}
+    """
+    path = f"/0/public/Depth?pair={pair}&count={count}"
+    try:
+        res = requests.get(BASE_URL + path, timeout=8)
+        if res.status_code == 200:
+            body = res.json()
+            result = body.get("result", {})
+            return next(iter(result.values()), {})
+    except Exception as e:
+        print(f"  ⚠️ Orderbook exception: {e}")
+    return {}
+
+
+# ─────────────────────────────────────────────
+# ORDERS
+# ─────────────────────────────────────────────
+
+def place_order(
+    pair: str,
+    side: str,           # "buy" or "sell"
+    order_type: str,     # "market" or "limit"
+    volume: float,       # amount of base currency
+    price: float = None, # required for limit orders
+    validate: bool = False  # True = dry run, won't actually place
+) -> tuple[bool, dict]:
+    """
+    Place a spot order on Kraken.
+    
+    Examples:
+        place_order("SOLUSD", "buy", "market", 0.5)
+        place_order("XBTUSD", "buy", "limit", 0.001, price=50000)
+        place_order("ETHUSD", "sell", "limit", 0.1, price=3500, validate=True)  # dry run
+    
+    Returns (success: bool, result_dict)
+    """
+    path = "/0/private/AddOrder"
+    data = {
+        "pair": pair,
+        "type": side,
+        "ordertype": order_type,
+        "volume": str(volume),
+    }
+    if price is not None:
+        data["price"] = str(price)
+    if validate:
+        data["validate"] = "true"  # dry run — Kraken won't execute
+
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        body = res.json()
+        if body.get("error"):
+            print(f"  ❌ Order error: {body['error']}")
+            return False, body
+        print(f"  ✅ Order placed: {body.get('result', {})}")
+        return True, body.get("result", {})
+    except Exception as e:
+        print(f"  ⚠️ Order exception: {e}")
+        return False, {"error": str(e)}
+
+
+def cancel_order(txid: str) -> bool:
+    """Cancel an open order by transaction ID."""
+    path = "/0/private/CancelOrder"
+    data = {"txid": txid}
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        body = res.json()
+        if body.get("error"):
+            print(f"  ❌ Cancel error: {body['error']}")
+            return False
+        print(f"  ✅ Cancelled: {txid}")
+        return True
+    except Exception as e:
+        print(f"  ⚠️ Cancel exception: {e}")
+        return False
+
+
+def get_open_orders() -> dict:
+    """Return all open orders. Keys are transaction IDs."""
+    path = "/0/private/OpenOrders"
+    data = {}
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        body = res.json()
+        if body.get("error"):
+            print(f"  ⚠️ OpenOrders error: {body['error']}")
+            return {}
+        return body.get("result", {}).get("open", {})
+    except Exception as e:
+        print(f"  ⚠️ OpenOrders exception: {e}")
+    return {}
+
+
+def get_closed_orders(trades: bool = True) -> dict:
+    """Return closed/filled orders."""
+    path = "/0/private/ClosedOrders"
+    data = {"trades": "true" if trades else "false"}
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        body = res.json()
+        if body.get("error"):
+            print(f"  ⚠️ ClosedOrders error: {body['error']}")
+            return {}
+        return body.get("result", {}).get("closed", {})
+    except Exception as e:
+        print(f"  ⚠️ ClosedOrders exception: {e}")
+    return {}
+
+
+# ─────────────────────────────────────────────
+# CONNECTION TEST
+# ─────────────────────────────────────────────
+
+def test_connection() -> dict:
+    """
+    Test auth by fetching balance. Prints debug info.
+    Run directly: python3 kraken_connection.py
+    """
+    print("=" * 50)
+    print(" 🔌 Testing Kraken connection...")
+    print("=" * 50)
+
+    # Public endpoint first (no auth needed)
+    ticker = get_ticker("XBTUSD")
+    if ticker:
+        ask = ticker.get("a", ["?"])[0]
+        bid = ticker.get("b", ["?"])[0]
+        print(f" ✅ Public API working | BTC ask: ${ask} bid: ${bid}")
+    else:
+        print(" ❌ Public API failed")
+
+    # Private endpoint
+    balances = get_balance()
+    if balances:
+        print(f" ✅ Auth working | Balances:")
+        for asset, amount in balances.items():
+            if float(amount) > 0:
+                print(f"    {asset}: {amount}")
+    else:
+        print(" ❌ Auth failed — check KRAKEN_API_KEY and KRAKEN_API_SECRET in .env")
+
+    print("=" * 50)
+    return balances
+
+
+if __name__ == "__main__":
+    test_connection()
