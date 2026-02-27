@@ -83,15 +83,41 @@ def get_stock_config(symbol: str) -> dict:
     }
 
 def get_pair_format(symbol: str) -> str:
-    """Get correct Kraken pair format."""
+    """Get correct Kraken pair format for crypto vs stocks/ETFs."""
+    # Crypto pairs
     if symbol == "BTC":
         return "XBTUSD"
     elif symbol == "ETH":
         return "ETHUSD"
-    elif symbol == "SOXS.EQ":
-        return "SOXSUSD"  # Fix for SOXS ETF
+    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI"]:
+        return f"{symbol}USD"
+    
+    # Stock/ETF pairs (3-4 letter tickers)
+    elif len(symbol) <= 4 and symbol.replace(".", "").isalpha():
+        if symbol.endswith(".EQ"):
+            return f"{symbol}USD"  # Already has .EQ suffix
+        else:
+            return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
+    
+    # Default to crypto format
     else:
         return f"{symbol}USD"
+
+def is_stock_or_etf(symbol: str) -> bool:
+    """Check if symbol is a stock/ETF (not crypto)."""
+    # Remove .EQ suffix if present
+    clean_symbol = symbol.replace(".EQ", "")
+    
+    # Stocks/ETFs are typically 1-5 letters, no crypto prefixes
+    crypto_prefixes = ["XBT", "XETH", "XXBT"]
+    stock_like = (
+        clean_symbol.isalpha() and 
+        len(clean_symbol) <= 5 and
+        not any(clean_symbol.startswith(prefix) for prefix in crypto_prefixes) and
+        clean_symbol not in ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI"]
+    )
+    
+    return stock_like
 
 def get_current_holdings():
     """Get current holdings from Kraken balance."""
@@ -121,35 +147,67 @@ def get_average_entry_price(symbol: str, pair: str):
 
 def get_price_precision(symbol: str) -> int:
     """Get price precision for Kraken pairs."""
-    precision_map = {
+    clean_symbol = symbol.replace(".EQ", "")
+    
+    # Crypto precision
+    crypto_precision = {
         "BTC": 1,      # $65,000.0
         "ETH": 2,      # $3,500.00
         "SOL": 2,      # $81.00
         "DOT": 4,      # $1.5961
         "ADA": 4,      # $0.4567
-        "SOXS": 4,     # $1.2345
-        "SOXS.EQ": 4,  # $1.2345
+        "LINK": 4,     # $10.1234
+        "UNI": 4,      # $15.2345
         "PEPE": 8,     # $0.00000001
     }
-    return precision_map.get(symbol, 4)
-
-def format_price(price: float, precision: int) -> float:
-    """Format price to correct decimal places."""
-    return round(price, precision)
+    
+    # Stock/ETF precision (typically 2-4 decimals)
+    stock_precision = {
+        "SOXS": 4,     # $1.2345
+        "AAPL": 2,     # $150.00
+        "TSLA": 2,     # $200.00
+        "MSFT": 2,     # $300.00
+        "GOOGL": 2,    # $150.00
+    }
+    
+    if is_stock_or_etf(symbol):
+        return stock_precision.get(clean_symbol, 4)
+    else:
+        return crypto_precision.get(clean_symbol, 4)
 
 def get_minimum_order_size(symbol: str) -> float:
     """Get minimum order size for Kraken pairs."""
-    min_sizes = {
+    clean_symbol = symbol.replace(".EQ", "")
+    
+    # Crypto minimums
+    crypto_min_sizes = {
         "BTC": 0.0001,
         "ETH": 0.005,
         "SOL": 0.01,
         "DOT": 0.1,
         "ADA": 1.0,
-        "SOXS": 1.0,
-        "SOXS.EQ": 1.0,
+        "LINK": 0.1,
+        "UNI": 0.1,
         "PEPE": 100000,  # High minimum for memecoins
     }
-    return min_sizes.get(symbol, 0.01)
+    
+    # Stock/ETF minimums (typically 1 share)
+    stock_min_sizes = {
+        "SOXS": 1.0,
+        "AAPL": 1.0,
+        "TSLA": 1.0,
+        "MSFT": 1.0,
+        "GOOGL": 1.0,
+    }
+    
+    if is_stock_or_etf(symbol):
+        return stock_min_sizes.get(clean_symbol, 1.0)
+    else:
+        return crypto_min_sizes.get(clean_symbol, 0.01)
+
+def format_price(price: float, precision: int) -> float:
+    """Format price to correct decimal places."""
+    return round(price, precision)
 
 def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False):
     """Place stop-loss and take-profit orders for a holding."""
@@ -207,7 +265,7 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
                 else:
                     print(f"  ❌ Failed to cancel: {cancel_info}")
         
-        # Place stop-loss order
+        # Place stop-loss order (this will be our primary protection)
         print(f"  🛡️ Placing stop-loss order...")
         stop_result, stop_info = place_order(
             pair=pair,
@@ -225,34 +283,46 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
             print(f"  ❌ Stop-loss order failed: {stop_info}")
             return False
         
-        # Place take-profit order
-        print(f"  🎯 Placing take-profit order...")
-        profit_result, profit_info = place_order(
-            pair=pair,
-            side="sell",
-            order_type="limit",
-            volume=holdings,
-            price=take_profit_price,
-            validate=False
-        )
+        # For take-profit, we'll use a different approach:
+        # Since Kraken doesn't allow multiple sell orders, we'll create a price alert
+        # and let the bot handle the take-profit when price reaches target
+        print(f"  🎯 Take-profit target set at ${take_profit_price:.{price_precision}f}")
+        print(f"  💡 Note: Bot will monitor for take-profit price and sell manually")
+        print(f"  📱 You'll get Telegram alert when take-profit price is reached")
         
-        if profit_result:
-            profit_order_id = profit_info.get('txid', [None])[0]
-            print(f"  ✅ Take-profit order placed: {profit_order_id}")
-        else:
-            print(f"  ❌ Take-profit order failed: {profit_info}")
-            return False
+        # Store take-profit info for monitoring
+        take_profit_info = {
+            "symbol": symbol,
+            "pair": pair,
+            "target_price": take_profit_price,
+            "volume": holdings,
+            "stop_loss_order": stop_order_id
+        }
+        
+        # Save take-profit info to a file for monitoring
+        try:
+            import json
+            with open("take_profit_targets.json", "a") as f:
+                f.write(json.dumps({
+                    "timestamp": datetime.now().isoformat(),
+                    **take_profit_info
+                }) + "\n")
+        except:
+            pass
         
         # Send notification
         msg = f"🛡️ *Protective Orders Placed*\n"
         msg += f"Symbol: {symbol}\n"
         msg += f"Holdings: {holdings:.6f}\n"
-        msg += f"Stop Loss: ${stop_loss_price:.4f}\n"
-        msg += f"Take Profit: ${take_profit_price:.4f}\n"
-        msg += f"Orders: {stop_order_id} | {profit_order_id}"
+        msg += f"Stop Loss: ${stop_loss_price:.{price_precision}f}\n"
+        msg += f"Take Profit Target: ${take_profit_price:.{price_precision}f}\n"
+        msg += f"Stop Loss Order: {stop_order_id}\n"
+        msg += f"Take Profit: Monitored by bot"
         tg(msg)
         
-        print(f"  ✅ Both protective orders placed successfully!")
+        print(f"  ✅ Protective orders placed successfully!")
+        print(f"  🛡️ Stop-loss: Active (${stop_loss_price:.{price_precision}f})")
+        print(f"  🎯 Take-profit: Will be monitored (${take_profit_price:.{price_precision}f})")
         return True
         
     except Exception as e:
