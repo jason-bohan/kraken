@@ -512,11 +512,11 @@ def monitor(dry_run: bool = False):
     """Main monitoring loop."""
     mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
     print("=" * 60)
-    print(f"  📈 Stock Launcher Monitor — Kraken  {mode}")
-    print(f"  Monitoring: {', '.join(STOCKS.keys())}")
+    print(f"  🪙 Crypto Swing Trading Monitor — Kraken  {mode}")
+    print(f"  Monitoring: {', '.join(CRYPTO_ASSETS.keys())}")
     print(f"  Check interval: {CHECK_INTERVAL}s")
     print(f"  Launch cooldown: {LAUNCH_COOLDOWN}s")
-    print(f"  Day trade limit: {MAX_DAY_TRADES} per stock")
+    print(f"  Day trade limit: {MAX_DAY_TRADES} per crypto")
     print("=" * 60)
     
     if dry_run:
