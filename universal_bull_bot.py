@@ -499,6 +499,22 @@ def scan_specific_asset(asset, timeframes=None, dry_run=False, sell_mode=False):
     
     return signals
 
+def format_price_for_pair(price: float, pair: str) -> float:
+    """Format price according to pair precision requirements."""
+    # Define precision for different pairs
+    precision_map = {
+        'DOTETH': 6,    # DOT/ETH limited to 6 decimals
+        'DOTBTC': 8,    # DOT/BTC more precision
+        'DOTUSD': 4,    # DOT/USD standard
+        'DOTUSDC': 4,   # DOT/USDC standard
+        'DOTUSDT': 4,   # DOT/USDT standard
+    }
+    
+    precision = precision_map.get(pair, 6)  # Default to 6 decimals
+    
+    # Round to appropriate precision
+    return round(price, precision)
+
 def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0.02, dry_run: bool = False):
     """Place a trailing stop-loss order."""
     try:
@@ -515,11 +531,17 @@ def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0
         
         # Calculate trailing stop price (2% below current)
         stop_price = current_price * (1 - trail_percentage)
-        print(f"  🛡️ Initial stop: ${stop_price:.6f}")
+        
+        # Format price according to pair precision
+        formatted_stop_price = format_price_for_pair(stop_price, pair)
+        formatted_current_price = format_price_for_pair(current_price, pair)
+        
+        print(f"  💰 Current price: ${formatted_current_price:.6f}")
+        print(f"  🛡️ Initial stop: ${formatted_stop_price:.6f}")
         
         if dry_run:
             print(f"  🔵 [DRY RUN] Would place trailing stop-loss")
-            return True, {"stop_price": stop_price}
+            return True, {"stop_price": formatted_stop_price}
         
         # Place trailing stop-loss order
         result, info = place_order(
@@ -527,7 +549,7 @@ def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0
             side="sell",
             order_type="stop-loss",
             volume=volume,
-            price=stop_price,
+            price=formatted_stop_price,  # Use formatted price
             validate=False
         )
         
