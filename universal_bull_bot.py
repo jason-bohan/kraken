@@ -298,11 +298,34 @@ def execute_trade(pair_data, signal, dry_run=False):
         base = pair_data['base']
         current_price = signal['price']
         
-        # Calculate position size
+        # Check existing holdings first
         balances = get_balance()
         usd_balance = float(balances.get('ZUSD', 0))
         
-        if usd_balance < 10:  # Minimum $10 for trading
+        # Check if we already have this asset
+        asset_balance = 0
+        for asset, balance in balances.items():
+            if asset.replace('X', '') == base:  # Handle XBT -> BTC, XETH -> ETH
+                asset_balance = float(balance)
+                break
+        
+        if asset_balance > 0:
+            print(f"  ⚠️ Already holding {asset_balance:.6f} {base}")
+            print(f"  💡 Skipping buy order - consider selling instead")
+            return False
+        
+        # Check for existing OCO orders on this pair
+        try:
+            open_orders = get_open_orders()
+            for order_id, order_data in open_orders.get('open', {}).items():
+                if order_data.get('descr', {}).get('pair') == pair_data['pair']:
+                    print(f"  ⚠️ Existing order found: {order_id}")
+                    print(f"  💡 Skipping - order already active")
+                    return False
+        except Exception as e:
+            print(f"  ⚠️ Could not check existing orders: {e}")
+        
+        if usd_balance < 5:  # Minimum $5 for trading
             print(f"  ❌ Insufficient USD balance: ${usd_balance:.2f}")
             return False
         
@@ -414,10 +437,14 @@ def scan_all_assets(timeframes=None, dry_run=False):
     
     return top_signals
 
-def scan_specific_asset(asset, timeframes=None, dry_run=False):
-    """Scan a specific asset for bullish signals."""
+def scan_specific_asset(asset, timeframes=None, dry_run=False, sell_mode=False):
+    """Scan a specific asset for bullish signals or sell existing positions."""
     if timeframes is None:
         timeframes = TIMEFRAMES
+    
+    if sell_mode:
+        print(f"  🔍 Checking {asset} for sell signals...")
+        return check_sell_signals(asset, dry_run)
     
     print(f"  🔍 Scanning {asset} for bullish signals...")
     
@@ -472,6 +499,76 @@ def scan_specific_asset(asset, timeframes=None, dry_run=False):
     
     return signals
 
+def check_sell_signals(asset, dry_run=False):
+    """Check if existing position should be sold."""
+    try:
+        # Get current holdings
+        balances = get_balance()
+        asset_balance = 0
+        
+        # Find the asset balance
+        for balance_asset, balance in balances.items():
+            if balance_asset.replace('X', '') == asset.upper():
+                asset_balance = float(balance)
+                break
+        
+        if asset_balance <= 0:
+            print(f"  ℹ️ No {asset} holdings found")
+            return False
+        
+        print(f"  📊 Current {asset} holdings: {asset_balance:.6f}")
+        
+        # Get current price
+        pairs = get_all_tradable_pairs()
+        target_pair = None
+        
+        for pair_entry in pairs:
+            base = pair_entry.get('base', '').replace('X', '')
+            if base.upper() == asset.upper():
+                target_pair = pair_entry.get('pair')
+                break
+        
+        if not target_pair:
+            print(f"  ❌ Could not find {asset} trading pair")
+            return False
+        
+        ticker = get_ticker(target_pair)
+        if not ticker:
+            print(f"  ❌ Could not get {asset} price")
+            return False
+        
+        current_price = float(ticker.get("c", [0])[0])
+        print(f"  💰 Current price: ${current_price:.6f}")
+        
+        # Simple sell logic: sell if we have any holdings
+        print(f"\n  🎯 Sell Signal Detected!")
+        print(f"  📊 Selling {asset_balance:.6f} {asset} at ${current_price:.6f}")
+        print(f"  💰 Total value: ${asset_balance * current_price:.2f}")
+        
+        if dry_run:
+            print(f"  🔵 [DRY RUN] Would place sell order")
+            return True
+        
+        # Place sell order
+        sell_result, sell_info = place_order(
+            pair=target_pair,
+            side="sell",
+            order_type="market",
+            volume=asset_balance,
+            validate=False
+        )
+        
+        if sell_result:
+            print(f"  ✅ Sell order placed: {sell_info}")
+            return True
+        else:
+            print(f"  ❌ Sell order failed: {sell_info}")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ Sell signal error: {e}")
+        return False
+
 # ─────────────────────────────────────────────
 # 🎯 MAIN FUNCTION
 # ─────────────────────────────────────────────
@@ -481,6 +578,7 @@ def main():
     parser = argparse.ArgumentParser(description="Universal Bull Market Bot - Kraken")
     parser.add_argument("--scan", action="store_true", help="Scan all assets for bullish signals")
     parser.add_argument("--asset", type=str, help="Scan specific asset (BTC, ETH, SOL, etc.)")
+    parser.add_argument("--sell", action="store_true", help="Sell existing position for asset")
     parser.add_argument("--dry", action="store_true", help="Dry run (no real trades)")
     parser.add_argument("--timeframes", type=str, default="1m,5m,15m,1h", 
                        help="Timeframes to analyze (comma-separated)")
@@ -501,10 +599,14 @@ def main():
         # Scan all assets
         scan_all_assets(timeframes, args.dry)
     elif args.asset:
-        # Scan specific asset
-        scan_specific_asset(args.asset, timeframes, args.dry)
+        if args.sell:
+            # Sell existing position
+            scan_specific_asset(args.asset, timeframes, args.dry, sell_mode=True)
+        else:
+            # Scan specific asset for buy signals
+            scan_specific_asset(args.asset, timeframes, args.dry)
     else:
-        print("  ❌ Please specify --scan or --asset <symbol>")
+        print("  ❌ Please specify --scan, --asset <symbol>, or --asset <symbol> --sell")
         return
     
     print(f"\n  ✅ Scanning complete!")
