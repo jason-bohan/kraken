@@ -26,8 +26,7 @@ import time
 import argparse
 from datetime import datetime
 from kraken_connection import (
-    get_balance, get_ticker, get_ohlc,
-    place_order, get_open_orders, cancel_order,
+    get_balance, get_ticker, get_ohlc, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order,
     calculate_order_size
 )
 

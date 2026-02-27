@@ -455,6 +455,53 @@ def cancel_order(txid: str) -> bool:
         return False
 
 
+def validate_order(order_data: dict) -> str:
+    """Validate order data before placing."""
+    try:
+        # Basic validation checks
+        if not order_data.get("pair"):
+            return "Missing pair"
+        
+        if not order_data.get("type"):
+            return "Missing order type"
+        
+        if not order_data.get("ordertype"):
+            return "Missing order type (ordertype)"
+        
+        # Validate volume
+        volume = order_data.get("volume", "0")
+        try:
+            volume_float = float(volume)
+            if volume_float <= 0:
+                return "Volume must be positive"
+        except ValueError:
+            return "Invalid volume format"
+        
+        # Validate prices for limit/stop orders
+        if order_data.get("ordertype") in ["limit", "stop-loss", "oco"]:
+            price = order_data.get("price", "0")
+            try:
+                price_float = float(price)
+                if price_float <= 0:
+                    return "Price must be positive"
+            except ValueError:
+                return "Invalid price format"
+        
+        # For OCO orders, validate both prices
+        if order_data.get("ordertype") == "oco":
+            price2 = order_data.get("price2", "0")
+            try:
+                price2_float = float(price2)
+                if price2_float <= 0:
+                    return "Stop price must be positive"
+            except ValueError:
+                return "Invalid stop price format"
+        
+        return None  # Validation passed
+        
+    except Exception as e:
+        return f"Validation error: {e}"
+
 def get_open_orders() -> dict:
     """Return all open orders. Keys are transaction IDs."""
     path = "/0/private/OpenOrders"

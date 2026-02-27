@@ -16,7 +16,7 @@ import signal
 import sys
 import math
 from datetime import datetime, timedelta
-from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, get_open_orders, cancel_order
+from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order
 from kraken_connection import calculate_order_size
 
 # ─────────────────────────────────────────────

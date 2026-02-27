@@ -11,7 +11,7 @@ import os
 import time
 import argparse
 from datetime import datetime
-from kraken_connection import get_balance, get_ticker, get_orderbook, place_order, get_open_orders, cancel_order
+from kraken_connection import get_balance, get_ticker, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -315,64 +315,40 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
                 else:
                     print(f"  ❌ Failed to cancel: {cancel_info}")
         
-        # Place stop-loss order (this will be our primary protection)
-        print(f"  🛡️ Placing stop-loss order...")
-        stop_result, stop_info = place_order(
+        # Place OCO order (combines stop-loss and take-profit)
+        print(f"  🛡️ Placing OCO order (stop-loss + take-profit)...")
+        oco_result, oco_info = place_oco_order(
             pair=pair,
             side="sell",
-            order_type="stop-loss",
             volume=holdings,
-            price=stop_loss_price,
+            price=take_profit_price,      # Take-profit limit
+            price2=stop_loss_price,     # Stop-loss trigger
             validate=False
         )
         
-        if stop_result:
-            stop_order_id = stop_info.get('txid', [None])[0]
-            print(f"  ✅ Stop-loss order placed: {stop_order_id}")
+        if oco_result:
+            oco_order_ids = oco_info.get('txid', [])
+            print(f"  ✅ OCO order placed: {oco_order_ids}")
+            print(f"  🛡️ Stop-loss: ${stop_loss_price:.{price_precision}f}")
+            print(f"  🎯 Take-profit: ${take_profit_price:.{price_precision}f}")
         else:
-            print(f"  ❌ Stop-loss order failed: {stop_info}")
+            print(f"  ❌ OCO order failed: {oco_info}")
             return False
         
-        # For take-profit, we'll use a different approach:
-        # Since Kraken doesn't allow multiple sell orders, we'll create a price alert
-        # and let the bot handle the take-profit when price reaches target
-        print(f"  🎯 Take-profit target set at ${take_profit_price:.{price_precision}f}")
-        print(f"  💡 Note: Bot will monitor for take-profit price and sell manually")
-        print(f"  📱 You'll get Telegram alert when take-profit price is reached")
-        
-        # Store take-profit info for monitoring
-        take_profit_info = {
-            "symbol": symbol,
-            "pair": pair,
-            "target_price": take_profit_price,
-            "volume": holdings,
-            "stop_loss_order": stop_order_id
-        }
-        
-        # Save take-profit info to a file for monitoring
-        try:
-            import json
-            with open("take_profit_targets.json", "a") as f:
-                f.write(json.dumps({
-                    "timestamp": datetime.now().isoformat(),
-                    **take_profit_info
-                }) + "\n")
-        except:
-            pass
-        
         # Send notification
-        msg = f"🛡️ *Protective Orders Placed*\n"
+        msg = f"🛡️ *OCO Protective Order Placed*\n"
         msg += f"Symbol: {symbol}\n"
         msg += f"Holdings: {holdings:.6f}\n"
         msg += f"Stop Loss: ${stop_loss_price:.{price_precision}f}\n"
         msg += f"Take Profit Target: ${take_profit_price:.{price_precision}f}\n"
-        msg += f"Stop Loss Order: {stop_order_id}\n"
-        msg += f"Take Profit: Monitored by bot"
+        msg += f"OCO Order IDs: {oco_order_ids}\n"
+        msg += f"Type: One-Cancels-Other (stop-loss + take-profit)"
         tg(msg)
         
-        print(f"  ✅ Protective orders placed successfully!")
+        print(f"  ✅ OCO protective order placed successfully!")
         print(f"  🛡️ Stop-loss: Active (${stop_loss_price:.{price_precision}f})")
-        print(f"  🎯 Take-profit: Will be monitored (${take_profit_price:.{price_precision}f})")
+        print(f"  🎯 Take-profit: Active (${take_profit_price:.{price_precision}f})")
+        print(f"  📊 Type: One-Cancels-Other (OCO)")
         return True
         
     except Exception as e:
