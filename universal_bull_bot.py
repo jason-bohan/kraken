@@ -399,17 +399,18 @@ def scan_all_assets(timeframes=None, dry_run=False):
         base = signal_data['base']
         signal = signal_data['signal']
         score = signal_data['score']
+        pair_name = signal_data['pair']
         price = signal['price']
         strong = "🔥" if signal['strong'] else "📈"
         
-        print(f"  {i+1}. {strong} {base:<6} | ${price:<8.4f} | Score: {score:<2} | {signal['pair']}")
+        print(f"  {i+1}. {strong} {base:<6} | ${price:<8.4f} | Score: {score:<2} | {pair_name}")
         print(f"      🎯 {', '.join(signal['reasons'])}")
         print(f"      📊 Timeframes: {', '.join(signal['timeframes'].keys())}")
         
         # Execute trades if not dry run
         if not dry_run and score >= 4:  # Only trade strong signals
             print(f"\n  🎯 Executing trade on {base}...")
-            execute_trade(pair_data, signal, dry_run)
+            execute_trade(signal_data, signal, dry_run)
     
     return top_signals
 
