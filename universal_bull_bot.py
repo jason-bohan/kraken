@@ -305,7 +305,7 @@ def execute_trade(pair_data, signal, dry_run=False):
         print(f"\n  🚀 {base} Bull Signal Detected!")
         print(f"  📊 Price: ${current_price:.4f}")
         print(f"  📈 Signal Score: {signal['score']}")
-        print(f"  🎯 Timeframes: {', '.join(signal['timeframes'].keys())}")
+        print(f"  🎯 Timeframe: {signal.get('timeframe', 'N/A')}")
         print(f"  📝 Reasons: {', '.join(signal['reasons'])}")
         print(f"  📏 Position Size: {position_size:.6f}")
         print(f"  🛡️ Stop Loss: ${stop_loss_price:.4f} ({stop_loss_pct*100:.1f}%)")
@@ -406,11 +406,20 @@ def scan_specific_asset(asset, timeframes=None, dry_run=False):
     # Find the asset pair
     pairs = get_all_tradable_pairs()
     target_pair = None
+    target_info = None
     
-    for pair_name, pair_info in pairs.items():
-        base = pair_info.get('base', '').replace('X', '')
-        if base.upper() == asset.upper():
-            target_pair = pair_name
+    asset_upper = asset.upper()
+    
+    for pair_entry in pairs:
+        base = pair_entry.get('base', '').replace('X', '')
+        pair_name = pair_entry.get('pair', '').upper()
+        
+        # Check if user input matches base, pair name, or wsname
+        if (base.upper() == asset_upper or 
+            pair_name == asset_upper or
+            pair_entry.get('wsname', '').replace('/', '').upper() == asset_upper):
+            target_pair = pair_entry.get('pair')
+            target_info = pair_entry
             break
     
     if not target_pair:
@@ -421,8 +430,8 @@ def scan_specific_asset(asset, timeframes=None, dry_run=False):
     pair_data = {
         'pair': target_pair,
         'base': asset.upper(),
-        'quote': pair_info.get('quote', ''),
-        'ordermin': float(pair_info.get('ordermin', 0))
+        'quote': target_info.get('quote', ''),
+        'ordermin': float(target_info.get('ordermin', 0))
     }
     
     signals = analyze_bullish_signals(pair_data, timeframes)
