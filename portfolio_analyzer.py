@@ -24,7 +24,7 @@ import json
 import csv
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
-from kraken_connection import get_balance, get_ticker
+from kraken_connection import get_balance, get_ticker, get_trade_history, get_closed_orders
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -35,57 +35,125 @@ CHART_WIDTH = 60
 CHART_HEIGHT = 15
 
 # ─────────────────────────────────────────────
-# 📈 TRADE HISTORY STORAGE
+# 📈 KRAKEN API TRADE HISTORY
 # ─────────────────────────────────────────────
 
-class TradeHistory:
-    """Manages trading history data."""
-    
-    def __init__(self, data_file="trade_history.json"):
-        self.data_file = data_file
-        self.trades = self.load_history()
-    
-    def load_history(self):
-        """Load trade history from file."""
-        try:
-            if os.path.exists(self.data_file):
-                with open(self.data_file, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"  ⚠️ Error loading history: {e}")
+def get_kraken_trade_history(period_days=None, count=100):
+    """Get trade history from Kraken API."""
+    try:
+        # Get trades from Kraken API
+        trades = get_trade_history(count)
+        
+        if not trades:
+            print("  📝 No trades found in Kraken API")
+            return []
+        
+        # Filter by period if specified
+        if period_days:
+            cutoff_timestamp = int((datetime.now() - timedelta(days=period_days)).timestamp())
+            trades = [t for t in trades if int(t["time"]) >= cutoff_timestamp]
+        
+        # Convert to our format
+        formatted_trades = []
+        for trade in trades:
+            # Convert timestamp to datetime
+            trade_time = datetime.fromtimestamp(int(trade["time"]))
+            
+            # Extract symbol from pair (e.g., "XBTUSD" -> "BTC")
+            pair = trade.get("pair", "")
+            symbol = pair.replace("XBT", "BTC").replace("XETH", "ETH").replace("ZUSD", "USD")
+            
+            # Calculate P&L (for sell trades, cost is revenue; for buy trades, cost is expense)
+            trade_type = trade.get("type", "")
+            cost = trade.get("cost", 0)
+            fee = trade.get("fee", 0)
+            
+            if trade_type == "sell":
+                pnl_amount = cost - fee  # Revenue minus fee
+                pnl_pct = 0  # Need entry price to calculate percentage
+            else:
+                pnl_amount = -(cost + fee)  # Cost plus fee is negative P&L
+                pnl_pct = 0
+            
+            formatted_trades.append({
+                "timestamp": trade_time.isoformat(),
+                "symbol": symbol,
+                "pair": pair,
+                "type": trade_type,
+                "entry_price": trade.get("price", 0),
+                "exit_price": trade.get("price", 0) if trade_type == "sell" else 0,
+                "shares": trade.get("vol", 0),
+                "pnl_amount": pnl_amount,
+                "pnl_pct": pnl_pct,
+                "reason": f"API {trade_type.title()}",
+                "fee": fee,
+                "cost": cost
+            })
+        
+        return formatted_trades
+        
+    except Exception as e:
+        print(f"  ⚠️ Error getting Kraken trade history: {e}")
         return []
-    
-    def save_history(self):
-        """Save trade history to file."""
-        try:
-            with open(self.data_file, 'w') as f:
-                json.dump(self.trades, f, indent=2, default=str)
-        except Exception as e:
-            print(f"  ⚠️ Error saving history: {e}")
-    
-    def add_trade(self, trade_data):
-        """Add a new trade to history."""
-        trade_data['timestamp'] = datetime.now().isoformat()
-        self.trades.append(trade_data)
-        self.save_history()
-    
-    def get_trades_in_period(self, period_days=None):
-        """Get trades within a specific period."""
-        if not period_days:
-            return self.trades
+
+def get_kraken_orders_history(period_days=None, count=100):
+    """Get closed orders history from Kraken API (more detailed)."""
+    try:
+        # Get closed orders from Kraken API
+        orders = get_closed_orders(count)
         
-        cutoff_date = datetime.now() - timedelta(days=period_days)
-        filtered_trades = []
+        if not orders:
+            print("  📝 No closed orders found in Kraken API")
+            return []
         
-        for trade in self.trades:
-            try:
-                trade_date = datetime.fromisoformat(trade.get('timestamp', ''))
-                if trade_date >= cutoff_date:
-                    filtered_trades.append(trade)
-            except:
-                continue
+        # Filter by period if specified
+        if period_days:
+            cutoff_timestamp = int((datetime.now() - timedelta(days=period_days)).timestamp())
+            orders = [o for o in orders if int(o["time"]) >= cutoff_timestamp]
         
-        return filtered_trades
+        # Convert to our format
+        formatted_trades = []
+        for order in orders:
+            # Convert timestamp to datetime
+            order_time = datetime.fromtimestamp(int(order["time"]))
+            
+            # Extract symbol from pair
+            pair = order.get("pair", "")
+            symbol = pair.replace("XBT", "BTC").replace("XETH", "ETH").replace("ZUSD", "USD")
+            
+            # Calculate P&L
+            order_type = order.get("type", "")
+            cost = order.get("cost", 0)
+            fee = order.get("fee", 0)
+            
+            if order_type == "sell":
+                pnl_amount = cost - fee
+                pnl_pct = 0
+            else:
+                pnl_amount = -(cost + fee)
+                pnl_pct = 0
+            
+            formatted_trades.append({
+                "timestamp": order_time.isoformat(),
+                "symbol": symbol,
+                "pair": pair,
+                "type": order_type,
+                "entry_price": order.get("price", 0),
+                "exit_price": order.get("price", 0) if order_type == "sell" else 0,
+                "shares": order.get("vol_exec", 0),
+                "pnl_amount": pnl_amount,
+                "pnl_pct": pnl_pct,
+                "reason": f"Order {order_type.title()}",
+                "fee": fee,
+                "cost": cost,
+                "status": order.get("status", "closed")
+            })
+        
+        return formatted_trades
+        
+    except Exception as e:
+        print(f"  ⚠️ Error getting Kraken orders history: {e}")
+        return []
 
 # ─────────────────────────────────────────────
 # 📊 TERMINAL CHARTS
@@ -461,22 +529,37 @@ def export_to_csv(trades, filename="portfolio_export.csv"):
 # ─────────────────────────────────────────────
 
 def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
-    """Main portfolio analysis function."""
-    print("📊 Portfolio P&L Analyzer — Kraken Trading History")
+    """Main portfolio analysis function using Kraken API."""
+    print("📊 Portfolio P&L Analyzer — Kraken API Trading History")
     print("=" * 60)
     
-    # Load trade history
-    history = TradeHistory()
-    trades = history.get_trades_in_period(period_days)
+    # Get trade history from Kraken API
+    print("  🔄 Fetching trade history from Kraken API...")
     
-    if not trades:
-        print("  📝 No trading history found")
-        print("  💡 Make sure your trading bots are saving trade data")
+    # Try both trade history and closed orders for comprehensive data
+    api_trades = get_kraken_trade_history(period_days, count=200)
+    api_orders = get_kraken_orders_history(period_days, count=200)
+    
+    # Combine both sources (remove duplicates)
+    all_trades = api_trades + api_orders
+    
+    if not all_trades:
+        print("  📝 No trading history found in Kraken API")
+        print("  💡 Make sure you have API permissions and recent trading activity")
         return
+    
+    # Remove duplicates by timestamp and pair
+    unique_trades = {}
+    for trade in all_trades:
+        key = f"{trade['timestamp']}_{trade['pair']}"
+        if key not in unique_trades:
+            unique_trades[key] = trade
+    
+    trades = list(unique_trades.values())
     
     # Filter by period
     if period_days:
-        print(f"  📅 Analyzing last {period_days} days")
+        print(f"  📅 Analyzing last {period_days} days ({len(trades)} trades)")
     else:
         print(f"  📅 Analyzing all {len(trades)} trades")
     
@@ -518,7 +601,7 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     send_telegram_summary(performance, symbol_stats, monthly_stats)
     
     print(f"\n  ✅ Analysis complete!")
-    print(f"  📊 Total analyzed: {len(trades)} trades")
+    print(f"  📊 Total analyzed: {len(trades)} trades from Kraken API")
 
 # ─────────────────────────────────────────────
 # 🎯 MAIN ENTRY POINT
