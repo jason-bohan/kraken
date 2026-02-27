@@ -27,7 +27,7 @@ import subprocess
 import signal
 import sys
 from datetime import datetime
-from kraken_connection import get_ticker, get_ohlc, get_balance
+from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook
 from kraken_connection import calculate_order_size
 
 # ─────────────────────────────────────────────
@@ -162,6 +162,94 @@ def get_market_data(symbol: str, config: dict) -> dict:
     except Exception as e:
         print(f"  ⚠️ Error getting {symbol} data: {e}")
         return None
+
+def analyze_orderbook(symbol: str, config: dict, current_price: float) -> dict:
+    """Analyze order book for deep value opportunities."""
+    try:
+        orderbook = get_orderbook(config["pair"], count=20)
+        if not orderbook:
+            return {"deep_value": False, "reason": "No orderbook data"}
+        
+        bids = orderbook.get("bids", [])  # Buy orders [price, volume, timestamp]
+        asks = orderbook.get("asks", [])   # Sell orders [price, volume, timestamp]
+        
+        if not bids or not asks:
+            return {"deep_value": False, "reason": "Empty orderbook"}
+        
+        # Calculate buy wall strength below current price
+        buy_wall_strength = 0
+        significant_buy_walls = []
+        
+        for price_str, volume, _ in bids[:10]:  # Top 10 buy orders
+            price = float(price_str)
+            volume = float(volume)
+            
+            # Look for buy walls 2-10% below current price
+            discount = (current_price - price) / current_price
+            if 0.02 <= discount <= 0.10:  # 2-10% below
+                buy_wall_strength += volume * price
+                if volume * price > 1000:  # Significant wall (> $1000)
+                    significant_buy_walls.append({
+                        "price": price,
+                        "volume": volume,
+                        "value_usd": volume * price,
+                        "discount": discount * 100
+                    })
+        
+        # Calculate sell wall strength above current price
+        sell_wall_strength = 0
+        significant_sell_walls = []
+        
+        for price_str, volume, _ in asks[:10]:  # Top 10 sell orders
+            price = float(price_str)
+            volume = float(volume)
+            
+            # Look for sell walls 2-10% above current price
+            premium = (price - current_price) / current_price
+            if 0.02 <= premium <= 0.10:  # 2-10% above
+                sell_wall_strength += volume * price
+                if volume * price > 1000:  # Significant wall (> $1000)
+                    significant_sell_walls.append({
+                        "price": price,
+                        "volume": volume,
+                        "value_usd": volume * price,
+                        "premium": premium * 100
+                    })
+        
+        # Determine deep value opportunities
+        deep_value_signals = []
+        
+        # Strong buy support below
+        if buy_wall_strength > 5000:  # > $5000 in buy walls
+            deep_value_signals.append(f"Strong buy support ${buy_wall_strength:.0f} below")
+        
+        # Weak sell resistance above (good for breakout)
+        if sell_wall_strength < 2000 and significant_sell_walls:  # < $2000 in sell walls
+            deep_value_signals.append(f"Weak sell resistance ${sell_wall_strength:.0f} above")
+        
+        # Large single wall (whale activity)
+        max_buy_wall = max(significant_buy_walls, key=lambda x: x['value_usd']) if significant_buy_walls else None
+        if max_buy_wall and max_buy_wall['value_usd'] > 10000:
+            deep_value_signals.append(f"Whale buy wall ${max_buy_wall['value_usd']:.0f} at ${max_buy_wall['price']:.0f}")
+        
+        if deep_value_signals:
+            return {
+                "deep_value": True,
+                "signals": deep_value_signals,
+                "buy_walls": significant_buy_walls[:3],  # Top 3
+                "sell_walls": significant_sell_walls[:3],  # Top 3
+                "buy_strength": buy_wall_strength,
+                "sell_strength": sell_wall_strength
+            }
+        else:
+            return {
+                "deep_value": False,
+                "reason": f"Buy: ${buy_wall_strength:.0f} | Sell: ${sell_wall_strength:.0f}"
+            }
+            
+    except Exception as e:
+        print(f"  ⚠️ Orderbook analysis error: {e}")
+        return {"deep_value": False, "reason": f"Analysis error: {e}"}
 
 def get_portfolio_value() -> dict:
     """Calculate total portfolio value in USD."""
@@ -387,6 +475,15 @@ def monitor(dry_run: bool = False):
                     print(f"  ⚠️ No market data")
                     continue
                 
+                # Analyze order book for deep value
+                orderbook_analysis = analyze_orderbook(symbol, config, market_data['price'])
+                
+                # Show order book info
+                if orderbook_analysis.get('deep_value'):
+                    print(f"  🏛️ DEEP VALUE: {', '.join(orderbook_analysis['signals'])}")
+                else:
+                    print(f"  📊 Orderbook: {orderbook_analysis['reason']}")
+                
                 # Check balance requirements
                 can_trade, balance_info = check_balance_requirements(config)
                 
@@ -397,8 +494,26 @@ def monitor(dry_run: bool = False):
                 # Check entry conditions
                 signal_info = check_entry_conditions(symbol, config, market_data)
                 
-                if signal_info["signal"]:
-                    print(f"  🎯 SIGNAL: {signal_info['type'].upper()} - {signal_info['reason']}")
+                # Check for deep value signals as additional entry criteria
+                deep_value_signal = orderbook_analysis.get('deep_value', False)
+                
+                if signal_info["signal"] or deep_value_signal:
+                    if deep_value_signal and not signal_info["signal"]:
+                        print(f"  🏛️ DEEP VALUE SIGNAL: {', '.join(orderbook_analysis['signals'])}")
+                        # Create a signal info for deep value
+                        signal_info = {
+                            "signal": True,
+                            "type": "buy",
+                            "reason": f"Deep value: {', '.join(orderbook_analysis['signals'])}",
+                            "price": market_data['price'],
+                            "rsi": market_data['rsi'],
+                            "dip": market_data['dip_from_high']
+                        }
+                    else:
+                        print(f"  🎯 SIGNAL: {signal_info['type'].upper()} - {signal_info['reason']}")
+                        if deep_value_signal:
+                            print(f"  🏛️ + Deep value: {', '.join(orderbook_analysis['signals'])}")
+                    
                     print(f"  💰 Price: ${signal_info['price']:.2f} | RSI: {signal_info['rsi']:.1f} | Dip: {signal_info['dip']*100:.1f}%")
                     
                     # Launch bot if conditions met
