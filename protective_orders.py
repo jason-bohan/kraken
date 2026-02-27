@@ -94,14 +94,19 @@ def get_pair_format(symbol: str) -> str:
     elif symbol in crypto_symbols:
         return f"{symbol}USD"
     
-    # Stock/ETF pairs (3-4 letter tickers, excluding known crypto)
+    # Stock/ETF pairs (special handling for SOXS and other ETFs)
+    elif symbol.replace(".EQ", "") in ["SOXS", "TSLA", "AAPL", "MSFT", "GOOGL"]:
+        clean_symbol = symbol.replace(".EQ", "")
+        return f"{clean_symbol}USD"  # Try without .EQ suffix first
+    
+    # Other stock/ETF pairs (3-4 letter tickers)
     elif len(symbol.replace(".EQ", "")) <= 4 and symbol.replace(".", "").isalpha():
         clean_symbol = symbol.replace(".EQ", "")
         if clean_symbol not in crypto_symbols:
             if symbol.endswith(".EQ"):
-                return f"{symbol}USD"  # Already has .EQ suffix
+                return f"{clean_symbol}USD"  # Try without .EQ
             else:
-                return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
+                return f"{symbol}.EQUSD"  # Add .EQ suffix as fallback
     
     # Default to crypto format
     else:
@@ -115,6 +120,9 @@ def is_stock_or_etf(symbol: str) -> bool:
     # Known crypto symbols (including memecoins)
     crypto_symbols = ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI", "PEPE", "SHIB", "DOGE"]
     
+    # Known stock/ETF symbols
+    stock_symbols = ["SOXS", "TSLA", "AAPL", "MSFT", "GOOGL"]
+    
     # Crypto prefixes
     crypto_prefixes = ["XBT", "XETH", "XXBT"]
     
@@ -125,7 +133,7 @@ def is_stock_or_etf(symbol: str) -> bool:
         clean_symbol not in crypto_symbols
     )
     
-    return stock_like
+    return stock_like or clean_symbol in stock_symbols
 
 def get_current_holdings():
     """Get current holdings from Kraken balance."""
