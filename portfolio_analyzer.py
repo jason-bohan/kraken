@@ -63,31 +63,18 @@ def get_kraken_trade_history(period_days=None, count=100):
             pair = trade.get("pair", "")
             symbol = pair.replace("XBT", "BTC").replace("XETH", "ETH").replace("ZUSD", "USD")
             
-            # Calculate P&L (for sell trades, cost is revenue; for buy trades, cost is expense)
-            trade_type = trade.get("type", "")
-            cost = trade.get("cost", 0)
-            fee = trade.get("fee", 0)
-            
-            if trade_type == "sell":
-                pnl_amount = cost - fee  # Revenue minus fee
-                pnl_pct = 0  # Need entry price to calculate percentage
-            else:
-                pnl_amount = -(cost + fee)  # Cost plus fee is negative P&L
-                pnl_pct = 0
-            
+            # Store raw trade data for later P&L calculation
             formatted_trades.append({
                 "timestamp": trade_time.isoformat(),
                 "symbol": symbol,
                 "pair": pair,
-                "type": trade_type,
-                "entry_price": trade.get("price", 0),
-                "exit_price": trade.get("price", 0) if trade_type == "sell" else 0,
-                "shares": trade.get("vol", 0),
-                "pnl_amount": pnl_amount,
-                "pnl_pct": pnl_pct,
-                "reason": f"API {trade_type.title()}",
-                "fee": fee,
-                "cost": cost
+                "type": trade.get("type", ""),
+                "price": float(trade.get("price", 0)),
+                "volume": float(trade.get("vol", 0)),
+                "cost": float(trade.get("cost", 0)),
+                "fee": float(trade.get("fee", 0)),
+                "trade_id": trade.get("id", ""),
+                "raw_data": trade
             })
         
         return formatted_trades
@@ -95,6 +82,129 @@ def get_kraken_trade_history(period_days=None, count=100):
     except Exception as e:
         print(f"  ⚠️ Error getting Kraken trade history: {e}")
         return []
+
+def identify_trade_source(trade):
+    """Identify which bot made the trade based on timing and patterns."""
+    timestamp = trade.get('timestamp', '')
+    pair = trade.get('pair', '')
+    
+    # Convert timestamp to datetime for analysis
+    try:
+        trade_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    except:
+        trade_time = datetime.now()
+    
+    # Bot identification patterns
+    hour = trade_time.hour
+    
+    # Manual trades (odd hours, irregular patterns)
+    if hour in [0, 1, 2, 3, 4, 5, 22, 23]:  # Late night/early morning
+        return "Manual"
+    
+    # Bot patterns by pair and time
+    if 'BTC' in pair or 'XBT' in pair:
+        if 6 <= hour <= 21:  # Trading hours
+            return "BTC Bot"
+    elif 'ETH' in pair:
+        if 6 <= hour <= 21:
+            return "ETH Bot"
+    elif 'SOL' in pair:
+        if 6 <= hour <= 21:
+            return "SOL Bot"
+    elif 'ADA' in pair:
+        if 6 <= hour <= 21:
+            return "ADA Bot"
+    elif 'DOT' in pair:
+        if 6 <= hour <= 21:
+            return "DOT Bot"
+    elif 'SOXS' in pair:  # Leveraged ETF
+        if 9 <= hour <= 16:  # Stock market hours
+            return "Stock Bot"
+    
+    # Default to generic bot
+    return "Unknown Bot"
+
+def calculate_realized_pnl(trades):
+    """Calculate realized P&L by matching buy/sell pairs with bot tracking."""
+    # Group trades by symbol
+    symbol_trades = defaultdict(list)
+    for trade in trades:
+        # Add bot identification
+        trade['bot_source'] = identify_trade_source(trade)
+        symbol_trades[trade['symbol']].append(trade)
+    
+    # Sort trades by timestamp for each symbol
+    for symbol in symbol_trades:
+        symbol_trades[symbol].sort(key=lambda x: x['timestamp'])
+    
+    pnl_trades = []
+    
+    for symbol, symbol_trade_list in symbol_trades.items():
+        # Track open positions
+        open_positions = []
+        
+        for trade in symbol_trade_list:
+            if trade['type'] == 'buy':
+                # Add to open positions
+                open_positions.append({
+                    'entry_price': trade['price'],
+                    'volume': trade['volume'],
+                    'entry_cost': trade['cost'],
+                    'entry_fee': trade['fee'],
+                    'entry_time': trade['timestamp'],
+                    'bot_source': trade['bot_source']
+                })
+            elif trade['type'] == 'sell' and open_positions:
+                # Match with earliest open position (FIFO)
+                position = open_positions.pop(0)
+                
+                # Calculate P&L
+                sell_revenue = trade['cost']
+                sell_fee = trade['fee']
+                buy_cost = position['entry_cost']
+                buy_fee = position['entry_fee']
+                
+                pnl_amount = sell_revenue - sell_fee - buy_cost - buy_fee
+                pnl_pct = (pnl_amount / buy_cost) * 100 if buy_cost > 0 else 0
+                
+                # Use the bot that made the buy (entry) as the primary bot
+                bot_source = position['bot_source']
+                
+                pnl_trades.append({
+                    'timestamp': trade['timestamp'],
+                    'symbol': symbol,
+                    'pair': trade['pair'],
+                    'type': 'sell',
+                    'entry_price': position['entry_price'],
+                    'exit_price': trade['price'],
+                    'shares': trade['volume'],
+                    'pnl_amount': pnl_amount,
+                    'pnl_pct': pnl_pct,
+                    'reason': f"{bot_source} (buy: {position['entry_time'][:10]}, sell: {trade['timestamp'][:10]})",
+                    'fee': buy_fee + sell_fee,
+                    'cost': sell_revenue,
+                    'bot_source': bot_source
+                })
+        
+        # Mark remaining open positions
+        for position in open_positions:
+            pnl_trades.append({
+                'timestamp': position['entry_time'],
+                'symbol': symbol,
+                'pair': f"{symbol}USD",
+                'type': 'open',
+                'entry_price': position['entry_price'],
+                'exit_price': 0,
+                'shares': position['volume'],
+                'pnl_amount': -(position['entry_cost'] + position['entry_fee']),
+                'pnl_pct': 0,
+                'reason': f"{position['bot_source']} - Open position",
+                'fee': position['entry_fee'],
+                'cost': position['entry_cost'],
+                'bot_source': position['bot_source']
+            })
+    
+    return pnl_trades
 
 def get_kraken_orders_history(period_days=None, count=100):
     """Get closed orders history from Kraken API (more detailed)."""
@@ -437,6 +547,77 @@ def display_symbol_breakdown(symbol_stats):
         
         print(f"  {emoji} {symbol:6} | ${pnl:+8.2f} | {trades:3} trades | {win_rate:5.1f}% win rate")
 
+def analyze_by_bot(trades):
+    """Analyze performance by bot source."""
+    bot_stats = defaultdict(lambda: {
+        'trades': 0,
+        'wins': 0,
+        'losses': 0,
+        'total_pnl': 0,
+        'total_fees': 0,
+        'symbols': set(),
+        'avg_win': 0,
+        'avg_loss': 0,
+        'max_win': 0,
+        'max_loss': 0
+    })
+    
+    for trade in trades:
+        bot = trade.get('bot_source', 'Unknown Bot')
+        pnl = trade.get('pnl_amount', 0)
+        fee = trade.get('fee', 0)
+        symbol = trade.get('symbol', '')
+        
+        stats = bot_stats[bot]
+        stats['trades'] += 1
+        stats['total_pnl'] += pnl
+        stats['total_fees'] += fee
+        stats['symbols'].add(symbol)
+        
+        if pnl > 0:
+            stats['wins'] += 1
+            stats['max_win'] = max(stats['max_win'], pnl)
+        elif pnl < 0:
+            stats['losses'] += 1
+            stats['max_loss'] = min(stats['max_loss'], pnl)
+    
+    # Calculate averages and win rates
+    for bot, stats in bot_stats.items():
+        if stats['wins'] > 0:
+            wins = [t['pnl_amount'] for t in trades if t.get('bot_source') == bot and t['pnl_amount'] > 0]
+            stats['avg_win'] = sum(wins) / len(wins)
+        
+        if stats['losses'] > 0:
+            losses = [t['pnl_amount'] for t in trades if t.get('bot_source') == bot and t['pnl_amount'] < 0]
+            stats['avg_loss'] = sum(losses) / len(losses)
+        
+        stats['win_rate'] = (stats['wins'] / stats['trades'] * 100) if stats['trades'] > 0 else 0
+        stats['symbols'] = list(stats['symbols'])
+    
+    return dict(bot_stats)
+
+def display_bot_breakdown(bot_stats):
+    """Display bot performance breakdown."""
+    if not bot_stats:
+        return
+    
+    print(f"\n  🤖 Performance by Bot:")
+    print(f"  " + "="*80)
+    
+    # Sort by total P&L
+    sorted_bots = sorted(bot_stats.items(), key=lambda x: x[1]['total_pnl'], reverse=True)
+    
+    for bot, stats in sorted_bots:
+        pnl_color = "🟢" if stats['total_pnl'] >= 0 else "🔴"
+        win_rate_color = "🟢" if stats['win_rate'] >= 50 else "🔴"
+        
+        print(f"  {pnl_color} {bot:<15} | ${stats['total_pnl']:>8.2f} | {stats['trades']:>3} trades | {win_rate_color} {stats['win_rate']:>5.1f}% win rate")
+        print(f"     Symbols: {', '.join(stats['symbols'])}")
+        print(f"     Avg Win: ${stats['avg_win']:>6.2f} | Avg Loss: ${stats['avg_loss']:>6.2f}")
+        print(f"     Max Win: ${stats['max_win']:>6.2f} | Max Loss: ${stats['max_loss']:>6.2f}")
+        print(f"     Total Fees: ${stats['total_fees']:>6.2f}")
+        print(f"  " + "-"*80)
+
 def display_period_breakdown(period_stats, period_type='monthly'):
     """Display performance by time period."""
     if not period_stats:
@@ -551,37 +732,51 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     # Remove duplicates by timestamp and pair
     unique_trades = {}
     for trade in all_trades:
-        key = f"{trade['timestamp']}_{trade['pair']}"
+        key = f"{trade['timestamp']}_{trade['pair']}_{trade['type']}"
         if key not in unique_trades:
             unique_trades[key] = trade
     
     trades = list(unique_trades.values())
     
+    print(f"  📊 Found {len(trades)} raw trades")
+    
+    # Calculate realized P&L by matching buy/sell pairs
+    print("  🔄 Calculating realized P&L...")
+    pnl_trades = calculate_realized_pnl(trades)
+    
+    if not pnl_trades:
+        print("  📝 No completed trades found (only buys without sells)")
+        return
+    
     # Filter by period
     if period_days:
-        print(f"  📅 Analyzing last {period_days} days ({len(trades)} trades)")
+        print(f"  📅 Analyzing last {period_days} days ({len(pnl_trades)} completed trades)")
     else:
-        print(f"  📅 Analyzing all {len(trades)} trades")
+        print(f"  📅 Analyzing all {len(pnl_trades)} completed trades")
     
     # Performance analysis
-    performance = analyze_performance(trades)
+    performance = analyze_performance(pnl_trades)
     display_performance_summary(performance)
     
     # Symbol breakdown
-    symbol_stats = analyze_by_symbol(trades)
+    symbol_stats = analyze_by_symbol(pnl_trades)
     display_symbol_breakdown(symbol_stats)
     
+    # Bot breakdown
+    bot_stats = analyze_by_bot(pnl_trades)
+    display_bot_breakdown(bot_stats)
+    
     # Period breakdown
-    monthly_stats = analyze_by_period(trades, 'monthly')
+    monthly_stats = analyze_by_period(pnl_trades, 'monthly')
     display_period_breakdown(monthly_stats, 'monthly')
     
     # Trade list
-    display_trade_list(trades)
+    display_trade_list(pnl_trades)
     
     # Charts
-    if show_chart and len(trades) > 1:
+    if show_chart and len(pnl_trades) > 1:
         print(f"\n  📈 Cumulative P&L Chart:")
-        pnl_values = [t.get('pnl_amount', 0) for t in trades]
+        pnl_values = [t.get('pnl_amount', 0) for t in pnl_trades]
         chart = create_pnl_chart(pnl_values)
         print(chart)
         
@@ -595,13 +790,13 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     
     # Export
     if export_format == 'csv':
-        export_to_csv(trades)
+        export_to_csv(pnl_trades)
     
     # Telegram summary
     send_telegram_summary(performance, symbol_stats, monthly_stats)
     
     print(f"\n  ✅ Analysis complete!")
-    print(f"  📊 Total analyzed: {len(trades)} trades from Kraken API")
+    print(f"  📊 Total analyzed: {len(pnl_trades)} completed trades from {len(trades)} raw trades")
 
 # ─────────────────────────────────────────────
 # 🎯 MAIN ENTRY POINT
