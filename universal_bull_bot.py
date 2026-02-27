@@ -405,7 +405,7 @@ def scan_all_assets(timeframes=None, dry_run=False):
         
         print(f"  {i+1}. {strong} {base:<6} | ${price:<8.4f} | Score: {score:<2} | {pair_name}")
         print(f"      🎯 {', '.join(signal['reasons'])}")
-        print(f"      📊 Timeframes: {', '.join(signal['timeframes'].keys())}")
+        print(f"      📊 Timeframes: {', '.join(signal_data['timeframes'].keys())}")
         
         # Execute trades if not dry run
         if not dry_run and score >= 4:  # Only trade strong signals
