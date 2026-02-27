@@ -96,23 +96,25 @@ def get_all_tradable_pairs():
         print(f"  ⚠️ Error fetching pairs: {e}")
         return []
 
-def filter_bullish_assets(pairs, min_volume=10000):
+def filter_bullish_assets(pairs, min_volume=0):
     """Filter assets with sufficient volume and liquidity."""
     filtered = []
     
     for pair in pairs:
-        # Skip if minimum order size too small
-        if pair['ordermin'] < min_volume:
-            continue
-        
         # Focus on major crypto and liquid assets
         base = pair['base'].replace('X', '')  # XBT -> BTC
+        
+        # Include major crypto (remove X prefix)
         if base in ['BTC', 'ETH', 'SOL', 'DOT', 'ADA', 'LINK', 'UNI']:
             filtered.append(pair)
         # Include major ETFs
         elif base in ['SOXS', 'TSLA', 'AAPL', 'MSFT', 'GOOGL']:
             filtered.append(pair)
+        # Include other common crypto pairs
+        elif base in ['LTC', 'BCH', 'XLM', 'XRP', 'DOGE', 'SHIB']:
+            filtered.append(pair)
     
+    print(f"  📊 Filtered {len(filtered)} major assets for analysis")
     return filtered
 
 # ─────────────────────────────────────────────
