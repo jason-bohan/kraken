@@ -62,6 +62,10 @@ def get_stock_config(symbol: str) -> dict:
             "profit_target": 0.06,  # 6% profit target
             "stop_loss": 0.03,      # 3% stop loss
         },
+        "SOXS.EQ": {
+            "profit_target": 0.06,  # 6% profit target
+            "stop_loss": 0.03,      # 3% stop loss
+        },
         "AAPL": {
             "profit_target": 0.06,
             "stop_loss": 0.03,
@@ -84,6 +88,8 @@ def get_pair_format(symbol: str) -> str:
         return "XBTUSD"
     elif symbol == "ETH":
         return "ETHUSD"
+    elif symbol == "SOXS.EQ":
+        return "SOXSUSD"  # Fix for SOXS ETF
     else:
         return f"{symbol}USD"
 
