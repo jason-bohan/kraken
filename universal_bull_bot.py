@@ -543,20 +543,45 @@ def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0
             print(f"  🔵 [DRY RUN] Would place trailing stop-loss")
             return True, {"stop_price": formatted_stop_price}
         
-        # Place trailing stop-loss order
+        # Try trailing-stop-limit order first (like GUI)
+        print(f"  🎯 Trying trailing-stop-limit order...")
         result, info = place_order(
             pair=pair,
             side="sell",
-            order_type="stop-loss",
+            order_type="trailing-stop-limit",  # Use trailing-stop-limit like GUI
             volume=volume,
-            price=formatted_stop_price,  # Use formatted price
+            price=formatted_stop_price,
             validate=False
         )
+        
+        # If trailing-stop-limit fails, try regular trailing-stop
+        if not result:
+            print(f"  ⚠️ Trailing-stop-limit failed, trying regular trailing-stop...")
+            result, info = place_order(
+                pair=pair,
+                side="sell",
+                order_type="trailing-stop",  # Fallback to trailing-stop
+                volume=volume,
+                price=formatted_stop_price,
+                validate=False
+            )
+        
+        # If both fail, try regular stop-loss
+        if not result:
+            print(f"  ⚠️ Trailing-stop failed, trying regular stop-loss...")
+            result, info = place_order(
+                pair=pair,
+                side="sell",
+                order_type="stop-loss",  # Fallback to stop-loss
+                volume=volume,
+                price=formatted_stop_price,
+                validate=False
+            )
         
         if result:
             order_id = info.get('txid', [None])[0]
             print(f"  ✅ Trailing stop-loss placed: {order_id}")
-            print(f"  🛡️ Stop: ${stop_price:.6f} (trails {trail_percentage*100:.1f}% below price)")
+            print(f"  🛡️ Stop: ${formatted_stop_price:.6f} (trails {trail_percentage*100:.1f}% below price)")
             return True, info
         else:
             print(f"  ❌ Trailing stop failed: {info}")
@@ -729,6 +754,7 @@ def place_trailing_stop_on_asset(asset, trail_percentage, dry_run=False):
             for order_id, order_data in open_orders.get('open', {}).items():
                 if order_data.get('descr', {}).get('pair') == target_pair:
                     print(f"  ⚠️ Existing order found: {order_id}")
+                    print(f"  💡 Order details: {order_data.get('descr', {})}")
                     print(f"  💡 Canceling existing order first...")
                     cancel_result = cancel_order(order_id)
                     if cancel_result:
@@ -738,6 +764,17 @@ def place_trailing_stop_on_asset(asset, trail_percentage, dry_run=False):
                         return False
         except Exception as e:
             print(f"  ⚠️ Could not check existing orders: {e}")
+        
+        # Debug: Show balance details
+        print(f"  🔍 Debug - Balance details:")
+        for asset, balance in balances.items():
+            if 'DOT' in asset.upper() or asset.replace('X', '') == 'DOT':
+                print(f"     {asset}: {balance}")
+        
+        # Debug: Show pair details
+        print(f"  🔍 Debug - Pair details: {target_pair}")
+        print(f"  🔍 Debug - Volume: {asset_balance}")
+        print(f"  🔍 Debug - Formatted stop: ${formatted_stop_price:.6f}")
         
         # Place trailing stop-loss
         result, info = place_trailing_stop_loss(
