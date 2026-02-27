@@ -499,6 +499,103 @@ def scan_specific_asset(asset, timeframes=None, dry_run=False, sell_mode=False):
     
     return signals
 
+def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0.02, dry_run: bool = False):
+    """Place a trailing stop-loss order."""
+    try:
+        print(f"  🎯 Placing trailing stop-loss at {trail_percentage*100:.1f}% trail...")
+        
+        # Get current price
+        ticker = get_ticker(pair)
+        if not ticker:
+            print(f"  ❌ Could not get current price for {pair}")
+            return False, None
+        
+        current_price = float(ticker.get("c", [0])[0])
+        print(f"  💰 Current price: ${current_price:.6f}")
+        
+        # Calculate trailing stop price (2% below current)
+        stop_price = current_price * (1 - trail_percentage)
+        print(f"  🛡️ Initial stop: ${stop_price:.6f}")
+        
+        if dry_run:
+            print(f"  🔵 [DRY RUN] Would place trailing stop-loss")
+            return True, {"stop_price": stop_price}
+        
+        # Place trailing stop-loss order
+        result, info = place_order(
+            pair=pair,
+            side="sell",
+            order_type="stop-loss",
+            volume=volume,
+            price=stop_price,
+            validate=False
+        )
+        
+        if result:
+            order_id = info.get('txid', [None])[0]
+            print(f"  ✅ Trailing stop-loss placed: {order_id}")
+            print(f"  🛡️ Stop: ${stop_price:.6f} (trails {trail_percentage*100:.1f}% below price)")
+            return True, info
+        else:
+            print(f"  ❌ Trailing stop failed: {info}")
+            return False, info
+            
+    except Exception as e:
+        print(f"  ❌ Trailing stop error: {e}")
+        return False, str(e)
+
+def update_trailing_stop(pair: str, order_id: str, new_stop_price: float, dry_run: bool = False):
+    """Update trailing stop-loss order."""
+    try:
+        print(f"  🔄 Updating trailing stop to ${new_stop_price:.6f}")
+        
+        if dry_run:
+            print(f"  🔵 [DRY RUN] Would update trailing stop")
+            return True
+        
+        # Cancel old order
+        cancel_result = cancel_order(order_id)
+        if cancel_result:
+            print(f"  ✅ Old trailing stop canceled")
+        else:
+            print(f"  ❌ Failed to cancel old stop")
+            return False
+        
+        # Place new trailing stop
+        balances = get_balance()
+        asset_balance = 0
+        base = pair.replace('USD', '').replace('USDT', '').replace('USDC', '')
+        
+        for asset, balance in balances.items():
+            if asset.replace('X', '') == base:
+                asset_balance = float(balance)
+                break
+        
+        if asset_balance <= 0:
+            print(f"  ❌ No {base} holdings to protect")
+            return False
+        
+        result, info = place_order(
+            pair=pair,
+            side="sell", 
+            order_type="stop-loss",
+            volume=asset_balance,
+            price=new_stop_price,
+            validate=False
+        )
+        
+        if result:
+            new_order_id = info.get('txid', [None])[0]
+            print(f"  ✅ New trailing stop placed: {new_order_id}")
+            return True, info
+        else:
+            print(f"  ❌ New trailing stop failed: {info}")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ Update trailing stop error: {e}")
+        return False
+
 def check_sell_signals(asset, dry_run=False):
     """Check if existing position should be sold."""
     try:
@@ -569,6 +666,85 @@ def check_sell_signals(asset, dry_run=False):
         print(f"  ❌ Sell signal error: {e}")
         return False
 
+def place_trailing_stop_on_asset(asset, trail_percentage, dry_run=False):
+    """Place trailing stop-loss on existing asset position."""
+    try:
+        print(f"  🎯 Setting up trailing stop-loss for {asset}...")
+        
+        # Get current holdings
+        balances = get_balance()
+        asset_balance = 0
+        
+        # Find the asset balance
+        for balance_asset, balance in balances.items():
+            if balance_asset.replace('X', '') == asset.upper():
+                asset_balance = float(balance)
+                break
+        
+        if asset_balance <= 0:
+            print(f"  ❌ No {asset} holdings found")
+            return False
+        
+        print(f"  📊 Current {asset} holdings: {asset_balance:.6f}")
+        
+        # Find the trading pair
+        pairs = get_all_tradable_pairs()
+        target_pair = None
+        
+        for pair_entry in pairs:
+            base = pair_entry.get('base', '').replace('X', '')
+            if base.upper() == asset.upper():
+                target_pair = pair_entry.get('pair')
+                break
+        
+        if not target_pair:
+            print(f"  ❌ Could not find {asset} trading pair")
+            return False
+        
+        # Check for existing orders
+        try:
+            open_orders = get_open_orders()
+            for order_id, order_data in open_orders.get('open', {}).items():
+                if order_data.get('descr', {}).get('pair') == target_pair:
+                    print(f"  ⚠️ Existing order found: {order_id}")
+                    print(f"  💡 Canceling existing order first...")
+                    cancel_result = cancel_order(order_id)
+                    if cancel_result:
+                        print(f"  ✅ Existing order canceled")
+                    else:
+                        print(f"  ❌ Failed to cancel existing order")
+                        return False
+        except Exception as e:
+            print(f"  ⚠️ Could not check existing orders: {e}")
+        
+        # Place trailing stop-loss
+        result, info = place_trailing_stop_loss(
+            pair=target_pair,
+            volume=str(asset_balance),
+            trail_percentage=trail_percentage,
+            dry_run=dry_run
+        )
+        
+        if result:
+            print(f"  ✅ Trailing stop-loss setup complete!")
+            print(f"  🛡️ Protecting {asset_balance:.6f} {asset} with {trail_percentage*100:.1f}% trail")
+            
+            # Send notification
+            msg = f"🛡️ *{asset} Trailing Stop-Loss Set*\n"
+            msg += f"Holdings: {asset_balance:.6f}\n"
+            msg += f"Trail: {trail_percentage*100:.1f}%\n"
+            msg += f"Pair: {target_pair}"
+            tg(msg)
+            
+            return True
+        else:
+            print(f"  ❌ Failed to set trailing stop-loss")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ Trailing stop setup error: {e}")
+        return False
+
 # ─────────────────────────────────────────────
 # 🎯 MAIN FUNCTION
 # ─────────────────────────────────────────────
@@ -579,7 +755,9 @@ def main():
     parser.add_argument("--scan", action="store_true", help="Scan all assets for bullish signals")
     parser.add_argument("--asset", type=str, help="Scan specific asset (BTC, ETH, SOL, etc.)")
     parser.add_argument("--sell", action="store_true", help="Sell existing position for asset")
+    parser.add_argument("--trail", action="store_true", help="Place trailing stop-loss on existing position")
     parser.add_argument("--dry", action="store_true", help="Dry run (no real trades)")
+    parser.add_argument("--trail-pct", type=float, default=0.02, help="Trailing stop percentage (default 2%)")
     parser.add_argument("--timeframes", type=str, default="1m,5m,15m,1h", 
                        help="Timeframes to analyze (comma-separated)")
     args = parser.parse_args()
@@ -599,14 +777,17 @@ def main():
         # Scan all assets
         scan_all_assets(timeframes, args.dry)
     elif args.asset:
-        if args.sell:
+        if args.trail:
+            # Place trailing stop-loss
+            place_trailing_stop_on_asset(args.asset, args.trail_pct, args.dry)
+        elif args.sell:
             # Sell existing position
             scan_specific_asset(args.asset, timeframes, args.dry, sell_mode=True)
         else:
             # Scan specific asset for buy signals
             scan_specific_asset(args.asset, timeframes, args.dry)
     else:
-        print("  ❌ Please specify --scan, --asset <symbol>, or --asset <symbol> --sell")
+        print("  ❌ Please specify --scan, --asset <symbol>, --asset <symbol> --sell, or --asset <symbol> --trail")
         return
     
     print(f"\n  ✅ Scanning complete!")
