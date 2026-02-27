@@ -35,12 +35,13 @@ from kraken_connection import calculate_order_size
 # ─────────────────────────────────────────────
 
 # Stocks to monitor (swing trading only)
+# NOTE: Kraken may not support all stocks - these are common ones to test
 STOCKS = {
     "AAPL": {
-        "pair": "AAPLUSD",
+        "pair": "AAPLUSD",  # Will test if this pair exists
         "asset": "AAPL",
         "quote": "ZUSD",
-        "bot_file": "aapl_swing_bot.py",
+        "bot_file": "stock_swing_bot.py",
         "rsi_oversold": 35,
         "dip_min": 0.03,
         "dip_max": 0.08,
@@ -50,10 +51,10 @@ STOCKS = {
         "swing_only": True
     },
     "TSLA": {
-        "pair": "TSLAUSD",
+        "pair": "TSLAUSD",  # Will test if this pair exists
         "asset": "TSLA",
         "quote": "ZUSD",
-        "bot_file": "tsla_swing_bot.py",
+        "bot_file": "stock_swing_bot.py",
         "rsi_oversold": 35,
         "dip_min": 0.04,
         "dip_max": 0.10,
@@ -160,6 +161,7 @@ def get_market_data(symbol: str, config: dict) -> dict:
     try:
         ticker = get_ticker(config["pair"])
         if not ticker:
+            print(f"  ⚠️ {symbol} pair '{config['pair']}' not found on Kraken")
             return None
             
         price = float(ticker.get("c", [0])[0])  # last trade price
@@ -182,7 +184,11 @@ def get_market_data(symbol: str, config: dict) -> dict:
         }
         
     except Exception as e:
-        print(f"  ⚠️ Error getting {symbol} data: {e}")
+        error_msg = str(e)
+        if "Unknown asset pair" in error_msg:
+            print(f"  ❌ {symbol} pair '{config['pair']}' not available on Kraken")
+        else:
+            print(f"  ⚠️ Error getting {symbol} data: {e}")
         return None
 
 def analyze_orderbook(symbol: str, config: dict, current_price: float) -> dict:
