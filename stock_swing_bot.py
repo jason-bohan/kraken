@@ -916,6 +916,43 @@ def execute_sell(current_price: float, reason: str, dry_run: bool) -> bool:
 # MAIN TRADING LOOP
 # ─────────────────────────────────────────────
 
+def get_pair_format(symbol: str) -> str:
+    """Get correct Kraken pair format for crypto vs stocks/ETFs."""
+    # Crypto pairs
+    if symbol == "BTC":
+        return "XBTUSD"
+    elif symbol == "ETH":
+        return "ETHUSD"
+    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI"]:
+        return f"{symbol}USD"
+    
+    # Stock/ETF pairs (3-4 letter tickers)
+    elif len(symbol) <= 4 and symbol.replace(".", "").isalpha():
+        if symbol.endswith(".EQ"):
+            return f"{symbol}USD"  # Already has .EQ suffix
+        else:
+            return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
+    
+    # Default to crypto format
+    else:
+        return f"{symbol}USD"
+
+def is_stock_or_etf(symbol: str) -> bool:
+    """Check if symbol is a stock/ETF (not crypto)."""
+    # Remove .EQ suffix if present
+    clean_symbol = symbol.replace(".EQ", "")
+    
+    # Stocks/ETFs are typically 1-5 letters, no crypto prefixes
+    crypto_prefixes = ["XBT", "XETH", "XXBT"]
+    stock_like = (
+        clean_symbol.isalpha() and 
+        len(clean_symbol) <= 5 and
+        not any(clean_symbol.startswith(prefix) for prefix in crypto_prefixes) and
+        clean_symbol not in ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI"]
+    )
+    
+    return stock_like
+
 def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
     """Main trading loop."""
     global SYMBOL, PAIR, ASSET, CONFIG
@@ -923,23 +960,22 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
     # Set global variables for this symbol
     SYMBOL = symbol.upper()
     
-    # Handle different pair formats for crypto
+    # Use the new pair format logic
+    PAIR = get_pair_format(SYMBOL)
+    
+    # Set asset name for balance checking
     if SYMBOL == "BTC":
-        PAIR = "XBTUSD"  # Kraken uses XBT for Bitcoin
         ASSET = "XXBT"
-    elif SYMBOL in ["ETH", "SOL", "ADA", "DOT"]:
-        PAIR = f"{SYMBOL}USD"
-        ASSET = SYMBOL if SYMBOL != "ETH" else "XETH"
+    elif SYMBOL == "ETH":
+        ASSET = "XETH"
     else:
-        # Try generic format (for stocks or other assets)
-        PAIR = f"{SYMBOL}USD"
         ASSET = SYMBOL
     
     CONFIG = get_stock_config(SYMBOL)
     
     mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
     entry_mode = "🖱️ MANUAL" if manual_entry else "🤖 AUTO"
-    asset_type = "🪙 Crypto" if SYMBOL in ["BTC", "ETH", "SOL", "ADA", "DOT"] else "📈 Stock"
+    asset_type = "📈 Stock/ETF" if is_stock_or_etf(SYMBOL) else "🪙 Crypto"
     
     print("=" * 60)
     print(f"  {asset_type} {SYMBOL} Swing Trading Bot {mode} {entry_mode}")

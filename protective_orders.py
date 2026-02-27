@@ -84,20 +84,24 @@ def get_stock_config(symbol: str) -> dict:
 
 def get_pair_format(symbol: str) -> str:
     """Get correct Kraken pair format for crypto vs stocks/ETFs."""
-    # Crypto pairs
+    # Crypto pairs (including memecoins)
+    crypto_symbols = ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI", "PEPE", "SHIB", "DOGE"]
+    
     if symbol == "BTC":
         return "XBTUSD"
     elif symbol == "ETH":
         return "ETHUSD"
-    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI"]:
+    elif symbol in crypto_symbols:
         return f"{symbol}USD"
     
-    # Stock/ETF pairs (3-4 letter tickers)
-    elif len(symbol) <= 4 and symbol.replace(".", "").isalpha():
-        if symbol.endswith(".EQ"):
-            return f"{symbol}USD"  # Already has .EQ suffix
-        else:
-            return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
+    # Stock/ETF pairs (3-4 letter tickers, excluding known crypto)
+    elif len(symbol.replace(".EQ", "")) <= 4 and symbol.replace(".", "").isalpha():
+        clean_symbol = symbol.replace(".EQ", "")
+        if clean_symbol not in crypto_symbols:
+            if symbol.endswith(".EQ"):
+                return f"{symbol}USD"  # Already has .EQ suffix
+            else:
+                return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
     
     # Default to crypto format
     else:
@@ -108,13 +112,17 @@ def is_stock_or_etf(symbol: str) -> bool:
     # Remove .EQ suffix if present
     clean_symbol = symbol.replace(".EQ", "")
     
-    # Stocks/ETFs are typically 1-5 letters, no crypto prefixes
+    # Known crypto symbols (including memecoins)
+    crypto_symbols = ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI", "PEPE", "SHIB", "DOGE"]
+    
+    # Crypto prefixes
     crypto_prefixes = ["XBT", "XETH", "XXBT"]
+    
     stock_like = (
         clean_symbol.isalpha() and 
         len(clean_symbol) <= 5 and
         not any(clean_symbol.startswith(prefix) for prefix in crypto_prefixes) and
-        clean_symbol not in ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI"]
+        clean_symbol not in crypto_symbols
     )
     
     return stock_like
@@ -149,7 +157,7 @@ def get_price_precision(symbol: str) -> int:
     """Get price precision for Kraken pairs."""
     clean_symbol = symbol.replace(".EQ", "")
     
-    # Crypto precision
+    # Crypto precision (including memecoins)
     crypto_precision = {
         "BTC": 1,      # $65,000.0
         "ETH": 2,      # $3,500.00
@@ -158,7 +166,9 @@ def get_price_precision(symbol: str) -> int:
         "ADA": 4,      # $0.4567
         "LINK": 4,     # $10.1234
         "UNI": 4,      # $15.2345
-        "PEPE": 8,     # $0.00000001
+        "PEPE": 8,     # $0.00000001 (memecoin)
+        "SHIB": 8,     # $0.00000001 (memecoin)
+        "DOGE": 6,     # $0.000001 (memecoin)
     }
     
     # Stock/ETF precision (typically 2-4 decimals)
@@ -179,7 +189,7 @@ def get_minimum_order_size(symbol: str) -> float:
     """Get minimum order size for Kraken pairs."""
     clean_symbol = symbol.replace(".EQ", "")
     
-    # Crypto minimums
+    # Crypto minimums (including memecoins)
     crypto_min_sizes = {
         "BTC": 0.0001,
         "ETH": 0.005,
@@ -188,7 +198,9 @@ def get_minimum_order_size(symbol: str) -> float:
         "ADA": 1.0,
         "LINK": 0.1,
         "UNI": 0.1,
-        "PEPE": 100000,  # High minimum for memecoins
+        "PEPE": 50000,   # Reduced minimum for PEPE memecoin
+        "SHIB": 100000,  # High minimum for SHIB memecoin
+        "DOGE": 1000,    # Minimum for DOGE memecoin
     }
     
     # Stock/ETF minimums (typically 1 share)

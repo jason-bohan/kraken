@@ -215,6 +215,43 @@ def calculate_realized_pnl(trades):
     
     return pnl_trades, open_positions
 
+def get_pair_format(symbol: str) -> str:
+    """Get correct Kraken pair format for crypto vs stocks/ETFs."""
+    # Crypto pairs
+    if symbol == "BTC":
+        return "XBTUSD"
+    elif symbol == "ETH":
+        return "ETHUSD"
+    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI"]:
+        return f"{symbol}USD"
+    
+    # Stock/ETF pairs (3-4 letter tickers)
+    elif len(symbol) <= 4 and symbol.replace(".", "").isalpha():
+        if symbol.endswith(".EQ"):
+            return f"{symbol}USD"  # Already has .EQ suffix
+        else:
+            return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
+    
+    # Default to crypto format
+    else:
+        return f"{symbol}USD"
+
+def is_stock_or_etf(symbol: str) -> bool:
+    """Check if symbol is a stock/ETF (not crypto)."""
+    # Remove .EQ suffix if present
+    clean_symbol = symbol.replace(".EQ", "")
+    
+    # Stocks/ETFs are typically 1-5 letters, no crypto prefixes
+    crypto_prefixes = ["XBT", "XETH", "XXBT"]
+    stock_like = (
+        clean_symbol.isalpha() and 
+        len(clean_symbol) <= 5 and
+        not any(clean_symbol.startswith(prefix) for prefix in crypto_prefixes) and
+        clean_symbol not in ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI"]
+    )
+    
+    return stock_like
+
 def calculate_unrealized_pnl(open_positions):
     """Calculate unrealized P&L for current holdings using current prices."""
     unrealized_trades = []
@@ -222,13 +259,8 @@ def calculate_unrealized_pnl(open_positions):
     for symbol, positions in open_positions.items():
         # Get current price for the symbol
         try:
-            # Handle different pair formats
-            if symbol == "BTC":
-                pair = "XBTUSD"
-            elif symbol == "ETH":
-                pair = "ETHUSD"
-            else:
-                pair = f"{symbol}USD"
+            # Use the new pair format logic
+            pair = get_pair_format(symbol)
             
             ticker = get_ticker(pair)
             if ticker:
