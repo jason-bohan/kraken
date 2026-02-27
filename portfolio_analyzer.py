@@ -138,15 +138,16 @@ def calculate_realized_pnl(trades):
         symbol_trades[symbol].sort(key=lambda x: x['timestamp'])
     
     pnl_trades = []
+    open_positions = {}  # Track current open positions by symbol
     
     for symbol, symbol_trade_list in symbol_trades.items():
-        # Track open positions
-        open_positions = []
+        # Track open positions for this symbol
+        symbol_open_positions = []
         
         for trade in symbol_trade_list:
             if trade['type'] == 'buy':
                 # Add to open positions
-                open_positions.append({
+                symbol_open_positions.append({
                     'entry_price': trade['price'],
                     'volume': trade['volume'],
                     'entry_cost': trade['cost'],
@@ -154,9 +155,9 @@ def calculate_realized_pnl(trades):
                     'entry_time': trade['timestamp'],
                     'bot_source': trade['bot_source']
                 })
-            elif trade['type'] == 'sell' and open_positions:
+            elif trade['type'] == 'sell' and symbol_open_positions:
                 # Match with earliest open position (FIFO)
-                position = open_positions.pop(0)
+                position = symbol_open_positions.pop(0)
                 
                 # Calculate P&L
                 sell_revenue = trade['cost']
@@ -180,14 +181,20 @@ def calculate_realized_pnl(trades):
                     'shares': trade['volume'],
                     'pnl_amount': pnl_amount,
                     'pnl_pct': pnl_pct,
-                    'reason': f"{bot_source} (buy: {position['entry_time'][:10]}, sell: {trade['timestamp'][:10]})",
+                    'reason': f"{bot_source} - Realized P&L (buy: {position['entry_time'][:10]}, sell: {trade['timestamp'][:10]})",
                     'fee': buy_fee + sell_fee,
                     'cost': sell_revenue,
-                    'bot_source': bot_source
+                    'bot_source': bot_source,
+                    'status': 'closed'
                 })
         
-        # Mark remaining open positions
-        for position in open_positions:
+        # Store remaining open positions for this symbol
+        if symbol_open_positions:
+            open_positions[symbol] = symbol_open_positions
+    
+    # Add open positions as holdings (not losses)
+    for symbol, positions in open_positions.items():
+        for position in positions:
             pnl_trades.append({
                 'timestamp': position['entry_time'],
                 'symbol': symbol,
@@ -196,15 +203,71 @@ def calculate_realized_pnl(trades):
                 'entry_price': position['entry_price'],
                 'exit_price': 0,
                 'shares': position['volume'],
-                'pnl_amount': -(position['entry_cost'] + position['entry_fee']),
+                'pnl_amount': 0,  # Open positions have unrealized P&L, not realized loss
                 'pnl_pct': 0,
-                'reason': f"{position['bot_source']} - Open position",
+                'reason': f"{position['bot_source']} - Open position (holding)",
                 'fee': position['entry_fee'],
                 'cost': position['entry_cost'],
-                'bot_source': position['bot_source']
+                'bot_source': position['bot_source'],
+                'status': 'open',
+                'unrealized_cost': position['entry_cost'] + position['entry_fee']
             })
     
-    return pnl_trades
+    return pnl_trades, open_positions
+
+def calculate_unrealized_pnl(open_positions):
+    """Calculate unrealized P&L for current holdings using current prices."""
+    unrealized_trades = []
+    
+    for symbol, positions in open_positions.items():
+        # Get current price for the symbol
+        try:
+            # Handle different pair formats
+            if symbol == "BTC":
+                pair = "XBTUSD"
+            elif symbol == "ETH":
+                pair = "ETHUSD"
+            else:
+                pair = f"{symbol}USD"
+            
+            ticker = get_ticker(pair)
+            if ticker:
+                current_price = float(ticker.get("c", [0])[0])
+            else:
+                current_price = 0
+        except:
+            current_price = 0
+        
+        for position in positions:
+            if current_price > 0:
+                # Calculate unrealized P&L
+                current_value = position['volume'] * current_price
+                entry_cost = position['entry_cost']
+                entry_fee = position['entry_fee']
+                total_cost = entry_cost + entry_fee
+                
+                unrealized_pnl = current_value - total_cost
+                unrealized_pct = (unrealized_pnl / total_cost) * 100 if total_cost > 0 else 0
+                
+                unrealized_trades.append({
+                    'timestamp': position['entry_time'],
+                    'symbol': symbol,
+                    'pair': f"{symbol}USD",
+                    'type': 'unrealized',
+                    'entry_price': position['entry_price'],
+                    'current_price': current_price,
+                    'shares': position['volume'],
+                    'pnl_amount': unrealized_pnl,
+                    'pnl_pct': unrealized_pct,
+                    'reason': f"{position['bot_source']} - Unrealized P&L",
+                    'fee': position['entry_fee'],
+                    'cost': position['entry_cost'],
+                    'bot_source': position['bot_source'],
+                    'status': 'open',
+                    'current_value': current_value
+                })
+    
+    return unrealized_trades
 
 def get_kraken_orders_history(period_days=None, count=100):
     """Get closed orders history from Kraken API (more detailed)."""
@@ -742,20 +805,62 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     
     # Calculate realized P&L by matching buy/sell pairs
     print("  🔄 Calculating realized P&L...")
-    pnl_trades = calculate_realized_pnl(trades)
+    pnl_trades, open_positions = calculate_realized_pnl(trades)
     
-    if not pnl_trades:
-        print("  📝 No completed trades found (only buys without sells)")
+    # Calculate unrealized P&L for current holdings
+    print("  � Calculating unrealized P&L for holdings...")
+    unrealized_trades = calculate_unrealized_pnl(open_positions)
+    
+    # Combine realized and unrealized trades
+    all_trades_analysis = pnl_trades + unrealized_trades
+    
+    if not all_trades_analysis:
+        print("  📝 No trading activity found")
         return
     
     # Filter by period
     if period_days:
-        print(f"  📅 Analyzing last {period_days} days ({len(pnl_trades)} completed trades)")
+        print(f"  📅 Analyzing last {period_days} days")
     else:
-        print(f"  📅 Analyzing all {len(pnl_trades)} completed trades")
+        print(f"  📅 Analyzing all trading activity")
     
-    # Performance analysis
-    performance = analyze_performance(pnl_trades)
+    # Show holdings summary
+    if open_positions:
+        print(f"\n  💼 Current Holdings:")
+        print(f"  " + "="*60)
+        total_unrealized = 0
+        for symbol, positions in open_positions.items():
+            total_volume = sum(p['volume'] for p in positions)
+            total_cost = sum(p['entry_cost'] + p['entry_fee'] for p in positions)
+            avg_entry = total_cost / total_volume if total_volume > 0 else 0
+            print(f"  📊 {symbol}: {total_volume:.6f} shares | Avg entry: ${avg_entry:.4f} | Cost: ${total_cost:.2f}")
+        
+        # Show unrealized P&L
+        if unrealized_trades:
+            print(f"\n  📈 Unrealized P&L:")
+            print(f"  " + "="*60)
+            for trade in unrealized_trades:
+                pnl = trade['pnl_amount']
+                pnl_color = "🟢" if pnl >= 0 else "🔴"
+                current_price = trade.get('current_price', 0)
+                entry_price = trade['entry_price']
+                print(f"  {pnl_color} {trade['symbol']} | ${pnl:+8.2f} ({trade['pnl_pct']:+6.2f}%) | Entry: ${entry_price:.4f} | Current: ${current_price:.4f}")
+                total_unrealized += pnl
+            
+            print(f"  � Total Unrealized P&L: ${total_unrealized:+.2f}")
+    
+    # Separate realized trades for performance analysis
+    realized_trades = [t for t in pnl_trades if t['type'] == 'sell']
+    
+    if not realized_trades:
+        print(f"\n  📝 No completed trades yet (only open positions)")
+        print(f"  💡 Realized P&L analysis will show completed trades when you sell")
+        return
+    
+    print(f"\n  📊 Realized Trades: {len(realized_trades)} completed")
+    
+    # Performance analysis (only on realized trades)
+    performance = analyze_performance(realized_trades)
     display_performance_summary(performance)
     
     # Symbol breakdown
