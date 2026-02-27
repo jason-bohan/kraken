@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-📈 Stock Launcher Monitor — Kraken 🏛️
-Monitors stock market conditions and launches swing trading bots when requirements are met.
+🪙 Crypto Swing Trading Monitor — Kraken 🚀
+Monitors cryptocurrency market conditions and launches swing trading bots when requirements are met.
 
 Features:
-- 📊 Monitors AAPL, TSLA for swing trade opportunities
-- 🛡️ Day trade protection (max 3 day trades per stock)
+- 📊 Monitors BTC, ETH, SOL, ADA, DOT for swing trade opportunities
+- 🛡️ Day trade protection (max 3 day trades per crypto)
 - 🚀 Launches bots in new terminals when signals are detected
 - ⏱️ Configurable monitoring intervals
 - 📱 Telegram notifications for bot launches
@@ -15,7 +15,7 @@ Usage:
     python3 stock_launcher_monitor.py --dry    # dry run (no bot launches)
 
 Requirements:
-- Stock swing bots must be in same directory
+- Crypto swing bots must be in same directory
 - .env with KRAKEN_API_KEY, KRAKEN_API_SECRET
 - Optional: TELEGRAM_TOKEN, TELEGRAM_CHAT_ID for notifications
 """
@@ -31,36 +31,75 @@ from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook
 from kraken_connection import calculate_order_size
 
 # ─────────────────────────────────────────────
-# 📈 STOCK CONFIGURATION
+# 🪙 CRYPTO CONFIGURATION
 # ─────────────────────────────────────────────
 
-# Stocks to monitor (swing trading only)
-# NOTE: Kraken may not support all stocks - these are common ones to test
-STOCKS = {
-    "AAPL": {
-        "pair": "AAPLUSD",  # Will test if this pair exists
-        "asset": "AAPL",
+# Crypto assets to monitor (swing trading only)
+# NOTE: These are the available assets on Kraken
+CRYPTO_ASSETS = {
+    "BTC": {
+        "pair": "XBTUSD",  # Kraken uses XBT for Bitcoin
+        "asset": "XXBT",
+        "quote": "ZUSD",
+        "bot_file": "stock_swing_bot.py",
+        "rsi_oversold": 40,
+        "dip_min": 0.02,
+        "dip_max": 0.06,
+        "rsi_overbought": 70,
+        "min_usd": 50.0,
+        "emoji": "₿",
+        "swing_only": True
+    },
+    "ETH": {
+        "pair": "ETHUSD",
+        "asset": "XETH",
         "quote": "ZUSD",
         "bot_file": "stock_swing_bot.py",
         "rsi_oversold": 35,
         "dip_min": 0.03,
         "dip_max": 0.08,
         "rsi_overbought": 75,
-        "min_usd": 100.0,
-        "emoji": "🍎",
+        "min_usd": 30.0,
+        "emoji": "Ξ",
         "swing_only": True
     },
-    "TSLA": {
-        "pair": "TSLAUSD",  # Will test if this pair exists
-        "asset": "TSLA",
+    "SOL": {
+        "pair": "SOLUSD",
+        "asset": "SOL",
+        "quote": "ZUSD",
+        "bot_file": "stock_swing_bot.py",
+        "rsi_oversold": 30,
+        "dip_min": 0.05,
+        "dip_max": 0.12,
+        "rsi_overbought": 80,
+        "min_usd": 20.0,
+        "emoji": "◎",
+        "swing_only": True
+    },
+    "ADA": {
+        "pair": "ADAUSD",
+        "asset": "ADA",
+        "quote": "ZUSD",
+        "bot_file": "stock_swing_bot.py",
+        "rsi_oversold": 30,
+        "dip_min": 0.04,
+        "dip_max": 0.10,
+        "rsi_overbought": 70,
+        "min_usd": 20.0,
+        "emoji": "₳",
+        "swing_only": True
+    },
+    "DOT": {
+        "pair": "DOTUSD",
+        "asset": "DOT",
         "quote": "ZUSD",
         "bot_file": "stock_swing_bot.py",
         "rsi_oversold": 35,
         "dip_min": 0.04,
-        "dip_max": 0.10,
+        "dip_max": 0.09,
         "rsi_overbought": 75,
-        "min_usd": 100.0,
-        "emoji": "🚗",
+        "min_usd": 20.0,
+        "emoji": "●",
         "swing_only": True
     }
 }
@@ -286,17 +325,17 @@ def get_portfolio_value() -> dict:
         portfolio_value = 0.0
         holdings = {}
         
-        # Get current prices for all stocks
+        # Get current prices for all crypto assets
         prices = {}
-        for symbol, config in STOCKS.items():
+        for symbol, config in CRYPTO_ASSETS.items():
             ticker = get_ticker(config["pair"])
             if ticker:
                 prices[symbol] = float(ticker.get("c", [0])[0])
             else:
                 prices[symbol] = 0.0
         
-        # Calculate USD value of each stock
-        for symbol, config in STOCKS.items():
+        # Calculate USD value of each crypto asset
+        for symbol, config in CRYPTO_ASSETS.items():
             asset_balance = float(balances.get(config["asset"], 0))
             usd_balance = float(balances.get(config["quote"], 0))
             
@@ -497,7 +536,7 @@ def monitor(dry_run: bool = False):
             portfolio = get_portfolio_value()
             print(f"\n💼 Portfolio Total: ${portfolio['total_usd']:.2f} USD")
             
-            for symbol, config in STOCKS.items():
+            for symbol, config in CRYPTO_ASSETS.items():
                 print(f"\n📊 {symbol}:")
                 
                 # Use portfolio data for balance info
