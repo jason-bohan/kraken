@@ -11,7 +11,7 @@ import os
 import time
 import argparse
 from datetime import datetime
-from kraken_connection import get_balance, get_ticker, place_order, get_open_orders, cancel_order
+from kraken_connection import get_balance, get_ticker, get_orderbook, place_order, get_open_orders, cancel_order
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -239,14 +239,40 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
     
     # Get current price
     ticker = get_ticker(pair)
-    if not ticker:
-        print(f"  ❌ No ticker data for {pair}")
-        return False
-    
-    current_price = float(ticker.get("c", [0])[0])
+    if ticker:
+        current_price = float(ticker.get("c", [0])[0])
+        print(f"  💰 Current Price: ${current_price:.{price_precision}f} (from ticker)")
+    else:
+        # Ticker failed - try fallback for equity pairs
+        if is_stock_or_etf(symbol):
+            print(f"  ⚠️ Ticker lookup failed for {pair} (equity pair)")
+            print(f"  💡 Using fallback price calculation...")
+            
+            # For equity pairs, we can try to get price from orderbook
+            try:
+                orderbook = get_orderbook(pair)
+                if orderbook and 'bids' in orderbook and orderbook['bids']:
+                    current_price = float(orderbook['bids'][0][0])
+                    print(f"  💰 Current Price: ${current_price:.{price_precision}f} (from orderbook)")
+                else:
+                    print(f"  ❌ No orderbook data for {pair}")
+                    print(f"  💰 Current Price: $0.0000 (unavailable)")
+                    current_price = 0
+            except Exception as e:
+                print(f"  ❌ Orderbook lookup failed: {e}")
+                print(f"  💰 Current Price: $0.0000 (unavailable)")
+                current_price = 0
+        else:
+            print(f"  ❌ Ticker error for {pair}")
+            current_price = 0
     
     # Calculate entry price (using current price as approximation)
     entry_price = get_average_entry_price(symbol, pair)
+    
+    # If ticker failed, use entry price as current price fallback
+    if current_price == 0:
+        current_price = entry_price
+        print(f"  💰 Current Price: ${current_price:.{price_precision}f} (using entry price fallback)")
     
     # Get price precision for this symbol
     price_precision = get_price_precision(symbol)
@@ -266,6 +292,10 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
     if holdings < min_order_size:
         print(f"  ❌ Holdings {holdings:.6f} below minimum {min_order_size:.6f}")
         return False
+    
+    # Continue even if price lookup failed (we have fallback)
+    if current_price == 0:
+        print(f"  ⚠️ Proceeding with entry price as current price")
     
     if dry_run:
         print(f"  🔵 [DRY RUN] Would place protective orders")
