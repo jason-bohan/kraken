@@ -156,6 +156,11 @@ PAIR = ""
 ASSET = ""
 CONFIG = {}
 
+# 🎯 Order management
+stop_loss_order_id = None
+take_profit_order_id = None
+trailing_stop_order_id = None
+
 # ─────────────────────────────────────────────
 # TELEGRAM NOTIFICATIONS
 # ─────────────────────────────────────────────
@@ -445,6 +450,178 @@ def calculate_position_size(entry_price: float, stop_loss_price: float, account_
     
     return shares
 
+def place_limit_orders(entry_price: float, position_shares: float, stop_loss_price: float, take_profit_price: float):
+    """Place stop-loss and take-profit limit orders."""
+    global stop_loss_order_id, take_profit_order_id
+    
+    try:
+        # Cancel any existing orders first
+        cancel_all_limit_orders()
+        
+        # Place stop-loss order (sell)
+        if stop_loss_price > 0 and position_shares > 0:
+            print(f"  🛡️ Placing stop-loss order at ${stop_loss_price:.2f}")
+            stop_result, stop_info = place_order(
+                pair=PAIR,
+                side="sell",
+                order_type="stop-loss",
+                volume=position_shares,
+                price=stop_loss_price,
+                validate=False
+            )
+            
+            if stop_result:
+                stop_loss_order_id = stop_info.get('txid', [None])[0]
+                print(f"  ✅ Stop-loss order placed: {stop_loss_order_id}")
+            else:
+                print(f"  ❌ Stop-loss order failed: {stop_info}")
+        
+        # Place take-profit order (sell limit)
+        if take_profit_price > 0 and position_shares > 0:
+            print(f"  🎯 Placing take-profit order at ${take_profit_price:.2f}")
+            profit_result, profit_info = place_order(
+                pair=PAIR,
+                side="sell",
+                order_type="limit",
+                volume=position_shares,
+                price=take_profit_price,
+                validate=False
+            )
+            
+            if profit_result:
+                take_profit_order_id = profit_info.get('txid', [None])[0]
+                print(f"  ✅ Take-profit order placed: {take_profit_order_id}")
+            else:
+                print(f"  ❌ Take-profit order failed: {profit_info}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"  ❌ Error placing limit orders: {e}")
+        return False
+
+def cancel_all_limit_orders():
+    """Cancel all existing limit orders."""
+    global stop_loss_order_id, take_profit_order_id, trailing_stop_order_id
+    
+    orders_to_cancel = [
+        ("Stop-loss", stop_loss_order_id),
+        ("Take-profit", take_profit_order_id),
+        ("Trailing stop", trailing_stop_order_id)
+    ]
+    
+    for order_name, order_id in orders_to_cancel:
+        if order_id:
+            try:
+                print(f"  🗑️ Canceling {order_name.lower()} order: {order_id}")
+                cancel_result, cancel_info = cancel_order(order_id)
+                if cancel_result:
+                    print(f"  ✅ {order_name} order canceled")
+                else:
+                    print(f"  ❌ Failed to cancel {order_name.lower()}: {cancel_info}")
+            except Exception as e:
+                print(f"  ⚠️ Error canceling {order_name.lower()}: {e}")
+    
+    # Reset order IDs
+    stop_loss_order_id = None
+    take_profit_order_id = None
+    trailing_stop_order_id = None
+
+def check_order_status():
+    """Check if any limit orders have been filled."""
+    global stop_loss_order_id, take_profit_order_id, trailing_stop_order_id, in_position
+    
+    try:
+        # Get open orders
+        open_orders = get_open_orders()
+        
+        # Check if our orders are still open
+        orders_still_open = {
+            "stop_loss": False,
+            "take_profit": False,
+            "trailing_stop": False
+        }
+        
+        for order in open_orders.get('open', {}):
+            order_id = order.get('txid', '')
+            
+            if order_id == stop_loss_order_id:
+                orders_still_open["stop_loss"] = True
+            elif order_id == take_profit_order_id:
+                orders_still_open["take_profit"] = True
+            elif order_id == trailing_stop_order_id:
+                orders_still_open["trailing_stop"] = True
+        
+        # If any order was filled (no longer open), close position
+        if (stop_loss_order_id and not orders_still_open["stop_loss"]) or \
+           (take_profit_order_id and not orders_still_open["take_profit"]) or \
+           (trailing_stop_order_id and not orders_still_open["trailing_stop"]):
+            
+            # Determine which order was filled
+            exit_reason = "stop_loss" if stop_loss_order_id and not orders_still_open["stop_loss"] else \
+                         "take_profit" if take_profit_order_id and not orders_still_open["take_profit"] else \
+                         "trailing_stop"
+            
+            print(f"  🎯 {exit_reason.replace('_', ' ').title()} order filled!")
+            
+            # Cancel any remaining orders
+            cancel_all_limit_orders()
+            
+            # Get current price for P&L calculation
+            ticker = get_ticker(PAIR)
+            current_price = float(ticker.get("c", [0])[0])) if ticker else entry_price
+            
+            # Execute sell logic for record keeping
+            execute_sell(current_price, exit_reason, dry_run=False)
+            
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"  ⚠️ Error checking order status: {e}")
+        return False
+
+def update_trailing_stop_order(current_price: float):
+    """Update trailing stop loss order."""
+    global trailing_stop_order_id
+    
+    if not in_position or trailing_stop == 0:
+        return
+    
+    # Calculate new trailing stop
+    new_trailing_stop = current_price * (1 - TRAILING_STOP_PCT)
+    
+    # Only update if trailing stop moved up significantly (at least 1%)
+    if trailing_stop_order_id and new_trailing_stop > trailing_stop * 1.01:
+        print(f"  📈 Updating trailing stop: ${trailing_stop:.2f} → ${new_trailing_stop:.2f}")
+        
+        try:
+            # Cancel old trailing stop
+            cancel_result, cancel_info = cancel_order(trailing_stop_order_id)
+            if cancel_result:
+                print(f"  ✅ Old trailing stop canceled")
+                
+                # Place new trailing stop
+                trail_result, trail_info = place_order(
+                    pair=PAIR,
+                    side="sell",
+                    order_type="stop-loss",
+                    volume=position_size,
+                    price=new_trailing_stop,
+                    validate=False
+                )
+                
+                if trail_result:
+                    trailing_stop_order_id = trail_info.get('txid', [None])[0]
+                    trailing_stop = new_trailing_stop
+                    print(f"  ✅ New trailing stop placed: {trailing_stop_order_id}")
+                else:
+                    print(f"  ❌ Failed to place new trailing stop: {trail_info}")
+            
+        except Exception as e:
+            print(f"  ❌ Error updating trailing stop: {e}")
+
 def update_trailing_stop(current_price: float):
     """Update trailing stop loss."""
     global trailing_stop
@@ -634,6 +811,10 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
             print(f"  🎯 Take Profit: ${take_profit:.2f}")
             print(f"  📊 Risk/Reward: {risk_reward_ratio:.2f}")
             
+            # Place limit orders for stop-loss and take-profit
+            if not dry_run:
+                place_limit_orders(current_price, position_shares, stop_loss_price, take_profit_price)
+            
             # Send notification
             msg = f"📈 *{SYMBOL} BUY EXECUTED*\n"
             msg += f"Shares: {position_shares:.2f} @ ${current_price:.2f}\n"
@@ -701,6 +882,10 @@ def execute_sell(current_price: float, reason: str, dry_run: bool) -> bool:
             print(f"  ✅ SELL EXECUTED: {position_size:.2f} shares @ ${current_price:.2f}")
             print(f"  💰 P&L: ${pnl_amount:+.2f} ({pnl_pct:+.2f}%)")
             print(f"  📝 Reason: {reason}")
+            
+            # Cancel all limit orders
+            if not dry_run:
+                cancel_all_limit_orders()
             
             # Send notification
             msg = f"📈 *{SYMBOL} SELL EXECUTED*\n"
@@ -790,18 +975,26 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
             
             # Check exit conditions if in position
             if in_position:
-                update_trailing_stop(current_price)
-                exit_reason = check_exit_conditions(current_price)
-                
-                if exit_reason != "hold":
-                    execute_sell(current_price, exit_reason, dry_run)
+                # Check if any limit orders have been filled
+                if check_order_status():
                     time.sleep(60)  # Wait after exit
                     continue
+                
+                # Update trailing stop order if price increased
+                update_trailing_stop_order(current_price)
                 
                 print(f"  📊 Position: {position_size:.2f} shares @ ${entry_price:.2f}")
                 print(f"  🛡️ Stop: ${stop_loss:.2f} | 🎯 Target: ${take_profit:.2f}")
                 if trailing_stop > 0:
                     print(f"  📈 Trailing: ${trailing_stop:.2f}")
+                
+                # Show active orders
+                if stop_loss_order_id or take_profit_order_id:
+                    print(f"  📋 Active Orders:")
+                    if stop_loss_order_id:
+                        print(f"     🛡️ Stop-loss: {stop_loss_order_id}")
+                    if take_profit_order_id:
+                        print(f"     🎯 Take-profit: {take_profit_order_id}")
             else:
                 # Manual entry prompt
                 if manual_entry:
