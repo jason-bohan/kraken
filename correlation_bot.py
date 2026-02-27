@@ -20,12 +20,8 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import requests as req
 
-# We'll import kraken functions after checking they're available
-try:
-    from kraken_connection import get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
-    KRANKEN_AVAILABLE = True
-except:
-    KRANKEN_AVAILABLE = False
+# We'll import kraken functions
+from kraken_connection import get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
 
 BASE_URL = "https://api.kraken.com"
 
@@ -39,7 +35,7 @@ PAIRS = [
 RSI_PERIOD = 14
 RSI_OVERSOLD = 35  # Slightly higher to find more buys
 RSI_OVERBOUGHT = 80  # Just for display, we won't act on it
-CORRELATION_THRESHOLD = 3  # Need 3+ coins in same state to trigger
+CORRELATION_THRESHOLD = 2  # Need 2+ coins in same state to trigger
 BUY_ONLY_MODE = True  # Only buy, no shorting
 CHECK_SECS = 30
 PROFIT_PCT = 0.05  # 5%
@@ -194,14 +190,10 @@ def check_correlation_signal(analysis: dict) -> tuple:
     return None, []
 
 
-def get_trade_size(pair: str, price: float, dry_run: bool) -> tuple:
+def get_trade_size(pair: str, price: float, dry_run=False) -> tuple:
     """Calculate trade size using dynamic minimums from Kraken."""
-    if not KRANKEN_AVAILABLE:
-        return 0, 0
-    
     if dry_run:
-        # Use max USD for dry run
-        available = MAX_TRADE_USD
+        available = DRY_BALANCE
     else:
         balances = get_balance()
         usd = float(balances.get("ZUSD", 0))
@@ -219,18 +211,19 @@ def get_trade_size(pair: str, price: float, dry_run: bool) -> tuple:
     return order_info['volume'], order_info['cost']
 
 
-def place_trade(pair: str, side: str, volume: float, cost: float, dry_run: bool) -> bool:
+def place_trade(pair: str, side: str, volume: float, cost: float, dry_run=False) -> bool:
     """Place a trade with both volume and cost."""
     if dry_run:
         print(f"  [DRY] {'BUY' if side == 'buy' else 'SELL'} {volume} {pair} (~${cost:.2f})")
         return True
     
-    if not KRANKEN_AVAILABLE:
-        return False
+    print(f"  🚀 {'BUY' if side == 'buy' else 'SELL'} {volume} {pair} (~${cost:.2f})")
     
     ok, result = place_order(pair, side, "market", volume=volume, cost=cost)
     if ok:
         tg(f"📊 *Correlation trade* {side.upper()} {volume} {pair} (~${cost:.2f})")
+    else:
+        print(f"  ❌ Trade failed: {result}")
     return ok
 
 
@@ -311,7 +304,7 @@ def run(dry_run: bool = False):
                         
                         if volume > 0:
                             print(f"  🎯 CORRELATION BUY: {pair} RSI={rsi:.0f} @ ${price:.4f} (~${cost:.2f})")
-                            ok = place_trade(pair, "buy", volume, cost)
+                            ok = place_trade(pair, "buy", volume, cost, dry_run)
                             if ok or dry_run:
                                 position = {
                                     "pair": pair,
@@ -342,4 +335,6 @@ def run(dry_run: bool = False):
 if __name__ == "__main__":
     import sys
     dry = "--dry" in sys.argv
+    mode = "🔵 DRY RUN" if dry else "🟢 LIVE"
+    print(f"Starting Correlation Bot in {mode} mode")
     run(dry_run=dry)
