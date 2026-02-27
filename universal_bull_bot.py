@@ -233,7 +233,14 @@ def get_top_bullish_signals(all_signals, min_score=3):
     """Get the strongest bullish signals across all assets."""
     top_signals = []
     
-    for pair_data, signals in all_signals.items():
+    # Also need the original pair data for execution
+    pairs = get_all_tradable_pairs()
+    liquid_pairs = filter_bullish_assets(pairs)
+    
+    # Create a lookup dictionary for pair data
+    pair_lookup = {pair['pair']: pair for pair in liquid_pairs}
+    
+    for pair_name, signals in all_signals.items():
         # Find best signal for this asset
         best_signal = None
         best_score = 0
@@ -244,10 +251,18 @@ def get_top_bullish_signals(all_signals, min_score=3):
                 best_signal = signal
         
         if best_signal and best_score >= min_score:
+            # Get the original pair data
+            original_pair = pair_lookup.get(pair_name, {
+                'pair': pair_name,
+                'base': pair_name.replace('XBT', 'BTC').replace('XETH', 'ETH'),
+                'quote': 'USD',
+                'ordermin': 0.01
+            })
+            
             top_signals.append({
-                'pair': pair_data['pair'],
-                'base': pair_data['base'],
-                'quote': pair_data['quote'],
+                'pair': original_pair['pair'],
+                'base': original_pair['base'],
+                'quote': original_pair['quote'],
                 'signal': best_signal,
                 'score': best_score,
                 'timeframes': signals
