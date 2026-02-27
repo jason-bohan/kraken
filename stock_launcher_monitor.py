@@ -522,7 +522,7 @@ def monitor(dry_run: bool = False):
     if dry_run:
         print("  🚀 DRY RUN MODE - Will show launches but won't actually start bots")
     
-    tg(f"📈 *Stock Monitor started* ({mode})")
+    tg(f"🪙 *Crypto Monitor started* ({mode})")
     
     cycle = 0
     
@@ -530,7 +530,7 @@ def monitor(dry_run: bool = False):
         while True:
             cycle += 1
             ts = datetime.now().strftime("%H:%M:%S")
-            print(f"\n[{ts}] Cycle {cycle} - Checking stock conditions...")
+            print(f"\n[{ts}] Cycle {cycle} - Checking crypto conditions...")
             
             # Get portfolio value once per cycle
             portfolio = get_portfolio_value()
