@@ -24,9 +24,63 @@ from kraken_connection import calculate_order_size
 # ─────────────────────────────────────────────
 
 def get_stock_config(symbol: str) -> dict:
-    """Get configuration for a specific stock."""
-    # Default configuration - can be customized per stock
-    configs = {
+    """Get configuration for a specific asset (crypto or stock)."""
+    # Crypto configurations (optimized for swing trading)
+    crypto_configs = {
+        "BTC": {
+            "rsi_oversold": 40,
+            "rsi_overbought": 70,
+            "dip_min": 0.02,
+            "dip_max": 0.06,
+            "profit_target": 0.04,
+            "stop_loss": 0.02,
+            "min_trade": 50.0,
+            "volatility_threshold": 0.03
+        },
+        "ETH": {
+            "rsi_oversold": 35,
+            "rsi_overbought": 75,
+            "dip_min": 0.03,
+            "dip_max": 0.08,
+            "profit_target": 0.06,
+            "stop_loss": 0.03,
+            "min_trade": 30.0,
+            "volatility_threshold": 0.04
+        },
+        "SOL": {
+            "rsi_oversold": 30,
+            "rsi_overbought": 80,
+            "dip_min": 0.05,
+            "dip_max": 0.12,
+            "profit_target": 0.08,
+            "stop_loss": 0.04,
+            "min_trade": 20.0,
+            "volatility_threshold": 0.06
+        },
+        "ADA": {
+            "rsi_oversold": 30,
+            "rsi_overbought": 70,
+            "dip_min": 0.04,
+            "dip_max": 0.10,
+            "profit_target": 0.06,
+            "stop_loss": 0.03,
+            "min_trade": 20.0,
+            "volatility_threshold": 0.05
+        },
+        "DOT": {
+            "rsi_oversold": 35,
+            "rsi_overbought": 75,
+            "dip_min": 0.04,
+            "dip_max": 0.09,
+            "profit_target": 0.07,
+            "stop_loss": 0.035,
+            "min_trade": 20.0,
+            "volatility_threshold": 0.05
+        }
+    }
+    
+    # Stock configurations (for brokers that support stocks)
+    stock_configs = {
         "AAPL": {
             "rsi_oversold": 30,
             "rsi_overbought": 70,
@@ -46,40 +100,21 @@ def get_stock_config(symbol: str) -> dict:
             "stop_loss": 0.04,
             "min_trade": 100.0,
             "volatility_threshold": 0.08
-        },
-        "MSFT": {
-            "rsi_oversold": 30,
-            "rsi_overbought": 70,
-            "dip_min": 0.02,
-            "dip_max": 0.06,
-            "profit_target": 0.05,
-            "stop_loss": 0.025,
-            "min_trade": 100.0,
-            "volatility_threshold": 0.04
-        },
-        "GOOGL": {
-            "rsi_oversold": 30,
-            "rsi_overbought": 70,
-            "dip_min": 0.03,
-            "dip_max": 0.07,
-            "profit_target": 0.06,
-            "stop_loss": 0.03,
-            "min_trade": 100.0,
-            "volatility_threshold": 0.05
         }
     }
     
-    # Return stock-specific config or default
-    return configs.get(symbol.upper(), {
-        "rsi_oversold": 30,
+    # Return symbol-specific config or default
+    symbol_upper = symbol.upper()
+    return crypto_configs.get(symbol_upper) or stock_configs.get(symbol_upper) or {
+        "rsi_oversold": 35,
         "rsi_overbought": 70,
         "dip_min": 0.03,
         "dip_max": 0.08,
         "profit_target": 0.06,
         "stop_loss": 0.03,
-        "min_trade": 100.0,
+        "min_trade": 50.0,
         "volatility_threshold": 0.05
-    })
+    }
 
 # 📊 Technical Analysis Parameters
 RSI_PERIOD = 14
@@ -702,14 +737,27 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
     
     # Set global variables for this symbol
     SYMBOL = symbol.upper()
-    PAIR = f"{SYMBOL}USD"
-    ASSET = SYMBOL
+    
+    # Handle different pair formats for crypto
+    if SYMBOL == "BTC":
+        PAIR = "XBTUSD"  # Kraken uses XBT for Bitcoin
+        ASSET = "XXBT"
+    elif SYMBOL in ["ETH", "SOL", "ADA", "DOT"]:
+        PAIR = f"{SYMBOL}USD"
+        ASSET = SYMBOL if SYMBOL != "ETH" else "XETH"
+    else:
+        # Try generic format (for stocks or other assets)
+        PAIR = f"{SYMBOL}USD"
+        ASSET = SYMBOL
+    
     CONFIG = get_stock_config(SYMBOL)
     
     mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
     entry_mode = "🖱️ MANUAL" if manual_entry else "🤖 AUTO"
+    asset_type = "🪙 Crypto" if SYMBOL in ["BTC", "ETH", "SOL", "ADA", "DOT"] else "📈 Stock"
+    
     print("=" * 60)
-    print(f"  📈 {SYMBOL} Swing Trading Bot {mode} {entry_mode}")
+    print(f"  {asset_type} {SYMBOL} Swing Trading Bot {mode} {entry_mode}")
     print(f"  Pair: {PAIR}")
     print(f"  Risk per trade: {RISK_PER_TRADE*100:.1f}%")
     print(f"  Min risk/reward: {MIN_RISK_REWARD}:1")
@@ -720,7 +768,7 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
         print(f"  🎮 Manual entry mode - Press ENTER to trade")
     print("=" * 60)
     
-    tg(f"📈 *{SYMBOL} Bot started* ({mode} {entry_mode})")
+    tg(f"{asset_type} *{SYMBOL} Bot started* ({mode} {entry_mode})")
     
     cycle = 0
     
