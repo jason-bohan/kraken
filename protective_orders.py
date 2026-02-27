@@ -237,6 +237,9 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
     config = get_stock_config(symbol)
     pair = get_pair_format(symbol)
     
+    # Get price precision for this symbol (needed before ticker lookup)
+    price_precision = get_price_precision(symbol)
+    
     # Get current price
     ticker = get_ticker(pair)
     if ticker:
@@ -273,9 +276,6 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
     if current_price == 0:
         current_price = entry_price
         print(f"  💰 Current Price: ${current_price:.{price_precision}f} (using entry price fallback)")
-    
-    # Get price precision for this symbol
-    price_precision = get_price_precision(symbol)
     
     # Calculate stop-loss and take-profit prices with correct precision
     stop_loss_price = format_price(entry_price * (1 - config["stop_loss"]), price_precision)
