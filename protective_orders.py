@@ -119,6 +119,38 @@ def get_average_entry_price(symbol: str, pair: str):
         return float(ticker.get("c", [0])[0])
     return 0
 
+def get_price_precision(symbol: str) -> int:
+    """Get price precision for Kraken pairs."""
+    precision_map = {
+        "BTC": 1,      # $65,000.0
+        "ETH": 2,      # $3,500.00
+        "SOL": 2,      # $81.00
+        "DOT": 4,      # $1.5961
+        "ADA": 4,      # $0.4567
+        "SOXS": 4,     # $1.2345
+        "SOXS.EQ": 4,  # $1.2345
+        "PEPE": 8,     # $0.00000001
+    }
+    return precision_map.get(symbol, 4)
+
+def format_price(price: float, precision: int) -> float:
+    """Format price to correct decimal places."""
+    return round(price, precision)
+
+def get_minimum_order_size(symbol: str) -> float:
+    """Get minimum order size for Kraken pairs."""
+    min_sizes = {
+        "BTC": 0.0001,
+        "ETH": 0.005,
+        "SOL": 0.01,
+        "DOT": 0.1,
+        "ADA": 1.0,
+        "SOXS": 1.0,
+        "SOXS.EQ": 1.0,
+        "PEPE": 100000,  # High minimum for memecoins
+    }
+    return min_sizes.get(symbol, 0.01)
+
 def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False):
     """Place stop-loss and take-profit orders for a holding."""
     print(f"\n📊 Processing {symbol}: {holdings:.6f} shares")
@@ -138,14 +170,24 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
     # Calculate entry price (using current price as approximation)
     entry_price = get_average_entry_price(symbol, pair)
     
-    # Calculate stop-loss and take-profit prices
-    stop_loss_price = entry_price * (1 - config["stop_loss"])
-    take_profit_price = entry_price * (1 + config["profit_target"])
+    # Get price precision for this symbol
+    price_precision = get_price_precision(symbol)
     
-    print(f"  💰 Current Price: ${current_price:.4f}")
-    print(f"  📈 Entry Price: ${entry_price:.4f}")
-    print(f"  🛡️ Stop Loss: ${stop_loss_price:.4f} ({config['stop_loss']*100:.1f}%)")
-    print(f"  🎯 Take Profit: ${take_profit_price:.4f} ({config['profit_target']*100:.1f}%)")
+    # Calculate stop-loss and take-profit prices with correct precision
+    stop_loss_price = format_price(entry_price * (1 - config["stop_loss"]), price_precision)
+    take_profit_price = format_price(entry_price * (1 + config["profit_target"]), price_precision)
+    
+    print(f"  💰 Current Price: ${current_price:.{price_precision}f}")
+    print(f"  📈 Entry Price: ${entry_price:.{price_precision}f}")
+    print(f"  🛡️ Stop Loss: ${stop_loss_price:.{price_precision}f} ({config['stop_loss']*100:.1f}%)")
+    print(f"  🎯 Take Profit: ${take_profit_price:.{price_precision}f} ({config['profit_target']*100:.1f}%)")
+    print(f"  🔢 Price Precision: {price_precision} decimals")
+    
+    # Check minimum order size
+    min_order_size = get_minimum_order_size(symbol)
+    if holdings < min_order_size:
+        print(f"  ❌ Holdings {holdings:.6f} below minimum {min_order_size:.6f}")
+        return False
     
     if dry_run:
         print(f"  🔵 [DRY RUN] Would place protective orders")
