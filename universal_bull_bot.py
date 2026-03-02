@@ -499,6 +499,383 @@ def scan_specific_asset(asset, timeframes=None, dry_run=False, sell_mode=False):
     
     return signals
 
+def detect_crypto_options(timeframes=None, dry_run=False):
+    """Detect crypto options trading opportunities."""
+    if timeframes is None:
+        timeframes = TIMEFRAMES
+    
+    print("  🔍 Scanning for crypto options opportunities...")
+    
+    # Crypto options available on Kraken
+    crypto_options = {
+        'BTC': {'name': 'Bitcoin', 'pair': 'XBTUSD', 'volatility_threshold': 0.03},
+        'ETH': {'name': 'Ethereum', 'pair': 'XETHZUSD', 'volatility_threshold': 0.04},
+        'SOL': {'name': 'Solana', 'pair': 'SOLUSD', 'volatility_threshold': 0.05},
+        'ADA': {'name': 'Cardano', 'pair': 'ADAUSD', 'volatility_threshold': 0.04},
+        'DOT': {'name': 'Polkadot', 'pair': 'DOTUSD', 'volatility_threshold': 0.06}
+    }
+    
+    options_opportunities = []
+    
+    for crypto_symbol, crypto_info in crypto_options.items():
+        try:
+            print(f"  🔍 Analyzing {crypto_info['name']} options...")
+            
+            # Get OHLC data for volatility
+            ohlc = get_ohlc(crypto_info['pair'], interval=15)
+            if not ohlc or len(ohlc) < 20:
+                continue
+            
+            # Extract price data
+            closes = [float(candle[4]) for candle in ohlc]
+            highs = [float(candle[2]) for candle in ohlc]
+            lows = [float(candle[3]) for candle in ohlc]
+            
+            current_price = closes[-1]
+            
+            # Calculate volatility (standard deviation of returns)
+            returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
+            volatility = (sum(r**2 for r in returns) / len(returns)) ** 0.5
+            
+            # Options signal detection
+            # 1. High volatility (good for options)
+            high_volatility = volatility > crypto_info['volatility_threshold']
+            
+            # 2. RSI extremes (good for options)
+            rsi = calculate_rsi(closes)
+            rsi_extreme = rsi < 30 or rsi > 70
+            
+            # 3. Price breakout (good for options)
+            recent_high = max(highs[-10:])
+            recent_low = min(lows[-10:])
+            breakout_up = current_price > recent_high * 1.02
+            breakout_down = current_price < recent_low * 0.98
+            
+            # Options signal scoring
+            score = 0
+            reasons = []
+            
+            if high_volatility:
+                score += 3
+                reasons.append(f"High vol {volatility:.3f}")
+            
+            if rsi_extreme:
+                score += 2
+                reasons.append(f"RSI {rsi:.0f}")
+            
+            if breakout_up or breakout_down:
+                score += 2
+                reasons.append("Breakout")
+            
+            # Strong options signal threshold
+            strong_signal = score >= 5
+            
+            if score >= 4:  # Show signals score 4+
+                options_opportunities.append({
+                    'symbol': crypto_symbol,
+                    'name': crypto_info['name'],
+                    'pair': crypto_info['pair'],
+                    'price': current_price,
+                    'volatility': volatility,
+                    'score': score,
+                    'strong': strong_signal,
+                    'reasons': reasons,
+                    'high_volatility': high_volatility,
+                    'rsi_extreme': rsi_extreme,
+                    'breakout_up': breakout_up,
+                    'breakout_down': breakout_down
+                })
+                
+        except Exception as e:
+            print(f"  ⚠️ Error analyzing {crypto_info['name']} options: {e}")
+            continue
+    
+    # Sort by score (highest first)
+    options_opportunities.sort(key=lambda x: x['score'], reverse=True)
+    
+    print(f"\n  📊 CRYPTO OPTIONS OPPORTUNITIES:")
+    print(f"  " + "="*80)
+    
+    for i, options_data in enumerate(options_opportunities[:3], 1):  # Top 3
+        symbol = options_data['symbol']
+        score = options_data['score']
+        price = options_data['price']
+        volatility = options_data['volatility']
+        strong = "🔥" if options_data['strong'] else "📊"
+        
+        print(f"  {i}. {strong} {symbol:<6} | ${price:<8.2f} | Score: {score:<2} | Vol: {volatility:.3f}")
+        print(f"      📊 {', '.join(options_data['reasons'])}")
+        
+        # Suggest option strategies
+        if options_data['breakout_up']:
+            print(f"      💡 Consider CALL options (bullish)")
+        elif options_data['breakout_down']:
+            print(f"      💡 Consider PUT options (bearish)")
+        elif options_data['high_volatility']:
+            print(f"      💡 Consider STRADDLE (high volatility)")
+        
+        # Execute options trades if not dry run
+        if not dry_run and score >= 5:  # Only trade strong signals
+            print(f"\n  📊 Executing options strategy on {symbol}...")
+            execute_options_trade(options_data, dry_run)
+    
+    return options_opportunities
+
+def execute_options_trade(options_data, dry_run=False):
+    """Execute a crypto options trade."""
+    try:
+        symbol = options_data['symbol']
+        name = options_data['name']
+        current_price = options_data['price']
+        
+        print(f"\n  📊 {name} Options Strategy Detected!")
+        print(f"  💰 Current Price: ${current_price:.2f}")
+        print(f"  📈 Signal Score: {options_data['score']}")
+        print(f"  📝 Reasons: {', '.join(options_data['reasons'])}")
+        print(f"  📊 Volatility: {options_data['volatility']:.3f}")
+        
+        # Suggest options strategy based on signal
+        if options_data['breakout_up']:
+            strategy = "CALL OPTIONS - Bullish breakout detected"
+            direction = "upward"
+        elif options_data['breakout_down']:
+            strategy = "PUT OPTIONS - Bearish breakdown detected"
+            direction = "downward"
+        else:
+            strategy = "STRADDLE - High volatility, play both directions"
+            direction = "both directions"
+        
+        print(f"  🎯 Recommended Strategy: {strategy}")
+        print(f"  📈 Expected Direction: {direction}")
+        
+        if dry_run:
+            print(f"  🔵 [DRY RUN] Would analyze options positions")
+            print(f"  💡 Manual options trading required via Kraken web interface")
+            return True
+        
+        # Note: Options trading requires manual setup via Kraken interface
+        print(f"  ⚠️ Options trading requires manual setup via Kraken web interface")
+        print(f"  💡 Go to Kraken > Derivatives > Options")
+        print(f"  💡 Search for {name} options contracts")
+        
+        # Send notification with strategy recommendation
+        msg = f"📊 *{name} Options Opportunity*\n"
+        msg += f"Price: ${current_price:.2f}\n"
+        msg += f"Volatility: {options_data['volatility']:.3f}\n"
+        msg += f"Signal Score: {options_data['score']}\n"
+        msg += f"Strategy: {strategy}\n"
+        msg += f"Direction: {direction}\n"
+        msg += f"Setup: Manual via Kraken Options interface"
+        tg(msg)
+        
+        return True
+            
+    except Exception as e:
+        print(f"  ❌ Options analysis error: {e}")
+        return False
+
+def detect_short_opportunities(timeframes=None, dry_run=False):
+    """Detect short selling opportunities using inverse ETFs and bearish patterns."""
+    if timeframes is None:
+        timeframes = TIMEFRAMES
+    
+    print("  🔍 Scanning for short selling opportunities...")
+    
+    # Inverse ETFs that act like shorts
+    inverse_etfs = {
+        'SOXS': {'name': 'SOXS', 'pair': 'SOXSUSD', 'multiplier': 3.0, 'description': '3x Short S&P 500'},
+        'SQQQ': {'name': 'SQQQ', 'pair': 'SQQQUSD', 'multiplier': 3.0, 'description': '3x Short NASDAQ-100'},
+        'DOGZ': {'name': 'DOGZ', 'pair': 'DOGZUSD', 'multiplier': 1.0, 'description': '1x Short Dow Jones'},
+        'BERZ': {'name': 'BERZ', 'pair': 'BERZUSD', 'multiplier': 1.0, 'description': '1x Short Nasdaq'}
+    }
+    
+    short_opportunities = []
+    
+    for etf_symbol, etf_info in inverse_etfs.items():
+        try:
+            print(f"  🔍 Analyzing {etf_info['name']} ({etf_info['pair']})")
+            
+            # Get OHLC data
+            ohlc = get_ohlc(etf_info['pair'], interval=15)
+            if not ohlc or len(ohlc) < 20:
+                continue
+            
+            # Extract price data
+            closes = [float(candle[4]) for candle in ohlc]
+            highs = [float(candle[2]) for candle in ohlc]
+            lows = [float(candle[3]) for candle in ohlc]
+            volumes = [float(candle[5]) for candle in ohlc]
+            
+            current_price = closes[-1]
+            recent_high = max(highs[-10:])
+            recent_low = min(lows[-10:])
+            
+            # Bearish signal detection
+            # 1. Breakout below recent low
+            breakdown = (recent_low - current_price) / recent_low > 0.02  # 2% below low
+            
+            # 2. Volume spike on down days
+            avg_volume = sum(volumes[-10:]) / 10
+            volume_spike = volumes[-1] / avg_volume if avg_volume > 0 else 1
+            
+            # 3. RSI showing weakness
+            rsi = calculate_rsi(closes)
+            rsi_weak = rsi < 40  # Oversold
+            
+            # 4. Moving averages crossing down
+            ma_short = sum(closes[-5:]) / 5 if len(closes) >= 5 else current_price
+            ma_long = sum(closes[-10:]) / 10 if len(closes) >= 10 else current_price
+            death_cross = current_price < ma_short and ma_short < ma_long
+            
+            # Bearish signal scoring
+            score = 0
+            reasons = []
+            
+            if breakdown:
+                score += 3
+                reasons.append("Breakdown")
+            
+            if volume_spike > 2.0:
+                score += 2
+                reasons.append(f"Volume spike {volume_spike:.1f}x")
+            
+            if rsi_weak:
+                score += 2
+                reasons.append(f"RSI {rsi:.0f}")
+            
+            if death_cross:
+                score += 1
+                reasons.append("Death cross")
+            
+            # Strong short signal threshold
+            strong_signal = score >= 4
+            
+            if score >= 3:  # Show signals score 3+
+                short_opportunities.append({
+                    'symbol': etf_info['name'],
+                    'pair': etf_info['pair'],
+                    'multiplier': etf_info['multiplier'],
+                    'description': etf_info['description'],
+                    'price': current_price,
+                    'score': score,
+                    'strong': strong_signal,
+                    'reasons': reasons,
+                    'breakdown': breakdown,
+                    'volume_spike': volume_spike,
+                    'rsi': rsi,
+                    'death_cross': death_cross
+                })
+                
+        except Exception as e:
+            print(f"  ⚠️ Error analyzing {etf_info['name']}: {e}")
+            continue
+    
+    # Sort by score (highest first)
+    short_opportunities.sort(key=lambda x: x['score'], reverse=True)
+    
+    print(f"\n  📉 SHORT SELLING OPPORTUNITIES:")
+    print(f"  " + "="*80)
+    
+    for i, short_data in enumerate(short_opportunities[:5], 1):  # Top 5
+        symbol = short_data['symbol']
+        score = short_data['score']
+        price = short_data['price']
+        multiplier = short_data['multiplier']
+        strong = "🔥" if short_data['strong'] else "📉"
+        
+        print(f"  {i}. {strong} {symbol:<6} | ${price:<8.2f} | Score: {score:<2} | {multiplier}x")
+        print(f"      📉 {', '.join(short_data['reasons'])}")
+        print(f"      📊 {short_data['description']}")
+        
+        # Execute short trades if not dry run
+        if not dry_run and score >= 4:  # Only trade strong signals
+            print(f"\n  📉 Executing short on {symbol}...")
+            execute_short_trade(short_data, dry_run)
+    
+    return short_opportunities
+
+def execute_short_trade(short_data, dry_run=False):
+    """Execute a short trade using inverse ETF."""
+    try:
+        symbol = short_data['symbol']
+        pair = short_data['pair']
+        current_price = short_data['price']
+        multiplier = short_data['multiplier']
+        
+        # Calculate position size
+        balances = get_balance()
+        usd_balance = float(balances.get('ZUSD', 0))
+        
+        if usd_balance < 10:  # Minimum $10 for trading
+            print(f"  ❌ Insufficient USD balance: ${usd_balance:.2f}")
+            return False
+        
+        # For shorting, we want smaller position (higher risk)
+        position_size = (usd_balance * 0.1) / current_price  # 10% of balance
+        
+        if position_size <= 0:
+            print(f"  ❌ Invalid position size: {position_size}")
+            return False
+        
+        # Calculate stop-loss and take-profit (inverse logic)
+        # For shorting, stop-loss is ABOVE current price
+        stop_loss_pct = 0.03  # 3% stop-loss (above for short)
+        take_profit_pct = 0.05   # 5% take-profit (below for short)
+        
+        stop_loss_price = current_price * (1 + stop_loss_pct)  # Stop above
+        take_profit_price = current_price * (1 - take_profit_pct)  # Take profit below
+        
+        print(f"\n  📉 {symbol} Short Signal Detected!")
+        print(f"  📊 Price: ${current_price:.4f}")
+        print(f"  📈 Signal Score: {short_data['score']}")
+        print(f"  📝 Reasons: {', '.join(short_data['reasons'])}")
+        print(f"  📏 Position Size: {position_size:.6f}")
+        print(f"  🛡️ Stop Loss: ${stop_loss_price:.4f} ({stop_loss_pct*100:.1f}% above)")
+        print(f"  🎯 Take Profit: ${take_profit_price:.4f} ({take_profit_pct*100:.1f}% below)")
+        print(f"  📊 Leverage: {multiplier}x via inverse ETF")
+        
+        if dry_run:
+            print(f"  🔵 [DRY RUN] Would place short position")
+            return True
+        
+        # Place OCO order for short position
+        print(f"  📉 Placing short OCO order...")
+        oco_result, oco_info = place_oco_order(
+            pair=pair,
+            side="buy",  # Buy inverse ETF to short market
+            order_type="oco",
+            volume=position_size,
+            price=take_profit_price,      # Take-profit limit (below)
+            price2=stop_loss_price,     # Stop-loss trigger (above)
+            validate=False
+        )
+        
+        if oco_result:
+            oco_ids = oco_info.get('txid', [])
+            print(f"  ✅ Short OCO Order Placed: {oco_ids}")
+            
+            # Send notification
+            msg = f"📉 *{symbol} Short Trade Executed*\n"
+            msg += f"Asset: {pair}\n"
+            msg += f"Price: ${current_price:.4f}\n"
+            msg += f"Size: {position_size:.6f}\n"
+            msg += f"Stop Loss: ${stop_loss_price:.4f}\n"
+            msg += f"Take Profit: ${take_profit_price:.4f}\n"
+            msg += f"Leverage: {multiplier}x\n"
+            msg += f"Signal Score: {short_data['score']}\n"
+            msg += f"Reasons: {', '.join(short_data['reasons'])}\n"
+            msg += f"OCO Order: {oco_ids}"
+            tg(msg)
+            
+            return True
+        else:
+            print(f"  ❌ Short OCO Order Failed: {oco_info}")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ Short trade execution error: {e}")
+        return False
+
 def format_price_for_pair(price: float, pair: str) -> float:
     """Format price according to pair precision requirements."""
     # Define precision for different pairs
@@ -815,6 +1192,8 @@ def main():
     parser.add_argument("--asset", type=str, help="Scan specific asset (BTC, ETH, SOL, etc.)")
     parser.add_argument("--sell", action="store_true", help="Sell existing position for asset")
     parser.add_argument("--trail", action="store_true", help="Place trailing stop-loss on existing position")
+    parser.add_argument("--short", action="store_true", help="Scan for short selling opportunities")
+    parser.add_argument("--options", action="store_true", help="Scan for crypto options opportunities")
     parser.add_argument("--dry", action="store_true", help="Dry run (no real trades)")
     parser.add_argument("--trail-pct", type=float, default=0.02, help="Trailing stop percentage (default 2%)")
     parser.add_argument("--timeframes", type=str, default="1m,5m,15m,1h", 
@@ -835,6 +1214,12 @@ def main():
     if args.scan:
         # Scan all assets
         scan_all_assets(timeframes, args.dry)
+    elif args.short:
+        # Scan for short selling opportunities
+        detect_short_opportunities(timeframes, args.dry)
+    elif args.options:
+        # Scan for crypto options opportunities
+        detect_crypto_options(timeframes, args.dry)
     elif args.asset:
         if args.trail:
             # Place trailing stop-loss
@@ -846,7 +1231,7 @@ def main():
             # Scan specific asset for buy signals
             scan_specific_asset(args.asset, timeframes, args.dry)
     else:
-        print("  ❌ Please specify --scan, --asset <symbol>, --asset <symbol> --sell, or --asset <symbol> --trail")
+        print("  ❌ Please specify --scan, --short, --options, --asset <symbol>, --asset <symbol> --sell, or --asset <symbol> --trail")
         return
     
     print(f"\n  ✅ Scanning complete!")
