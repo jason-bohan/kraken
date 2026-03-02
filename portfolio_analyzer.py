@@ -63,6 +63,28 @@ def get_kraken_trade_history(period_days=None, count=100):
             pair = trade.get("pair", "")
             symbol = pair.replace("XBT", "BTC").replace("XETH", "ETH").replace("ZUSD", "USD")
             
+            # Handle special cases
+            if symbol == "BTCUSD":
+                symbol = "BTC"
+            elif symbol == "ETHUSD":
+                symbol = "ETH"
+            elif symbol == "DOGEUSD":
+                symbol = "DOGE"
+            elif symbol == "AVAXUSD":
+                symbol = "AVAX"
+            elif symbol == "SOLUSD":
+                symbol = "SOL"
+            elif symbol == "DOTUSD":
+                symbol = "DOT"
+            elif symbol == "BTCZUSD":
+                symbol = "BTCZ"
+            elif symbol == "SOXSUSD":
+                symbol = "SOXS"
+            elif symbol == "XDGUSD":
+                symbol = "DOGE"
+            elif symbol == "XBTUSD":
+                symbol = "BTC"
+            
             # Store raw trade data for later P&L calculation
             formatted_trades.append({
                 "timestamp": trade_time.isoformat(),
@@ -217,20 +239,23 @@ def calculate_realized_pnl(trades):
 
 def get_pair_format(symbol: str) -> str:
     """Get correct Kraken pair format for crypto vs stocks/ETFs."""
+    # Skip stocks/ETFs entirely
+    stock_etf_symbols = ["SOXS", "BTCZ"]  # Add more if needed
+    
+    if symbol in stock_etf_symbols:
+        return "SKIP_STOCK_ETF"  # Skip these entirely
+    
     # Crypto pairs
     if symbol == "BTC":
         return "XBTUSD"
     elif symbol == "ETH":
         return "ETHUSD"
-    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI"]:
+    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI", "DOGE", "SHIB", "AVAX"]:
         return f"{symbol}USD"
-    
-    # Stock/ETF pairs (3-4 letter tickers)
-    elif len(symbol) <= 4 and symbol.replace(".", "").isalpha():
-        if symbol.endswith(".EQ"):
-            return f"{symbol}USD"  # Already has .EQ suffix
-        else:
-            return f"{symbol}.EQUSD"  # Add .EQ suffix for stocks/ETFs
+    elif symbol == "XDG":  # DOGE on Kraken
+        return "XDGUSD"
+    elif symbol == "XBT":  # BTC on Kraken
+        return "XBTUSD"
     
     # Default to crypto format
     else:
@@ -262,11 +287,18 @@ def calculate_unrealized_pnl(open_positions):
             # Use the new pair format logic
             pair = get_pair_format(symbol)
             
+            # Skip stocks/ETFs entirely
+            if pair == "SKIP_STOCK_ETF":
+                print(f"  ⚠️ Skipping stock/ETF {symbol} (not available on Kraken)")
+                continue
+            
             ticker = get_ticker(pair)
             if ticker:
                 current_price = float(ticker.get("c", [0])[0])
             else:
-                current_price = 0
+                # Skip assets without price data
+                print(f"  ⚠️ No price data for {symbol} ({pair}), skipping...")
+                continue
         except:
             current_price = 0
         
