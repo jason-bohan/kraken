@@ -518,6 +518,8 @@ def scan_all_cheap_futures(timeframes=None, dry_run: bool = False):
 
 def main():
     """Main function to run cheap futures bot."""
+    global DEFAULT_TRAIL_PCT, DEFAULT_TAKE_PROFIT_PCT
+    
     parser = argparse.ArgumentParser(description="Cheap Futures Bot - SOL/ADA/DOGE Trading")
     parser.add_argument("--scan", action="store_true", help="Scan all cheap futures")
     parser.add_argument("--asset", type=str, help="Analyze specific cheap asset")
@@ -538,7 +540,6 @@ def main():
         timeframes = TIMEFRAMES
     
     # Update global parameters if provided
-    global DEFAULT_TRAIL_PCT, DEFAULT_TAKE_PROFIT_PCT
     DEFAULT_TRAIL_PCT = args.trail_pct
     DEFAULT_TAKE_PROFIT_PCT = args.profit_pct
     
