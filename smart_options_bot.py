@@ -96,7 +96,7 @@ def generate_options_symbol(asset: str, expiry_date: str, strike_price: float, o
     
     return f"OF_{pair}_{date_format}_{strike_formatted}_{type_code}"
 
-def calculate_optimal_strike(current_price: float, market_direction: str, volatility: float) -> float:
+def calculate_optimal_strike(current_price: float, market_direction: str, volatility: float, asset: str) -> float:
     """Calculate optimal strike price based on market conditions."""
     # For options, we want strikes that are likely to be in-the-money
     if market_direction == "bullish":
@@ -111,11 +111,13 @@ def calculate_optimal_strike(current_price: float, market_direction: str, volati
     
     optimal_strike = current_price * strike_adjustment
     
-    # Round to nearest tick size
-    if asset == 'BTC':
+    # Round to nearest tick size based on asset
+    if asset.upper() == 'BTC':
         return round(optimal_strike / 100) * 100  # Round to nearest $100
-    else:  # ETH
+    elif asset.upper() == 'ETH':
         return round(optimal_strike / 50) * 50    # Round to nearest $50
+    else:
+        return round(optimal_strike, 2)
 
 def get_next_expiry_dates() -> list:
     """Get next available expiry dates for options."""
@@ -163,19 +165,17 @@ def analyze_market_direction(asset: str, timeframes=None) -> dict:
     
     print(f"  🔍 Analyzing {asset} market direction...")
     
+    # Get the correct pair for the asset
+    if asset.upper() == 'BTC':
+        target_pair = 'XBTUSD'
+    elif asset.upper() == 'ETH':
+        target_pair = 'ETHUSD'
+    else:
+        return {"error": f"Asset {asset} not supported for options"}
+    
+    print(f"  📊 Using pair: {target_pair}")
+    
     # Get OHLC data
-    pairs = get_asset_pairs()
-    target_pair = None
-    
-    for pair_entry in pairs:
-        base = pair_entry.get('base', '').replace('X', '')
-        if base.upper() == asset.upper():
-            target_pair = pair_entry.get('pair')
-            break
-    
-    if not target_pair:
-        return {"error": f"Asset {asset} not found"}
-    
     ohlc = get_ohlc(target_pair, interval=15)
     if not ohlc or len(ohlc) < 30:
         return {"error": "Insufficient OHLC data"}
@@ -338,7 +338,7 @@ def execute_options_trade(asset: str, strategy: dict, market_analysis: dict, dry
         position_size = calculate_options_position_size(usd_balance, volatility)
         
         # Get optimal strike and expiry
-        optimal_strike = calculate_optimal_strike(current_price, market_analysis["market_direction"], volatility)
+        optimal_strike = calculate_optimal_strike(current_price, market_analysis["market_direction"], volatility, asset)
         expiry_dates = get_next_expiry_dates()
         best_expiry = expiry_dates[0]  # Use nearest expiry
         
@@ -457,7 +457,7 @@ def scan_all_crypto_options(timeframes=None, dry_run: bool = False):
         print(f"      📊 Vol: {analysis['volatility']:.3f} | RSI: {analysis['rsi']:.0f}")
         
         # Generate options symbol preview
-        optimal_strike = calculate_optimal_strike(analysis["current_price"], analysis["market_direction"], analysis["volatility"])
+        optimal_strike = calculate_optimal_strike(analysis["current_price"], analysis["market_direction"], analysis["volatility"], asset)
         expiry_dates = get_next_expiry_dates()
         best_expiry = expiry_dates[0]
         options_symbol = generate_options_symbol(asset, best_expiry, optimal_strike, direction.upper())
