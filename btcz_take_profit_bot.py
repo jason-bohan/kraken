@@ -68,47 +68,97 @@ def tg(msg: str):
         pass
 
 # ─────────────────────────────────────────────
-# MOCK API FUNCTIONS (Replace with real broker API)
+# REAL KRAKEN API FUNCTIONS
 # ─────────────────────────────────────────────
 def get_btcz_price() -> float:
-    """Get current BTCZ price (replace with real API call)."""
-    # This would be your broker's API call
-    # For now, return the current price you showed me
-    return CURRENT_PRICE
+    """Get current BTCZ price from Kraken."""
+    try:
+        ticker = get_ticker('BTCZUSD')
+        if not ticker:
+            print(f"  ⚠️ No BTCZ ticker data")
+            return CURRENT_PRICE
+        return float(ticker.get("c", [CURRENT_PRICE])[0])
+    except Exception as e:
+        print(f"  ⚠️ BTCZ price error: {e}")
+        return CURRENT_PRICE
 
 def get_btc_price() -> float:
-    """Get current Bitcoin price (replace with real API call)."""
-    # This would be your broker's API call
-    # For now, use approximate BTC price
-    return 69167.7
+    """Get current Bitcoin price from Kraken."""
+    try:
+        ticker = get_ticker('XBTUSD')
+        if not ticker:
+            print(f"  ⚠️ No BTC ticker data")
+            return 69167.7
+        return float(ticker.get("c", [69167.7])[0])
+    except Exception as e:
+        print(f"  ⚠️ BTC price error: {e}")
+        return 69167.7
+
+def get_btcz_balance() -> float:
+    """Get current BTCZ balance from Kraken."""
+    try:
+        balances = get_balance()
+        return float(balances.get('BTCZ', 0))
+    except Exception as e:
+        print(f"  ⚠️ BTCZ balance error: {e}")
+        return YOUR_BALANCE
 
 def place_btcz_sell_order(price: float, quantity: float, order_type: str) -> dict:
-    """Place BTCZ sell order (replace with real broker API call)."""
-    # This would be your broker's API call
-    # For now, simulate the order
-    order = {
-        "success": True,
-        "order_id": f"BTCZ_{int(time.time())}",
-        "symbol": SYMBOL,
-        "type": "sell",
-        "order_type": order_type,
-        "price": price,
-        "quantity": quantity,
-        "status": "placed"
-    }
-    
-    print(f"  📊 Placing {order_type} sell order:")
-    print(f"      💰 Price: ${price:.2f}")
-    print(f"      📊 Quantity: {quantity} {SYMBOL}")
-    print(f"      💵 Total Value: ${price * quantity:.2f}")
-    
-    return order
+    """Place BTCZ sell order on Kraken."""
+    try:
+        print(f"  📊 Placing {order_type} sell order on Kraken:")
+        print(f"      💰 Price: ${price:.2f}")
+        print(f"      📊 Quantity: {quantity} BTCZ")
+        print(f"      💵 Total Value: ${price * quantity:.2f}")
+        
+        # Determine order type for Kraken
+        kraken_type = "limit"
+        if order_type == "market":
+            kraken_type = "market"
+        elif order_type == "take_profit_limit":
+            kraken_type = "limit"
+        elif order_type == "stop_loss_limit":
+            kraken_type = "stop-loss"
+        
+        # Place real order on Kraken
+        order = place_order(
+            pair='BTCZUSD',
+            type='sell',
+            ordertype=kraken_type,
+            volume=quantity,
+            price=price if kraken_type == "limit" else None,
+            validate=False
+        )
+        
+        if order.get('error'):
+            print(f"  ❌ BTCZ sell order failed: {order['error']}")
+            return {"success": False, "error": order['error']}
+        
+        print(f"  ✅ BTCZ sell order placed: {order['descr']['order']}")
+        return {
+            "success": True,
+            "order_id": order.get('txid', f"BTCZ_{int(time.time())}"),
+            "symbol": "BTCZ",
+            "type": "sell",
+            "order_type": order_type,
+            "price": price,
+            "quantity": quantity,
+            "status": "placed"
+        }
+        
+    except Exception as e:
+        print(f"  ❌ BTCZ order placement error: {e}")
+        return {"success": False, "error": str(e)}
 
-def check_open_orders() -> list:
-    """Check existing open orders (replace with real broker API call)."""
-    # This would be your broker's API call
-    # For now, return empty (no open orders)
-    return []
+def check_open_btcz_orders() -> list:
+    """Check existing open BTCZ orders on Kraken."""
+    try:
+        open_orders = get_open_orders()
+        btcz_orders = [order for order in open_orders if order.get('descr', {}).get('pair') == 'BTCZUSD']
+        return btcz_orders
+    except Exception as e:
+        print(f"  ⚠️ Open orders error: {e}")
+        return []
 
 # ─────────────────────────────────────────────
 # TRADING LOGIC
