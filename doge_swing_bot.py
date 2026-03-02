@@ -279,19 +279,19 @@ def execute_doge_buy(analysis: dict, dry_run: bool = False) -> dict:
             return {"success": True, "action": "DRY_RUN_BUY", "volume": buy_volume}
         
         # Place real order
-        order = place_order(
+        success, order = place_order(
             pair=PAIR,
-            type="buy",
-            ordertype="market",
+            side="buy",
+            order_type="market",
             volume=buy_volume,
             validate=False
         )
         
-        if order.get('error'):
-            print(f"  ❌ DOGE buy order failed: {order['error']}")
-            return {"success": False, "error": order['error']}
+        if not success:
+            print(f"  ❌ DOGE buy order failed: {order.get('error', 'Unknown error')}")
+            return {"success": False, "error": order.get('error', 'Unknown error')}
         
-        print(f"  ✅ DOGE buy order placed: {order['descr']['order']}")
+        print(f"  ✅ DOGE buy order placed: {order.get('descr', {}).get('order', 'Unknown')}")
         
         # Send Telegram notification
         msg = f"🚀 *DOGE Pump Buy*\n\n"
@@ -345,19 +345,19 @@ def execute_doge_sell(analysis: dict, dry_run: bool = False) -> dict:
             return {"success": True, "action": "DRY_RUN_SELL", "volume": sell_volume}
         
         # Place real sell order
-        order = place_order(
+        success, order = place_order(
             pair=PAIR,
-            type="sell",
-            ordertype="market",
+            side="sell",
+            order_type="market",
             volume=sell_volume,
             validate=False
         )
         
-        if order.get('error'):
-            print(f"  ❌ DOGE sell order failed: {order['error']}")
-            return {"success": False, "error": order['error']}
+        if not success:
+            print(f"  ❌ DOGE sell order failed: {order.get('error', 'Unknown error')}")
+            return {"success": False, "error": order.get('error', 'Unknown error')}
         
-        print(f"  ✅ DOGE sell order placed: {order['descr']['order']}")
+        print(f"  ✅ DOGE sell order placed: {order.get('descr', {}).get('order', 'Unknown')}")
         
         # Send Telegram notification
         msg = f"💰 *DOGE Position Sold*\n\n"
