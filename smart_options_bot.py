@@ -35,10 +35,26 @@ TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # Options trading parameters
 DEFAULT_TRAIL_PCT = 0.03      # 3% trailing stop
-DEFAULT_TAKE_PROFIT_PCT = 0.10  # 10% take-profit (covers fees)
+DEFAULT_TAKE_PROFIT_PCT = 0.10  # 10% take-profit (covers 12.5% max fees)
 DEFAULT_POSITION_SIZE = 0.10      # 10% of account per trade
 MIN_POSITION_SIZE = 0.05       # 5% minimum position size
 MAX_POSITIONS = 3              # Maximum concurrent positions
+
+# Kraken Options specifications
+OPTIONS_PAIRS = {
+    'BTC': {
+        'pair': 'XBTUSD',
+        'min_contracts': 0.01,
+        'tick_size': 1.0,
+        'settlement': 'BTCOPTRR'
+    },
+    'ETH': {
+        'pair': 'ETHUSD', 
+        'min_contracts': 0.1,
+        'tick_size': 0.1,
+        'settlement': 'ETHOPTRR'
+    }
+}
 
 # Market analysis parameters
 VOLATILITY_THRESHOLD = 0.04      # 4% volatility for options
@@ -70,6 +86,75 @@ def tg(msg: str):
 # ─────────────────────────────────────────────
 # 📊 MARKET ANALYSIS
 # ─────────────────────────────────────────────
+
+def generate_options_symbol(asset: str, expiry_date: str, strike_price: float, option_type: str) -> str:
+    """Generate Kraken options symbol based on specifications."""
+    pair = OPTIONS_PAIRS[asset]['pair']
+    date_format = expiry_date.replace('-', '')  # YYMMDD format
+    strike_formatted = int(strike_price)  # Strike as integer
+    type_code = 'C' if option_type.upper() == 'CALL' else 'P'
+    
+    return f"OF_{pair}_{date_format}_{strike_formatted}_{type_code}"
+
+def calculate_optimal_strike(current_price: float, market_direction: str, volatility: float) -> float:
+    """Calculate optimal strike price based on market conditions."""
+    # For options, we want strikes that are likely to be in-the-money
+    if market_direction == "bullish":
+        # For calls: strike slightly above current price
+        strike_adjustment = 1.0 + (volatility * 2)  # Adjust for volatility
+    elif market_direction == "bearish":
+        # For puts: strike slightly below current price
+        strike_adjustment = 1.0 - (volatility * 2)
+    else:
+        # For straddles: use at-the-money
+        strike_adjustment = 1.0
+    
+    optimal_strike = current_price * strike_adjustment
+    
+    # Round to nearest tick size
+    if asset == 'BTC':
+        return round(optimal_strike / 100) * 100  # Round to nearest $100
+    else:  # ETH
+        return round(optimal_strike / 50) * 50    # Round to nearest $50
+
+def get_next_expiry_dates() -> list:
+    """Get next available expiry dates for options."""
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    
+    # Generate weekly, monthly, quarterly dates
+    expiries = []
+    
+    # Weekly (next Friday)
+    days_until_friday = (4 - today.weekday()) % 7
+    if days_until_friday == 0:
+        days_until_friday = 7
+    weekly_expiry = today + timedelta(days=days_until_friday)
+    expiries.append(weekly_expiry.strftime("%y%m%d"))
+    
+    # Monthly (end of month)
+    if today.month == 12:
+        monthly_expiry = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        monthly_expiry = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+    expiries.append(monthly_expiry.strftime("%y%m%d"))
+    
+    # Quarterly (next quarter end)
+    current_quarter = (today.month - 1) // 3 + 1
+    if current_quarter == 4:
+        quarterly_expiry = today.replace(year=today.year + 1, month=1, day=31)
+    else:
+        quarterly_month = current_quarter * 3
+        if quarterly_month == 3:
+            quarterly_expiry = today.replace(month=3, day=31)
+        elif quarterly_month == 6:
+            quarterly_expiry = today.replace(month=6, day=30)
+        elif quarterly_month == 9:
+            quarterly_expiry = today.replace(month=9, day=30)
+    
+    expiries.append(quarterly_expiry.strftime("%y%m%d"))
+    
+    return expiries[:3]  # Return first 3 expiries
 
 def analyze_market_direction(asset: str, timeframes=None) -> dict:
     """Analyze market direction and volatility for options trading."""
@@ -241,53 +326,74 @@ def execute_options_trade(asset: str, strategy: dict, market_analysis: dict, dry
         current_price = market_analysis["current_price"]
         pair = market_analysis["pair"]
         direction = strategy["direction"]
+        volatility = market_analysis["volatility"]
         
         # Calculate position size
         balances = get_balance()
         usd_balance = float(balances.get('ZUSD', 0))
         
-        if usd_balance < 50:  # Minimum $50 for options
+        if usd_balance < 100:  # Minimum $100 for options
             return {"error": f"Insufficient USD balance: ${usd_balance:.2f}"}
         
-        position_size = calculate_options_position_size(usd_balance, market_analysis["volatility"])
+        position_size = calculate_options_position_size(usd_balance, volatility)
         
-        # Calculate trailing stop and take-profit
+        # Get optimal strike and expiry
+        optimal_strike = calculate_optimal_strike(current_price, market_analysis["market_direction"], volatility)
+        expiry_dates = get_next_expiry_dates()
+        best_expiry = expiry_dates[0]  # Use nearest expiry
+        
+        # Generate options symbol
+        options_symbol = generate_options_symbol(asset, best_expiry, optimal_strike, direction.upper())
+        
+        # Calculate trailing stop and take-profit for the underlying
         if direction == "put":
-            # PUT options: stop-loss ABOVE current price
-            stop_loss_price = current_price * (1 + DEFAULT_TRAIL_PCT)
-            take_profit_price = current_price * (1 - DEFAULT_TAKE_PROFIT_PCT)
+            # PUT options: profit when underlying goes down
+            stop_loss_price = current_price * (1 + DEFAULT_TRAIL_PCT)  # Stop above
+            take_profit_price = current_price * (1 - DEFAULT_TAKE_PROFIT_PCT)  # Target below
         else:
-            # CALL options: stop-loss BELOW current price
-            stop_loss_price = current_price * (1 - DEFAULT_TRAIL_PCT)
-            take_profit_price = current_price * (1 + DEFAULT_TAKE_PROFIT_PCT)
+            # CALL options: profit when underlying goes up
+            stop_loss_price = current_price * (1 - DEFAULT_TRAIL_PCT)  # Stop below
+            take_profit_price = current_price * (1 + DEFAULT_TAKE_PROFIT_PCT)  # Target above
         
         print(f"\n  🎯 {strategy['action']} Strategy Detected!")
         print(f"  📊 {asset} Price: ${current_price:.2f}")
         print(f"  📈 Market Direction: {market_analysis['market_direction']}")
         print(f"  📊 Volatility: {market_analysis['volatility']:.3f}")
+        print(f"  🎯 Options Symbol: {options_symbol}")
+        print(f"  📅 Expiry: {best_expiry}")
+        print(f"  💰 Strike Price: ${optimal_strike:.0f}")
         print(f"  📏 Position Size: {position_size:.2f}% (${position_size:.2f})")
         print(f"  🛡️ Stop Loss: ${stop_loss_price:.2f} ({DEFAULT_TRAIL_PCT*100:.1f}% trail)")
         print(f"  🎯 Take Profit: ${take_profit_price:.2f} ({DEFAULT_TAKE_PROFIT_PCT*100:.1f}% target)")
         
+        # Calculate contracts needed
+        min_contracts = OPTIONS_PAIRS[asset]['min_contracts']
+        contracts_needed = max(min_contracts, position_size / optimal_strike)
+        
+        print(f"  📊 Contracts: {contracts_needed:.3f} (min: {min_contracts})")
+        print(f"  💰 Premium Estimate: ${contracts_needed * optimal_strike * 0.05:.2f}")  # Rough estimate
+        
         if dry_run:
-            print(f"  🔵 [DRY RUN] Would place {direction} options")
-            return {"success": True, "strategy": strategy}
+            print(f"  🔵 [DRY RUN] Would place {direction.upper()} options")
+            return {"success": True, "strategy": strategy, "symbol": options_symbol}
         
         # Note: Options trading requires manual setup via Kraken interface
         print(f"  ⚠️ Options trading requires manual setup via Kraken interface")
         print(f"  💡 Go to Kraken > Derivatives > Options")
-        print(f"  💡 Select {asset} options contracts:")
-        print(f"  💡 Choose {direction.upper()} options")
-        print(f"  💡 Set expiration (weekly/monthly)")
-        print(f"  💡 Position size: {position_size:.2f}% (${position_size:.2f})")
-        print(f"  💡 Stop-loss: ${stop_loss_price:.2f}")
-        print(f"  💡 Take-profit: ${take_profit_price:.2f}")
+        print(f"  💡 Search for options symbol: {options_symbol}")
+        print(f"  💡 Buy {contracts_needed:.3f} contracts")
+        print(f"  💡 Set trailing stop on underlying at ${stop_loss_price:.2f}")
+        print(f"  💡 Set take-profit on underlying at ${take_profit_price:.2f}")
         
-        # Send notification with strategy
+        # Send notification with detailed strategy
         msg = f"🎯 *{asset} Options Signal*\n"
         msg += f"Strategy: {strategy['action']}\n"
+        msg += f"Symbol: {options_symbol}\n"
         msg += f"Direction: {market_analysis['market_direction']}\n"
         msg += f"Price: ${current_price:.2f}\n"
+        msg += f"Strike: ${optimal_strike:.0f}\n"
+        msg += f"Expiry: {best_expiry}\n"
+        msg += f"Contracts: {contracts_needed:.3f}\n"
         msg += f"Volatility: {market_analysis['volatility']:.3f}\n"
         msg += f"Position: {position_size:.2f}% (${position_size:.2f})\n"
         msg += f"Stop: ${stop_loss_price:.2f}\n"
@@ -295,7 +401,7 @@ def execute_options_trade(asset: str, strategy: dict, market_analysis: dict, dry
         msg += f"Setup: Manual via Kraken Options"
         tg(msg)
         
-        return {"success": True, "strategy": strategy}
+        return {"success": True, "strategy": strategy, "symbol": options_symbol}
         
     except Exception as e:
         print(f"  ❌ Options trade error: {e}")
@@ -306,10 +412,10 @@ def scan_all_crypto_options(timeframes=None, dry_run: bool = False):
     if timeframes is None:
         timeframes = TIMEFRAMES
     
-    print("  🔍 Scanning all crypto for options opportunities...")
+    print("  🔍 Scanning crypto options opportunities...")
     
-    # Crypto assets with options on Kraken
-    crypto_assets = ['BTC', 'ETH', 'SOL', 'ADA', 'DOT']
+    # Only BTC and ETH have options on Kraken
+    crypto_assets = ['BTC', 'ETH']
     all_opportunities = []
     
     for asset in crypto_assets:
@@ -334,10 +440,10 @@ def scan_all_crypto_options(timeframes=None, dry_run: bool = False):
     # Sort by signal strength
     all_opportunities.sort(key=lambda x: x["market_analysis"]["signal_strength"], reverse=True)
     
-    print(f"\n  🎯 CRYPTO OPTIONS OPPORTUNITIES:")
+    print(f"\n  🎯 KRAKEN OPTIONS OPPORTUNITIES:")
     print(f"  " + "="*80)
     
-    for i, opportunity in enumerate(all_opportunities[:5], 1):
+    for i, opportunity in enumerate(all_opportunities, 1):
         asset = opportunity["asset"]
         analysis = opportunity["market_analysis"]
         strategy = opportunity["strategy"]
@@ -349,6 +455,15 @@ def scan_all_crypto_options(timeframes=None, dry_run: bool = False):
         print(f"  {i}. {strength_emoji} {asset:<6} | ${analysis['current_price']:<8.2f} | {direction.upper()} | Strength: {strength}")
         print(f"      📈 {strategy['reason']}")
         print(f"      📊 Vol: {analysis['volatility']:.3f} | RSI: {analysis['rsi']:.0f}")
+        
+        # Generate options symbol preview
+        optimal_strike = calculate_optimal_strike(analysis["current_price"], analysis["market_direction"], analysis["volatility"])
+        expiry_dates = get_next_expiry_dates()
+        best_expiry = expiry_dates[0]
+        options_symbol = generate_options_symbol(asset, best_expiry, optimal_strike, direction.upper())
+        
+        print(f"      🎯 Symbol: {options_symbol}")
+        print(f"      💰 Strike: ${optimal_strike:.0f} | Expiry: {best_expiry}")
         
         # Execute trades if not dry run
         if not dry_run:
