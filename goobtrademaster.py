@@ -15,10 +15,12 @@ import sys
 import queue
 import subprocess
 import threading
+from collections import deque
 from datetime import datetime
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.screen import ModalScreen
 from textual.widgets import Header, Footer, Static, RichLog, Button, Label, Rule
 from textual.reactive import reactive
 
@@ -101,13 +103,15 @@ class BotProcess:
     """Wraps a running bot subprocess and drains its stdout into a queue."""
 
     def __init__(self, bot_id: str, proc: subprocess.Popen, mode: str):
-        self.bot_id   = bot_id
-        self.proc     = proc
-        self.mode     = mode
-        self.started  = datetime.now().strftime("%H:%M:%S")
+        self.bot_id    = bot_id
+        self.proc      = proc
+        self.mode      = mode
+        self.started   = datetime.now().strftime("%H:%M:%S")
         self.last_line = ""
         self.last_seen = ""
-        self._q: queue.Queue = queue.Queue(maxsize=200)
+        self._q: queue.Queue    = queue.Queue(maxsize=200)
+        self._history: deque    = deque(maxlen=500)
+        self._history_lock      = threading.Lock()
         t = threading.Thread(target=self._drain, daemon=True)
         t.start()
 
@@ -117,6 +121,8 @@ class BotProcess:
             if stripped:
                 self.last_line = stripped
                 self.last_seen = datetime.now().strftime("%H:%M:%S")
+                with self._history_lock:
+                    self._history.append(stripped)
                 try:
                     self._q.put_nowait(stripped)
                 except queue.Full:
@@ -125,6 +131,14 @@ class BotProcess:
                         self._q.put_nowait(stripped)
                     except queue.Empty:
                         pass
+
+    def get_history(self) -> list:
+        with self._history_lock:
+            return list(self._history)
+
+    def history_len(self) -> int:
+        with self._history_lock:
+            return len(self._history)
 
     def running(self) -> bool:
         return self.proc.poll() is None
@@ -199,6 +213,7 @@ class BotCard(Static):
             yield Button("Live",    id="live_" + bid, variant="success")
             yield Button("Dry Run", id="dry_"  + bid, variant="primary")
             yield Button("Stop",    id="stop_" + bid, variant="error")
+            yield Button("Logs",    id="logs_" + bid, variant="default")
 
     def refresh_status(self):
         bp      = _procs[self.bot_id]
@@ -374,6 +389,97 @@ class PnlPanel(Static):
             self.query_one("#pnl_data", Label).update("[red]" + str(e) + "[/red]")
 
 
+# ─── Bot log modal ────────────────────────────────────────────────────────────
+
+class BotLogScreen(ModalScreen):
+    """Full-screen modal showing a bot's raw stdout — streaming live."""
+
+    BINDINGS = [
+        ("escape", "dismiss",  "Close"),
+        ("c",      "copy_log", "Copy to clipboard"),
+    ]
+
+    def __init__(self, bot: dict, **kwargs):
+        super().__init__(**kwargs)
+        self.bot             = bot
+        self._history_offset = 0
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="log_modal"):
+            yield Label(
+                "[bold]" + self.bot["name"] + "[/bold]  —  live output"
+                "   [dim]ESC close  |  C copy[/dim]"
+            )
+            yield Rule()
+            yield RichLog(id="bot_log_view", highlight=True, markup=False,
+                          wrap=True, auto_scroll=True)
+
+    def on_mount(self) -> None:
+        log = self.query_one("#bot_log_view", RichLog)
+        bp  = _procs[self.bot["id"]]
+        if bp:
+            for line in bp.get_history():
+                log.write(line)
+            self._history_offset = bp.history_len()
+        else:
+            log.write("  Bot is not running — start it from the main screen first.")
+        self.set_interval(0.5, self._poll)
+
+    def _poll(self) -> None:
+        bp = _procs[self.bot["id"]]
+        if not bp:
+            return
+        history = bp.get_history()
+        new_lines = history[self._history_offset:]
+        if new_lines:
+            log = self.query_one("#bot_log_view", RichLog)
+            for line in new_lines:
+                log.write(line)
+            self._history_offset = len(history)
+
+    def action_copy_log(self) -> None:
+        bp = _procs[self.bot["id"]]
+        lines = bp.get_history() if bp else []
+        if not lines:
+            self.notify("Nothing to copy", severity="warning")
+            return
+        text = "\n".join(lines)
+        try:
+            proc = subprocess.Popen(
+                ["xclip", "-selection", "clipboard"],
+                stdin=subprocess.PIPE
+            )
+            proc.communicate(input=text.encode())
+            self.notify(str(len(lines)) + " lines copied to clipboard")
+        except Exception as e:
+            self.notify("Copy failed: " + str(e), severity="error")
+
+
+class QuitScreen(ModalScreen):
+    """Ask whether to stop bots or keep them running on exit."""
+
+    BINDINGS = [("escape", "dismiss", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="quit_modal"):
+            yield Label("[bold]Quit GooB Trade Master?[/bold]")
+            yield Rule()
+            yield Label("What should happen to running bots?")
+            yield Label("")
+            with Horizontal(classes="btn-row"):
+                yield Button("Stop All & Quit",   id="quit_stop",  variant="error")
+                yield Button("Keep Running & Quit", id="quit_keep", variant="success")
+                yield Button("Cancel",             id="quit_cancel", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "quit_stop":
+            self.dismiss("stop")
+        elif event.button.id == "quit_keep":
+            self.dismiss("keep")
+        else:
+            self.dismiss(None)
+
+
 # ─── App ──────────────────────────────────────────────────────────────────────
 
 class GooB(App):
@@ -441,6 +547,50 @@ class GooB(App):
 
     ScrollBar > .scrollbar--vertical-bar {
         color: $primary-darken-2;
+    }
+
+    BotLogScreen {
+        align: center middle;
+    }
+
+    QuitScreen {
+        align: center middle;
+    }
+
+    #quit_modal {
+        width: 60;
+        height: auto;
+        background: $surface;
+        border: thick $error;
+        padding: 2 4;
+    }
+
+    #quit_modal Label {
+        width: 100%;
+        text-align: center;
+    }
+
+    .btn-row {
+        width: 100%;
+        height: auto;
+        align: center middle;
+        margin-top: 1;
+    }
+
+    .btn-row Button {
+        margin: 0 1;
+    }
+
+    #log_modal {
+        width: 92%;
+        height: 88%;
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+    }
+
+    #bot_log_view {
+        height: 1fr;
     }
 
     MarketPanel {
@@ -551,6 +701,10 @@ class GooB(App):
                 else:
                     self._log("[dim]" + bot["name"] + " wasn't running[/dim]")
                 self.query_one("#card_" + bid, BotCard).refresh_status()
+                return
+
+            if bid_str == "logs_" + bid:
+                self.push_screen(BotLogScreen(bot))
                 return
 
 
