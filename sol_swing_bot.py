@@ -29,7 +29,7 @@ from kraken_connection import (
     get_balance, get_ticker, get_ohlc, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order,
     calculate_order_size
 )
-from position_guardian import place_exit_oco, scan_and_protect
+from position_guardian import place_exit_orders, scan_and_protect, check_exit_orders, cancel_remaining_exit
 
 # ─────────────────────────────────────────────
 # SETTINGS
@@ -192,8 +192,9 @@ def run(dry_run: bool = False):
     tg(f"🤖 *SOL Swing Bot started* ({mode})")
 
     # position tracks an active trade: entry_price, volume, mode ("buy" or "sell")
-    position = None
-    cycle    = 0
+    position    = None
+    exit_orders = None
+    cycle       = 0
 
     # On startup, protect any existing SOL holdings with OCO orders
     if not dry_run:
@@ -236,6 +237,12 @@ def run(dry_run: bool = False):
 
             # ── MANAGE OPEN POSITION ──────────────────────
             if position:
+                # Check if Kraken already closed via server-side orders
+                if not dry_run and exit_orders and check_exit_orders(exit_orders):
+                    position = None
+                    exit_orders = None
+                    continue
+
                 entry    = position["entry_price"]
                 volume   = position["volume"]
                 pos_mode = position["mode"]
@@ -247,66 +254,67 @@ def run(dry_run: bool = False):
                 # ── SELL MODE: holding SOL, waiting for price to rise ──
                 if pos_mode == "sell":
 
-                    # Take profit: price rose +1% — sell SOL for USDT
                     if pnl_pct >= PROFIT_PCT:
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                         if not dry_run:
+                            if exit_orders: cancel_remaining_exit(exit_orders)
                             ok, result = place_order(PAIR, "sell", "market", volume)
                             if not ok:
                                 print(f"  ❌ Sell failed: {result}")
                             else:
                                 tg(f"💰 *SOL sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
-                                position = None  # now holding USDT, look to buy dip
+                                position = None; exit_orders = None
                         else:
                             print(f"  [DRY] Would sell {volume} SOL")
-                            position = None
+                            position = None; exit_orders = None
 
-                    # Stop loss: price dropped -40% — cut and hold USDT
                     elif pnl_pct <= -STOP_PCT:
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                         if not dry_run:
+                            if exit_orders: cancel_remaining_exit(exit_orders)
                             ok, result = place_order(PAIR, "sell", "market", volume)
                             if not ok:
                                 print(f"  ❌ Stop sell failed: {result}")
                             else:
                                 tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
-                                position = None
+                                position = None; exit_orders = None
                         else:
                             print(f"  [DRY] Would stop-sell {volume} SOL")
-                            position = None
+                            position = None; exit_orders = None
 
                     else:
                         print(f"  ⏳ Holding SOL... waiting for +{PROFIT_PCT*100:.1f}% to sell")
 
-                # ── BUY MODE: holding USDT, waiting for price to fall ──
+                # ── BUY MODE: bought SOL, waiting to sell at profit ──
                 elif pos_mode == "buy":
 
-                    # Take profit: price dropped to dip zone — already bought, now hold and wait to sell
                     if pnl_pct >= PROFIT_PCT:
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                         if not dry_run:
+                            if exit_orders: cancel_remaining_exit(exit_orders)
                             ok, result = place_order(PAIR, "sell", "market", volume)
                             if not ok:
                                 print(f"  ❌ Sell failed: {result}")
                             else:
                                 tg(f"💰 *SOL sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.2f}")
-                                position = None
+                                position = None; exit_orders = None
                         else:
                             print(f"  [DRY] Would sell {volume} SOL")
-                            position = None
+                            position = None; exit_orders = None
 
                     elif pnl_pct <= -STOP_PCT:
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} SOL @ ${price:.2f}")
                         if not dry_run:
+                            if exit_orders: cancel_remaining_exit(exit_orders)
                             ok, result = place_order(PAIR, "sell", "market", volume)
                             if not ok:
                                 print(f"  ❌ Stop sell failed: {result}")
                             else:
                                 tg(f"🛑 *Stop loss* SOL {pnl_pct*100:.2f}% @ ${price:.2f}")
-                                position = None
+                                position = None; exit_orders = None
                         else:
                             print(f"  [DRY] Would stop-sell {volume} SOL")
-                            position = None
+                            position = None; exit_orders = None
 
                     else:
                         print(f"  ⏳ Bought SOL... waiting for +{PROFIT_PCT*100:.1f}% to sell")
@@ -380,7 +388,7 @@ def run(dry_run: bool = False):
                                     "entry_time": ts,
                                     "mode": "sell"  # bought SOL, now watching to sell
                                 }
-                                place_exit_oco(PAIR, volume, price, PROFIT_PCT, STOP_PCT)
+                                exit_orders = place_exit_orders(PAIR, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🛒 *SOL bought* {volume} @ ${price:.2f} | {reason_str}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")

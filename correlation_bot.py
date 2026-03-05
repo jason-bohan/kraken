@@ -22,7 +22,7 @@ import requests as req
 
 # We'll import kraken functions
 from kraken_connection import get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
-from position_guardian import place_exit_oco
+from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 
 BASE_URL = "https://api.kraken.com"
 
@@ -263,6 +263,11 @@ def run(dry_run: bool = False):
             
             # Manage existing position
             if position:
+                # Check if Kraken already closed via server-side orders
+                if not dry_run and position.get("exit_orders") and check_exit_orders(position["exit_orders"]):
+                    position = None
+                    continue
+
                 pair = position["pair"]
                 entry = position["entry_price"]
                 volume = position["volume"]
@@ -315,7 +320,7 @@ def run(dry_run: bool = False):
                                     "entry_time": ts
                                 }
                                 if ok and not dry_run:
-                                    place_exit_oco(pair, volume, price, PROFIT_PCT, STOP_PCT)
+                                    position["exit_orders"] = place_exit_orders(pair, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🎯 *Correlation BUY* {pair} RSI={rsi:.0f} @ ${price:.4f} (~${cost:.2f})")
                 
                 elif signal_type == "sell_overbought" and not BUY_ONLY_MODE:

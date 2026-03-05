@@ -267,16 +267,31 @@ class MarketPanel(Static):
 
 
 class BalancesPanel(Static):
-    """Account balances with USD equivalent totals."""
+    """Account balances — dynamically shows everything you actually hold."""
 
-    ASSETS = [
-        ("ZUSD",  "USD",  None),
-        ("XXBT",  "BTC",  "XBTUSD"),
-        ("XETH",  "ETH",  "ETHUSD"),
-        ("SOL",   "SOL",  "SOLUSD"),
-        ("XDG",   "DOGE", "XDGUSD"),
-        ("DOT",   "DOT",  "DOTUSD"),
-    ]
+    # Known Kraken asset key → (display name, USD pair for price lookup)
+    # Anything not listed here will be shown with its raw key and no USD price
+    _KNOWN = {
+        "ZUSD":  ("USD",   None),
+        "XXBT":  ("BTC",   "XBTUSD"),
+        "XETH":  ("ETH",   "ETHUSD"),
+        "SOL":   ("SOL",   "SOLUSD"),
+        "XDG":   ("DOGE",  "XDGUSD"),
+        "XDOGE": ("DOGE",  "XDGUSD"),
+        "DOT":   ("DOT",   "DOTUSD"),
+        "XXRP":  ("XRP",   "XRPUSD"),
+        "ADA":   ("ADA",   "ADAUSD"),
+        "LINK":  ("LINK",  "LINKUSD"),
+        "AVAX":  ("AVAX",  "AVAXUSD"),
+        "MATIC": ("MATIC", "MATICUSD"),
+        "ATOM":  ("ATOM",  "ATOMUSD"),
+        "WAR":   ("WAR",   "WARUSD"),
+        "XPL":   ("XPL",   "XPLUSD"),
+        "BTCZ":  ("BTCZ",  "BTCZUSD"),
+        "SOXS":  ("SOXS",  "SOXSUSD"),
+        "UNI":   ("UNI",   "UNIUSD"),
+        "AAVE":  ("AAVE",  "AAVEUSD"),
+    }
 
     def compose(self) -> ComposeResult:
         yield Label("[bold]BALANCES[/bold]")
@@ -290,36 +305,66 @@ class BalancesPanel(Static):
                 self.query_one("#bal_data", Label).update("[red]Auth error — check .env[/red]")
                 return
 
-            lines      = []
-            total_usd  = 0.0
+            lines       = []
+            total_usd   = 0.0
             price_cache = {}
 
-            for kraken_key, display, pair in self.ASSETS:
-                amt = float(balances.get(kraken_key, 0))
+            # Sort: USD first, then by USD value descending
+            def get_usd_val(item):
+                key, amt_str = item
+                amt = float(amt_str)
+                if amt < 1e-8:
+                    return -1
+                if key == "ZUSD":
+                    return amt + 1e9  # always first
+                known = self._KNOWN.get(key)
+                if not known or not known[1]:
+                    return 0
+                pair = known[1]
+                if pair not in price_cache:
+                    try:
+                        tk = get_ticker(pair)
+                        price_cache[pair] = float(tk["c"][0]) if tk else 0.0
+                    except Exception:
+                        price_cache[pair] = 0.0
+                return float(amt_str) * price_cache[pair]
+
+            sorted_balances = sorted(balances.items(), key=get_usd_val, reverse=True)
+
+            for key, amt_str in sorted_balances:
+                amt = float(amt_str)
                 if amt < 1e-8:
                     continue
 
-                if pair is None:
-                    price = 1.0
-                else:
-                    if pair not in price_cache:
-                        try:
-                            tk = get_ticker(pair)
-                            price_cache[pair] = float(tk["c"][0]) if tk else 0.0
-                        except Exception:
-                            price_cache[pair] = 0.0
-                    price = price_cache[pair]
+                known = self._KNOWN.get(key)
+                display = known[0] if known else key
+                pair    = known[1] if known else None
 
-                usd_val    = amt * price
+                if pair is None and key != "ZUSD":
+                    # Unknown asset — show without USD value
+                    lines.append(display.ljust(6) + f"{amt:.6g}")
+                    continue
+
+                if key == "ZUSD":
+                    total_usd += amt
+                    lines.append("USD   [bold]$" + f"{amt:,.2f}" + "[/bold]")
+                    continue
+
+                if pair not in price_cache:
+                    try:
+                        tk = get_ticker(pair)
+                        price_cache[pair] = float(tk["c"][0]) if tk else 0.0
+                    except Exception:
+                        price_cache[pair] = 0.0
+
+                price   = price_cache[pair]
+                usd_val = amt * price
                 total_usd += usd_val
 
-                if display == "USD":
-                    lines.append("USD   [bold]$" + f"{amt:,.2f}" + "[/bold]")
-                else:
-                    lines.append(
-                        display.ljust(5) + " " + f"{amt:.6f}" +
-                        "  [dim]approx $" + f"{usd_val:,.2f}" + "[/dim]"
-                    )
+                lines.append(
+                    display.ljust(6) + f"{amt:.6g}" +
+                    "  [dim]approx $" + f"{usd_val:,.2f}" + "[/dim]"
+                )
 
             lines.append("")
             color = "green" if total_usd > 0 else "white"

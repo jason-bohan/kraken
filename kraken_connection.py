@@ -419,7 +419,8 @@ def place_order(
             return False, {"error": "For cost-based orders without price, must also provide volume"}
     
     if price is not None:
-        data["price"] = str(price)
+        # Accept pre-formatted strings (e.g. "95.97") to preserve Kraken's required precision
+        data["price"] = price if isinstance(price, str) else str(price)
     if validate:
         data["validate"] = "true"  # dry run — Kraken won't execute
 

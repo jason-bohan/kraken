@@ -31,7 +31,7 @@ from datetime import datetime
 from kraken_connection import (
     get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
 )
-from position_guardian import place_exit_oco
+from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 import requests as req
 
 BASE_URL = "https://api.kraken.com"
@@ -267,23 +267,24 @@ def get_pair_data(pair: str) -> tuple:
     """
     ticker = get_ticker(pair)
     if not ticker:
-        return None, None, None
+        return None, None, None, None
 
     try:
         price = float(ticker.get("a", [0])[0])
     except:
-        return None, None, None
+        return None, None, None, None
 
     candles = get_ohlc(pair, interval=1)  # 1-min candles for HFT
     if not candles or len(candles) < RSI_PERIOD + 5:
-        return price, 50.0, price
+        return price, 50.0, price, price
 
     closes      = [float(c[4]) for c in candles]
     highs       = [float(c[2]) for c in candles]
     rsi         = calculate_rsi(closes, RSI_PERIOD)
     recent_high = max(highs[-30:])
+    ma20        = sum(closes[-20:]) / min(20, len(closes))
 
-    return price, rsi, recent_high
+    return price, rsi, recent_high, ma20
 
 
 # ─────────────────────────────────────────────
@@ -329,7 +330,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
     while not stop_event.is_set():
         try:
             ts = datetime.now().strftime("%H:%M:%S")
-            price, rsi, recent_high = get_pair_data(pair)
+            price, rsi, recent_high, ma20 = get_pair_data(pair)
 
             if price is None:
                 time.sleep(CHECK_SECS)
@@ -339,6 +340,15 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
 
             # ── MANAGE POSITION ──────────────────────────
             if position:
+                # Check if Kraken already closed via server-side orders
+                if not dry_run and position.get("exit_orders") and check_exit_orders(position["exit_orders"]):
+                    with deployed_lock:
+                        deployed_usd = max(0, deployed_usd - (position["entry_price"] * position["volume"]))
+                    with positions_lock:
+                        positions.pop(pair, None)
+                    position = None
+                    continue
+
                 entry       = position["entry_price"]
                 volume      = position["volume"]
                 pnl_pct     = (price - entry) / entry
@@ -401,10 +411,19 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 rsi_signal = rsi <= RSI_OVERSOLD
                 dip_signal = DIP_MIN <= dip <= DIP_MAX
 
-                bal_str = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
-                print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}%{bal_str}")
+                # Trend filter: only buy if price is above 20-period MA (uptrend)
+                uptrend = price >= ma20 if ma20 else True
 
-                if rsi_signal or dip_signal:
+                # Holdings check: don't buy if we already hold this asset
+                asset_key = pair.replace("USD", "").replace("ZUSD", "")
+                already_held = not dry_run and float(get_balance().get(asset_key, 0)) * price > 5.0
+
+                bal_str   = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
+                trend_str = "UP" if uptrend else "DOWN"
+                held_str  = " HELD" if already_held else ""
+                print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | Trend {trend_str}{held_str}{bal_str}")
+
+                if (rsi_signal or dip_signal) and uptrend and not already_held:
                     reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
 
                     volume = get_trade_size(pair, price, dry_run)
@@ -430,12 +449,12 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                         else:
                             ok, result = place_order(pair, "buy", "market", volume)
                             if ok:
-                                position = {"entry_price": price, "volume": volume}
+                                eo = place_exit_orders(pair, volume, price, PROFIT_PCT, STOP_PCT)
+                                position = {"entry_price": price, "volume": volume, "exit_orders": eo}
                                 with positions_lock:
                                     positions[pair] = position
                                 with deployed_lock:
                                     deployed_usd += cost
-                                place_exit_oco(pair, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🛒 *{pair}* buy @ ${price:.4f} | {reason}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")
