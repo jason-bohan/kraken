@@ -3,11 +3,11 @@
 SOL Swing Bot — Kraken
 Strategy: Two modes working together:
   1. SOL MODE: If you already hold SOL, treat it as an open position.
-               Sell when +1% profit from session start price, buy back on 20-30% dip.
-  2. USD MODE: If you have USDT/USD, buy SOL on dips, sell on +1% profit.
+               Sell when +10% profit from session start price, buy back on 5-15% dip.
+  2. USD MODE: If you have USD, buy SOL on dips, sell on +10% profit.
 
-Entry zone: RSI below 40 OR 20-30% dip from recent high.
-Stop loss: -40% from entry.
+Entry zone: RSI below 35 OR 5-15% dip from recent high.
+Stop loss: -5% from entry (tight — 2:1 reward/risk).
 
 Usage:
     python3 sol_swing_bot.py          # live trading
@@ -35,13 +35,13 @@ from kraken_connection import (
 # ─────────────────────────────────────────────
 PAIR           = "SOLUSD"      # SOL trading pair on Kraken
 ASSET          = "SOL"         # base asset name in balance
-QUOTE          = "USDT"        # quote currency (change to ZUSD if using USD)
-PROFIT_PCT     = 0.05          # 5% profit target — realistic for SOL volatility, covers fees
-STOP_PCT       = 0.40          # 40% stop loss — SOL historically volatile, give it room
+QUOTE          = "ZUSD"        # Kraken USD (not USDT)
+PROFIT_PCT     = 0.10          # 10% profit target — SOL volatile enough to hit this in days
+STOP_PCT       = 0.05          # 5% stop loss — 2:1 reward/risk
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 40            # enter when RSI below this
-DIP_MIN        = 0.20          # only enter when SOL is AT LEAST 20% below recent high
-DIP_MAX        = 0.30          # skip entry if drop exceeds 30% (possible crash, not bounce)
+RSI_OVERSOLD   = 35            # enter when RSI below this — more selective
+DIP_MIN        = 0.05          # buy SOL after 5%+ pullback from recent high
+DIP_MAX        = 0.15          # skip if drop exceeds 15% (possible breakdown)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
 MIN_TRADE_SOL  = 0.05          # minimum SOL to sell per trade
 RESERVE_USD    = 2.0           # keep this much USD in reserve

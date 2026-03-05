@@ -22,8 +22,8 @@ import time
 import argparse
 from datetime import datetime
 from kraken_connection import (
-    get_ticker, get_ohlc, get_balance, get_orderbook, 
-    get_open_orders, cancel_order, get_asset_pairs
+    get_ticker, get_ohlc, get_balance, get_orderbook,
+    place_order, get_open_orders, cancel_order, get_asset_pairs
 )
 
 # 📱 Telegram settings

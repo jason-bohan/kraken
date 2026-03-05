@@ -3,11 +3,11 @@
 ETH Swing Bot — Kraken
 Strategy: Two modes working together:
   1. ETH MODE: If you already hold ETH, treat it as an open position.
-               Sell when +1% profit from session start price, buy back on 20-30% dip.
-  2. USD MODE: If you have USDT/USD, buy ETH on dips, sell on +1% profit.
+               Sell when +10% profit from session start price, buy back on 5-15% dip.
+  2. USD MODE: If you have USD, buy ETH on dips, sell on +10% profit.
 
-Entry zone: RSI below 40 OR 20-30% dip from recent high.
-Stop loss: -40% from entry.
+Entry zone: RSI below 35 OR 5-15% dip from recent high.
+Stop loss: -5% from entry (tight — 2:1 reward/risk).
 
 Usage:
     python3 eth_swing_bot.py          # live trading
@@ -36,12 +36,12 @@ from kraken_connection import (
 PAIR           = "ETHUSD"     # ETH trading pair on Kraken
 ASSET          = "XETH"        # ETH asset name in Kraken balance (Kraken prefix: XETH)
 QUOTE          = "ZUSD"        # Kraken USD
-PROFIT_PCT     = 0.07          # 7% profit target — ETH sits between SOL and BTC in volatility
-STOP_PCT       = 0.25          # 25% stop loss — ETH less volatile than SOL, more than BTC
+PROFIT_PCT     = 0.10          # 10% profit target — 2:1 reward/risk vs 5% stop
+STOP_PCT       = 0.05          # 5% stop loss — cut losses fast before they compound
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 40            # enter when RSI below this
-DIP_MIN        = 0.15          # ETH healthy corrections are 15-25%
-DIP_MAX        = 0.25          # skip if drop exceeds 25% (possible bear, not bounce)
+RSI_OVERSOLD   = 35            # enter when RSI below this — more selective
+DIP_MIN        = 0.05          # buy ETH after 5%+ pullback from recent high
+DIP_MAX        = 0.15          # skip if drop exceeds 15% (possible breakdown)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
 MIN_TRADE_ETH  = 0.005         # minimum ETH to sell per trade
 RESERVE_USD    = 2.0           # keep this much USD in reserve

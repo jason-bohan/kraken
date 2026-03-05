@@ -29,8 +29,8 @@ BASE_URL = "https://api.kraken.com"
 # SETTINGS
 # ─────────────────────────────────────────────
 PAIRS = [
-    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD",
-    "DOGEUSD", "AVAXUSD", "DOTUSD", "LINKUSD", "MATICUSD"
+    "XBTUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD",
+    "XDGUSD", "AVAXUSD", "DOTUSD", "LINKUSD", "MATICUSD"
 ]
 RSI_PERIOD = 14
 RSI_OVERSOLD = 35  # Slightly higher to find more buys
@@ -38,8 +38,8 @@ RSI_OVERBOUGHT = 80  # Just for display, we won't act on it
 CORRELATION_THRESHOLD = 2  # Need 2+ coins in same state to trigger
 BUY_ONLY_MODE = True  # Only buy, no shorting
 CHECK_SECS = 30
-PROFIT_PCT = 0.05  # 5%
-STOP_PCT = 0.10    # 10%
+PROFIT_PCT = 0.08  # 8% — 2:1 reward/risk
+STOP_PCT = 0.04    # 4% — tight stop
 RESERVE_USD = 5.0  # Keep this much USD in reserve
 DRY_BALANCE = 50.0
 

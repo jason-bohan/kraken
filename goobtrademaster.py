@@ -18,7 +18,7 @@ import threading
 from datetime import datetime
 
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, ScrollableContainer
 from textual.widgets import Header, Footer, Static, RichLog, Button, Label, Rule
 from textual.reactive import reactive
 
@@ -48,6 +48,51 @@ BOTS = [
         "pair":      "XBTUSD",
         "desc":      "8% target / 4% stop   |  dip + RSI entries",
     },
+    {
+        "id":        "eth_swing",
+        "name":      "ETH Swing",
+        "script":    "eth_swing_bot.py",
+        "live_args": [],
+        "dry_args":  ["--dry"],
+        "pair":      "ETHUSD",
+        "desc":      "10% target / 5% stop  |  dip + RSI entries",
+    },
+    {
+        "id":        "sol_swing",
+        "name":      "SOL Swing",
+        "script":    "sol_swing_bot.py",
+        "live_args": [],
+        "dry_args":  ["--dry"],
+        "pair":      "SOLUSD",
+        "desc":      "10% target / 5% stop  |  dip + RSI entries",
+    },
+    {
+        "id":        "dynamic_hft",
+        "name":      "Dynamic HFT",
+        "script":    "dynamic_hft_bot.py",
+        "live_args": [],
+        "dry_args":  ["--dry"],
+        "pair":      "XBTUSD",
+        "desc":      "8% target / 4% stop   |  top volatile pairs across all of Kraken",
+    },
+    {
+        "id":        "correlation",
+        "name":      "Correlation",
+        "script":    "correlation_bot.py",
+        "live_args": [],
+        "dry_args":  ["--dry"],
+        "pair":      "XBTUSD",
+        "desc":      "8% target / 4% stop   |  buys when 2+ coins oversold simultaneously",
+    },
+    {
+        "id":        "cheap_futures",
+        "name":      "Cheap Futures",
+        "script":    "cheap_futures_bot.py",
+        "live_args": ["--scan"],
+        "dry_args":  ["--scan", "--dry"],
+        "pair":      "SOLUSD",
+        "desc":      "15% target / 3% stop  |  SOL/ADA/DOGE volatility scanner",
+    },
 ]
 
 # ─── Bot process management ───────────────────────────────────────────────────
@@ -56,10 +101,12 @@ class BotProcess:
     """Wraps a running bot subprocess and drains its stdout into a queue."""
 
     def __init__(self, bot_id: str, proc: subprocess.Popen, mode: str):
-        self.bot_id  = bot_id
-        self.proc    = proc
-        self.mode    = mode
-        self.started = datetime.now().strftime("%H:%M:%S")
+        self.bot_id   = bot_id
+        self.proc     = proc
+        self.mode     = mode
+        self.started  = datetime.now().strftime("%H:%M:%S")
+        self.last_line = ""
+        self.last_seen = ""
         self._q: queue.Queue = queue.Queue(maxsize=200)
         t = threading.Thread(target=self._drain, daemon=True)
         t.start()
@@ -68,6 +115,8 @@ class BotProcess:
         for line in self.proc.stdout:
             stripped = line.rstrip()
             if stripped:
+                self.last_line = stripped
+                self.last_seen = datetime.now().strftime("%H:%M:%S")
                 try:
                     self._q.put_nowait(stripped)
                 except queue.Full:
@@ -145,21 +194,30 @@ class BotCard(Static):
         bid = self.bot_id
         yield Label("[bold]" + self.bot["name"] + "[/bold]  [dim]" + self.bot["desc"] + "[/dim]")
         yield Label("  Stopped", id="status_" + bid)
+        yield Label("", id="heartbeat_" + bid, classes="heartbeat")
         with Horizontal(classes="btn-row"):
             yield Button("Live",    id="live_" + bid, variant="success")
             yield Button("Dry Run", id="dry_"  + bid, variant="primary")
             yield Button("Stop",    id="stop_" + bid, variant="error")
 
     def refresh_status(self):
-        bp     = _procs[self.bot_id]
-        widget = self.query_one("#status_" + self.bot_id, Label)
+        bp      = _procs[self.bot_id]
+        status  = self.query_one("#status_"    + self.bot_id, Label)
+        heartbeat = self.query_one("#heartbeat_" + self.bot_id, Label)
         if bp and bp.running():
             if bp.mode == "live":
-                widget.update("[green]  LIVE  since " + bp.started + "[/green]")
+                status.update("[green]  LIVE  since " + bp.started + "[/green]")
             else:
-                widget.update("[cyan]  DRY RUN  since " + bp.started + "[/cyan]")
+                status.update("[cyan]  DRY RUN  since " + bp.started + "[/cyan]")
+            if bp.last_line:
+                # Strip emoji/whitespace clutter, cap length
+                clean = bp.last_line.strip().lstrip("  ").replace("  ", " ")
+                heartbeat.update(
+                    "[dim]" + bp.last_seen + "  " + clean[:65] + "[/dim]"
+                )
         else:
-            widget.update("  Stopped")
+            status.update("  Stopped")
+            heartbeat.update("")
 
 
 class MarketPanel(Static):
@@ -339,9 +397,13 @@ class GooB(App):
     }
 
     #left_col {
-        width: 52;
+        width: 55;
         padding: 0 1;
         border-right: solid $primary-darken-2;
+    }
+
+    #bot_scroll {
+        height: 1fr;
     }
 
     #right_col {
@@ -357,6 +419,12 @@ class GooB(App):
         height: auto;
     }
 
+    .heartbeat {
+        color: $text-muted;
+        height: 1;
+        overflow: hidden;
+    }
+
     .btn-row {
         height: 3;
         margin-top: 1;
@@ -365,6 +433,14 @@ class GooB(App):
     Button {
         min-width: 10;
         margin-right: 1;
+    }
+
+    ScrollBar {
+        width: 1;
+    }
+
+    ScrollBar > .scrollbar--vertical-bar {
+        color: $primary-darken-2;
     }
 
     MarketPanel {
@@ -395,8 +471,9 @@ class GooB(App):
             with Vertical(id="left_col"):
                 yield Label("[bold]BOTS[/bold]")
                 yield Rule()
-                for bot in BOTS:
-                    yield BotCard(bot, id="card_" + bot["id"])
+                with ScrollableContainer(id="bot_scroll"):
+                    for bot in BOTS:
+                        yield BotCard(bot, id="card_" + bot["id"])
             with Vertical(id="right_col"):
                 yield MarketPanel(id="market_panel")
                 yield BalancesPanel(id="bal_panel")
@@ -413,16 +490,27 @@ class GooB(App):
         ts = datetime.now().strftime("%H:%M:%S")
         self.query_one("#log", RichLog).write("[dim]" + ts + "[/dim]  " + msg)
 
+    # Lines containing these keywords bubble up to the log; everything else
+    # is silently consumed and shown only in the card heartbeat.
+    LOG_KEYWORDS = {
+        "buy", "sell", "order", "profit", "stop loss", "target",
+        "signal", "momentum", "pump", "position", "error", "failed",
+        "exception", "cancelled", "filled",
+    }
+
     def refresh_all(self):
         self.query_one("#market_panel", MarketPanel).refresh_data()
         self.query_one("#bal_panel",    BalancesPanel).refresh_data()
         self.query_one("#pnl_panel",    PnlPanel).refresh_data()
         for bot in BOTS:
-            self.query_one("#card_" + bot["id"], BotCard).refresh_status()
-            bp = _procs[bot["id"]]
+            card = self.query_one("#card_" + bot["id"], BotCard)
+            bp   = _procs[bot["id"]]
             if bp:
                 for line in bp.pop_output():
-                    self._log("[dim]" + bot["name"] + ":[/dim] " + line)
+                    lower = line.lower()
+                    if any(kw in lower for kw in self.LOG_KEYWORDS):
+                        self._log("[dim]" + bot["name"] + ":[/dim] " + line.strip())
+            card.refresh_status()
 
     def action_refresh(self):
         self._log("Manual refresh")
