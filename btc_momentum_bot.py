@@ -249,19 +249,18 @@ def execute_btc_buy(analysis: dict, dry_run: bool = False) -> dict:
             return {"success": True, "action": "DRY_RUN_BUY", "volume": buy_volume}
         
         # Place real order
-        order = place_order(
+        ok, order = place_order(
             pair=BTC_PAIR,
-            type="buy",
-            ordertype="market",
+            side="buy",
+            order_type="market",
             volume=buy_volume,
-            validate=False
         )
-        
-        if order.get('error'):
-            print(f"  ❌ BTC buy order failed: {order['error']}")
-            return {"success": False, "error": order['error']}
-        
-        print(f"  ✅ BTC buy order placed: {order['descr']['order']}")
+
+        if not ok:
+            print(f"  ❌ BTC buy order failed: {order}")
+            return {"success": False, "error": order}
+
+        print(f"  ✅ BTC buy order placed: {order.get('descr', {}).get('order', 'submitted')}")
         
         # Send Telegram notification
         msg = f"🚀 *BTC Momentum Buy*\n\n"
@@ -313,19 +312,18 @@ def execute_btc_sell(analysis: dict, dry_run: bool = False) -> dict:
             return {"success": True, "action": "DRY_RUN_SELL", "volume": sell_volume}
         
         # Place real sell order
-        order = place_order(
+        ok, order = place_order(
             pair=BTC_PAIR,
-            type="sell",
-            ordertype="market",
+            side="sell",
+            order_type="market",
             volume=sell_volume,
-            validate=False
         )
-        
-        if order.get('error'):
-            print(f"  ❌ BTC sell order failed: {order['error']}")
-            return {"success": False, "error": order['error']}
-        
-        print(f"  ✅ BTC sell order placed: {order['descr']['order']}")
+
+        if not ok:
+            print(f"  ❌ BTC sell order failed: {order}")
+            return {"success": False, "error": order}
+
+        print(f"  ✅ BTC sell order placed: {order.get('descr', {}).get('order', 'submitted')}")
         
         # Send Telegram notification
         msg = f"💰 *BTC Position Sold*\n\n"

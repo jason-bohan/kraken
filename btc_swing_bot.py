@@ -3,11 +3,11 @@
 BTC Swing Bot — Kraken
 Strategy: Two modes working together:
   1. BTC MODE: If you already hold BTC, treat it as an open position.
-               Sell when +5% profit from session start price, buy back on 15-25% dip.
-  2. USD MODE (buy BTC on dips): If you have USDT/USD, buy BTC on dips, sell on +5% profit.
+               Sell when +8% profit from session start price, buy back on 5-15% dip.
+  2. USD MODE (buy BTC on dips): If you have USD, buy BTC on dips, sell on +8% profit.
 
-Entry zone: RSI below 40 OR 20-30% dip from recent high.
-Stop loss: -40% from entry.
+Entry zone: RSI below 35 OR 5-15% dip from recent high.
+Stop loss: -4% from entry (tight — cut losses fast, 2:1 reward/risk).
 
 Usage:
     python3 btc_swing_bot.py          # live trading
@@ -37,12 +37,12 @@ from kraken_connection import (
 PAIR           = "XBTUSD"     # BTC trading pair on Kraken (Kraken uses XBT not BTC)
 ASSET          = "XXBT"        # BTC asset name in Kraken balance (Kraken uses XXBT prefix)
 QUOTE          = "ZUSD"        # Kraken USD
-PROFIT_PCT     = 0.05          # 5% profit target — BTC moves less than SOL, 5% is realistic
-STOP_PCT       = 0.20          # 20% stop loss — BTC less volatile than SOL
+PROFIT_PCT     = 0.08          # 8% profit target — 2:1 reward/risk vs 4% stop
+STOP_PCT       = 0.04          # 4% stop loss — cut losses fast before they compound
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 40            # enter when RSI below this
-DIP_MIN        = 0.15          # BTC dips 15-25% in healthy corrections
-DIP_MAX        = 0.25          # skip if drop exceeds 25% (possible bear market, not bounce)
+RSI_OVERSOLD   = 35            # enter when RSI below this — more selective than 40
+DIP_MIN        = 0.05          # buy BTC after 5%+ pullback from recent high
+DIP_MAX        = 0.15          # skip if drop exceeds 15% (possible breakdown, not bounce)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
 MIN_TRADE_BTC  = 0.00001       # minimum BTC to sell per trade (BTC is expensive, small fractions)
 RESERVE_USD    = 2.0           # keep this much USD in reserve

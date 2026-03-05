@@ -455,75 +455,7 @@ def cancel_order(txid: str) -> bool:
         return False
 
 
-def place_oco_order(
-    pair: str,
-    side: str,           # "buy" or "sell"
-    volume: float,       # amount of base currency
-    stop_price: float,   # stop-loss trigger price
-    limit_price: float,  # take-profit limit price
-    validate: bool = False
-) -> tuple[bool, dict]:
-    """
-    Place an OCO (One-Cancels-Other) order on Kraken.
-    
-    This places two orders simultaneously: a stop-loss and a take-profit limit.
-    When one fills, the other is automatically cancelled.
-    
-    Note: Kraken doesn't have native OCO, so we simulate it by:
-    1. Placing the first order (stop-loss)
-    2. Placing the second order (take-profit)
-    3. Returning both order IDs - user must manually cancel the other when one fills
-    
-    Returns (success: bool, dict with both order IDs)
-    """
-    # First, place the stop-loss order
-    stop_result, stop_info = place_order(
-        pair=pair,
-        side=side,
-        order_type="stop-loss",
-        volume=volume,
-        price=stop_price,
-        validate=validate
-    )
-    
-    if not stop_result:
-        return False, {"error": f"Stop-loss failed: stop_info", "stop_order": None, "limit_order": None}
-    
-    stop_order_id = stop_info.get('txid', [None])[0]
-    print(f"  ✅ Stop-loss order placed: {stop_order_id}")
-    
-    # Second, place the take-profit limit order
-    limit_result, limit_info = place_order(
-        pair=pair,
-        side=side,
-        order_type="limit",
-        volume=volume,
-        price=limit_price,
-        validate=validate
-    )
-    
-    if not limit_result:
-        # If limit fails, cancel the stop-loss and return error
-        print(f"  ⚠️ Take-profit failed, canceling stop-loss: {stop_order_id}")
-        cancel_order(stop_order_id)
-        return False, {"error": f"Limit failed: {limit_info}", "stop_order": stop_order_id, "limit_order": None}
-    
-    limit_order_id = limit_info.get('txid', [None])[0]
-    print(f"  ✅ Take-profit order placed: {limit_order_id}")
-    
-    # Return both order IDs so the bot can cancel one when the other fills
-    return True, {
-        "stop_order": stop_order_id,
-        "stop_price": stop_price,
-        "limit_order": limit_order_id,
-        "limit_price": limit_price,
-        "pair": pair,
-        "side": side,
-        "volume": volume
-    }
-
-
-def place_oco_order(pair: str, side: str, volume: str, price: str, price2: str, validate: bool = True) -> tuple[bool, dict]:
+def place_oco_order(pair: str, side: str, volume: str, price: str, price2: str, validate: bool = False) -> tuple[bool, dict]:
     """
     Place OCO (One-Cancels-Other) order - combines stop-loss and take-profit.
     
@@ -577,7 +509,7 @@ def place_oco_order(pair: str, side: str, volume: str, price: str, price2: str, 
             return True, order_info
         else:
             print(f"  ❌ No order ID returned")
-            return False, response
+            return False, body
             
     except Exception as e:
         print(f"  ❌ OCO Order exception: {e}")
