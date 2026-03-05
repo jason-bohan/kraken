@@ -29,6 +29,7 @@ from kraken_connection import (
     get_balance, get_ticker, get_ohlc, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order,
     calculate_order_size
 )
+from position_guardian import place_exit_oco, scan_and_protect
 
 # ─────────────────────────────────────────────
 # SETTINGS
@@ -39,8 +40,8 @@ QUOTE          = "ZUSD"        # Kraken USD
 PROFIT_PCT     = 0.10          # 10% profit target — 2:1 reward/risk vs 5% stop
 STOP_PCT       = 0.05          # 5% stop loss — cut losses fast before they compound
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 35            # enter when RSI below this — more selective
-DIP_MIN        = 0.05          # buy ETH after 5%+ pullback from recent high
+RSI_OVERSOLD   = 40            # enter when RSI below this
+DIP_MIN        = 0.02          # buy ETH after 2%+ pullback from recent high
 DIP_MAX        = 0.15          # skip if drop exceeds 15% (possible breakdown)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
 MIN_TRADE_ETH  = 0.005         # minimum ETH to sell per trade
@@ -193,6 +194,13 @@ def run(dry_run: bool = False):
     # position tracks an active trade: entry_price, volume, mode ("buy" or "sell")
     position = None
     cycle    = 0
+
+    # On startup, protect any existing ETH holdings with OCO orders
+    if not dry_run:
+        scan_and_protect(
+            {PAIR: {"asset": ASSET, "reserve": RESERVE_ETH}},
+            PROFIT_PCT, STOP_PCT
+        )
 
     # On startup, check if we already hold ETH and treat it as an open position
     if not dry_run:
@@ -372,6 +380,7 @@ def run(dry_run: bool = False):
                                     "entry_time": ts,
                                     "mode": "sell"  # bought ETH, now watching to sell
                                 }
+                                place_exit_oco(PAIR, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🛒 *ETH bought* {volume} @ ${price:.2f} | {reason_str}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")

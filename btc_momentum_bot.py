@@ -49,7 +49,7 @@ RSI_PERIOD     = 14            # RSI lookback periods
 RSI_BREAKOUT   = 50            # RSI breaks above 50 = bullish momentum
 VOLUME_SPIKE    = 2.0           # 2x average volume = momentum
 BREAKOUT_PCT   = 0.02           # 2% above recent high = breakout
-MIN_TRADE_USD  = 25.0          # minimum USD per trade
+MIN_TRADE_USD  = 15.0          # minimum USD per trade
 RESERVE_USD    = 5.0           # keep this much USD in reserve
 CHECK_SECS     = 60            # seconds between scans
 

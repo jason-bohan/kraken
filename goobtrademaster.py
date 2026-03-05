@@ -170,7 +170,7 @@ def start_bot(bot_id: str, dry: bool = False) -> bool:
         return False
     bot  = next(b for b in BOTS if b["id"] == bot_id)
     args = bot["dry_args"] if dry else bot["live_args"]
-    cmd  = [sys.executable, os.path.join(SCRIPT_DIR, bot["script"])] + args
+    cmd  = [sys.executable, "-u", os.path.join(SCRIPT_DIR, bot["script"])] + args
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

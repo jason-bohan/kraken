@@ -30,6 +30,7 @@ from kraken_connection import (
     place_order, place_oco_order, get_open_orders, cancel_order,
     calculate_order_size
 )
+from position_guardian import place_exit_oco, scan_and_protect
 
 # ─────────────────────────────────────────────
 # SETTINGS
@@ -40,8 +41,8 @@ QUOTE          = "ZUSD"        # Kraken USD
 PROFIT_PCT     = 0.08          # 8% profit target — 2:1 reward/risk vs 4% stop
 STOP_PCT       = 0.04          # 4% stop loss — cut losses fast before they compound
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 35            # enter when RSI below this — more selective than 40
-DIP_MIN        = 0.05          # buy BTC after 5%+ pullback from recent high
+RSI_OVERSOLD   = 40            # enter when RSI below this
+DIP_MIN        = 0.02          # buy BTC after 2%+ pullback from recent high
 DIP_MAX        = 0.15          # skip if drop exceeds 15% (possible breakdown, not bounce)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
 MIN_TRADE_BTC  = 0.00001       # minimum BTC to sell per trade (BTC is expensive, small fractions)
@@ -195,8 +196,12 @@ def run(dry_run: bool = False):
     position = None
     cycle    = 0
 
-    # On startup, check if we already hold SOL and treat it as an open position
+    # On startup, protect any existing BTC holdings with OCO orders
     if not dry_run:
+        scan_and_protect(
+            {PAIR: {"asset": ASSET, "reserve": RESERVE_BTC}},
+            PROFIT_PCT, STOP_PCT
+        )
         balances = get_balance()
         btc_held = float(balances.get(ASSET, 0))
         if btc_held > RESERVE_BTC:
@@ -371,8 +376,9 @@ def run(dry_run: bool = False):
                                     "entry_price": price,
                                     "volume": volume,
                                     "entry_time": ts,
-                                    "mode": "sell"  # bought SOL, now watching to sell
+                                    "mode": "sell"  # bought BTC, now watching to sell
                                 }
+                                place_exit_oco(PAIR, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🛒 *BTC bought* {volume} @ ${price:.2f} | {reason_str}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")

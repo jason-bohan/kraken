@@ -29,8 +29,9 @@ import argparse
 import threading
 from datetime import datetime
 from kraken_connection import (
-    get_balance, get_ticker, get_ohlc, place_order
+    get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
 )
+from position_guardian import place_exit_oco
 import requests as req
 
 BASE_URL = "https://api.kraken.com"
@@ -43,15 +44,15 @@ RESCAN_SECS      = 900          # rescan for new top pairs every 15 min
 CHECK_SECS       = 30           # how often each pair thread checks price
 PROFIT_PCT       = 0.08         # 8% profit target — 2:1 reward/risk vs 4% stop
 STOP_PCT         = 0.04         # 4% stop loss — cut losses fast
-RSI_OVERSOLD     = 30           # entry RSI threshold (tighter from 35)
-DIP_MIN          = 0.10         # enter on 10%+ dip
+RSI_OVERSOLD     = 40           # entry RSI threshold
+DIP_MIN          = 0.02         # enter on 2%+ dip
 DIP_MAX          = 0.15         # skip if drop > 15% (crash territory)
 RSI_PERIOD       = 14
-MAX_USD_PER_PAIR = 2.0          # max $ to risk per pair
-MAX_TOTAL_USD    = 5.0         # hard cap: reduced from $10
-MIN_VOLUME_USD   = 1_000_000   # skip pairs with < $1M 24h volume (was 500k)
-MIN_VOLATILITY   = 0.05         # skip pairs with < 5% 24h swing (increased from 3%)
-RESERVE_USD      = 5.0          # always keep $5 in reserve (increased from $1)
+MAX_USD_PER_PAIR = 15.0         # max $ to risk per pair (must exceed Kraken ~$10 min)
+MAX_TOTAL_USD    = 30.0         # hard cap across all pairs
+MIN_VOLUME_USD   = 1_000_000   # skip pairs with < $1M 24h volume
+MIN_VOLATILITY   = 0.05         # skip pairs with < 5% 24h swing
+RESERVE_USD      = 5.0          # always keep $5 in reserve
 DRY_START_BAL    = 50.0         # default fake starting balance for dry run
 DEBUG_PAIRS      = False        # set True to print all pair scores during scan
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
@@ -289,29 +290,29 @@ def get_pair_data(pair: str) -> tuple:
 # TRADE SIZING
 # ─────────────────────────────────────────────
 def get_trade_size(pair: str, price: float, dry_run: bool) -> float:
-    """Position size respecting MAX_USD_PER_PAIR and MAX_TOTAL_USD."""
+    """Position size: use available USD up to MAX_USD_PER_PAIR, respecting Kraken's dynamic ordermin."""
     if price <= 0:
         return 0.0
 
+    if dry_run:
+        usd_avail = dry_available_usd()
+    else:
+        balances  = get_balance()
+        usd_avail = max(0, float(balances.get("ZUSD", 0)) - RESERVE_USD)
+
     with deployed_lock:
         remaining = MAX_TOTAL_USD - deployed_usd
-        trade_usd = min(MAX_USD_PER_PAIR, remaining)
 
-    if dry_run:
-        avail     = dry_available_usd()
-        trade_usd = min(trade_usd, avail)
-        if trade_usd < 0.50:
-            return 0.0
-        return round(trade_usd / price, 6)
+    trade_usd = min(usd_avail, remaining, MAX_USD_PER_PAIR)
 
-    balances  = get_balance()
-    usd_avail = float(balances.get("ZUSD", 0))
-    trade_usd = min(trade_usd, max(0, usd_avail - RESERVE_USD))
-
-    if trade_usd < 0.50:
+    if trade_usd <= 0:
         return 0.0
 
-    return round(trade_usd / price, 6)
+    # calculate_order_size fetches Kraken's real ordermin for this pair
+    info = calculate_order_size(pair, price, trade_usd)
+    if not info.get("can_afford"):
+        return 0.0
+    return info["volume"]
 
 
 # ─────────────────────────────────────────────
@@ -403,7 +404,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 bal_str = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
                 print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}%{bal_str}")
 
-                if rsi_signal and dip_signal:
+                if rsi_signal or dip_signal:
                     reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
 
                     volume = get_trade_size(pair, price, dry_run)
@@ -434,6 +435,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                                     positions[pair] = position
                                 with deployed_lock:
                                     deployed_usd += cost
+                                place_exit_oco(pair, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🛒 *{pair}* buy @ ${price:.4f} | {reason}")
                             else:
                                 print(f"  ❌ Buy failed: {result}")

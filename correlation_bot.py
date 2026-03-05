@@ -22,6 +22,7 @@ import requests as req
 
 # We'll import kraken functions
 from kraken_connection import get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
+from position_guardian import place_exit_oco
 
 BASE_URL = "https://api.kraken.com"
 
@@ -33,7 +34,7 @@ PAIRS = [
     "XDGUSD", "AVAXUSD", "DOTUSD", "LINKUSD", "MATICUSD"
 ]
 RSI_PERIOD = 14
-RSI_OVERSOLD = 35  # Slightly higher to find more buys
+RSI_OVERSOLD = 40  # Slightly higher to find more buys
 RSI_OVERBOUGHT = 80  # Just for display, we won't act on it
 CORRELATION_THRESHOLD = 2  # Need 2+ coins in same state to trigger
 BUY_ONLY_MODE = True  # Only buy, no shorting
@@ -313,6 +314,8 @@ def run(dry_run: bool = False):
                                     "side": "buy",
                                     "entry_time": ts
                                 }
+                                if ok and not dry_run:
+                                    place_exit_oco(pair, volume, price, PROFIT_PCT, STOP_PCT)
                                 tg(f"🎯 *Correlation BUY* {pair} RSI={rsi:.0f} @ ${price:.4f} (~${cost:.2f})")
                 
                 elif signal_type == "sell_overbought" and not BUY_ONLY_MODE:
