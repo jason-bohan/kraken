@@ -303,63 +303,6 @@ def get_trade_history(count: int = 50) -> dict:
         print(f"  ⚠️ Trade history exception: {e}")
         return {}
 
-def get_closed_orders(count: int = 50) -> dict:
-    """Get closed orders from Kraken."""
-    path = "/0/private/ClosedOrders"
-    nonce = str(int(time.time() * 1000))
-    
-    data = {
-        "nonce": nonce,
-        "count": str(count)
-    }
-    
-    try:
-        signature = get_kraken_signature(path, data, os.getenv("KRAKEN_API_SECRET", ""))
-        headers = {
-            "API-Key": os.getenv("KRAKEN_API_KEY", ""),
-            "API-Sign": signature
-        }
-        
-        res = requests.post(BASE_URL + path, data=data, headers=headers, timeout=10)
-        
-        if res.status_code == 200:
-            body = res.json()
-            if body.get("error"):
-                print(f"  ⚠️ Closed orders error: {body['error']}")
-                return {}
-            
-            result = body.get("result", {})
-            orders = result.get("closed", {})
-            
-            # Convert order dict to list
-            order_list = []
-            for order_id, order_data in orders.items():
-                order_list.append({
-                    "id": order_id,
-                    "time": order_data.get("closetm"),
-                    "pair": order_data.get("pair"),
-                    "type": order_data.get("type"),
-                    "order_type": order_data.get("ordertype"),
-                    "price": float(order_data.get("price", 0)),
-                    "cost": float(order_data.get("cost", 0)),
-                    "fee": float(order_data.get("fee", 0)),
-                    "vol": float(order_data.get("vol", 0)),
-                    "vol_exec": float(order_data.get("vol_exec", 0)),
-                    "status": order_data.get("status")
-                })
-            
-            # Sort by time (newest first)
-            order_list.sort(key=lambda x: x["time"], reverse=True)
-            return order_list
-            
-        else:
-            print(f"  ⚠️ Closed orders HTTP error: {res.status_code}")
-            return {}
-            
-    except Exception as e:
-        print(f"  ⚠️ Closed orders exception: {e}")
-        return {}
-
 def get_orderbook(pair: str, count: int = 10) -> dict:
     path = f"/0/public/Depth?pair={pair}&count={count}"
     try:

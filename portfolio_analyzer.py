@@ -58,32 +58,23 @@ def get_kraken_trade_history(period_days=None, count=100):
         for trade in trades:
             # Convert timestamp to datetime
             trade_time = datetime.fromtimestamp(int(trade["time"]))
-            
-            # Extract symbol from pair (e.g., "XBTUSD" -> "BTC")
+
+            # Extract base symbol from pair by stripping quote currency
             pair = trade.get("pair", "")
-            symbol = pair.replace("XBT", "BTC").replace("XETH", "ETH").replace("ZUSD", "USD")
-            
-            # Handle special cases
-            if symbol == "BTCUSD":
-                symbol = "BTC"
-            elif symbol == "ETHUSD":
-                symbol = "ETH"
-            elif symbol == "DOGEUSD":
-                symbol = "DOGE"
-            elif symbol == "AVAXUSD":
-                symbol = "AVAX"
-            elif symbol == "SOLUSD":
-                symbol = "SOL"
-            elif symbol == "DOTUSD":
-                symbol = "DOT"
-            elif symbol == "BTCZUSD":
-                symbol = "BTCZ"
-            elif symbol == "SOXSUSD":
-                symbol = "SOXS"
-            elif symbol == "XDGUSD":
-                symbol = "DOGE"
-            elif symbol == "XBTUSD":
-                symbol = "BTC"
+            symbol = pair
+            for suffix in ["USD", "EUR", "USDT"]:
+                if symbol.endswith(suffix) and len(symbol) > len(suffix):
+                    symbol = symbol[:-len(suffix)]
+                    break
+
+            # Rename Kraken internal asset names to standard symbols
+            kraken_renames = {
+                "XBT": "BTC", "XBTC": "BTC", "XXBT": "BTC", "XXBTZ": "BTC",
+                "XETH": "ETH", "XETHZ": "ETH",
+                "XDG": "DOGE", "XXDG": "DOGE",
+                "BTCZZ": "BTCZ",
+            }
+            symbol = kraken_renames.get(symbol, symbol)
             
             # Store raw trade data for later P&L calculation
             formatted_trades.append({
@@ -238,28 +229,25 @@ def calculate_realized_pnl(trades):
     return pnl_trades, open_positions
 
 def get_pair_format(symbol: str) -> str:
-    """Get correct Kraken pair format for crypto vs stocks/ETFs."""
-    # Skip stocks/ETFs entirely
-    stock_etf_symbols = ["SOXS", "BTCZ"]  # Add more if needed
-    
-    if symbol in stock_etf_symbols:
-        return "SKIP_STOCK_ETF"  # Skip these entirely
-    
-    # Crypto pairs
-    if symbol == "BTC":
-        return "XBTUSD"
-    elif symbol == "ETH":
-        return "ETHUSD"
-    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI", "DOGE", "SHIB", "AVAX"]:
-        return f"{symbol}USD"
-    elif symbol == "XDG":  # DOGE on Kraken
-        return "XDGUSD"
-    elif symbol == "XBT":  # BTC on Kraken
-        return "XBTUSD"
-    
-    # Default to crypto format
-    else:
-        return f"{symbol}USD"
+    """Get correct Kraken pair format for a base symbol (e.g. 'SOL' -> 'SOLUSD')."""
+    # Skip stocks/ETFs and non-crypto pairs
+    stock_etf_symbols = {"SOXS", "BTCZ", "SOXS#1"}
+    if symbol in stock_etf_symbols or "#" in symbol:
+        return "SKIP_STOCK_ETF"
+
+    # Kraken uses legacy pair names for some assets
+    special_pairs = {
+        "BTC": "XBTUSD",
+        "ETH": "ETHUSD",
+        "DOGE": "XDGUSD",
+        "XBT": "XBTUSD",
+        "XDG": "XDGUSD",
+    }
+    if symbol in special_pairs:
+        return special_pairs[symbol]
+
+    # All others: assume SYMBOL + USD
+    return f"{symbol}USD"
 
 def is_stock_or_etf(symbol: str) -> bool:
     """Check if symbol is a stock/ETF (not crypto)."""
@@ -336,58 +324,63 @@ def calculate_unrealized_pnl(open_positions):
 def get_kraken_orders_history(period_days=None, count=100):
     """Get closed orders history from Kraken API (more detailed)."""
     try:
-        # Get closed orders from Kraken API
-        orders = get_closed_orders(count)
-        
+        # get_closed_orders returns a dict {order_id: order_data}
+        orders = get_closed_orders()
+
         if not orders:
             print("  📝 No closed orders found in Kraken API")
             return []
-        
-        # Filter by period if specified
+
+        cutoff_timestamp = None
         if period_days:
             cutoff_timestamp = int((datetime.now() - timedelta(days=period_days)).timestamp())
-            orders = [o for o in orders if int(o["time"]) >= cutoff_timestamp]
-        
-        # Convert to our format
+
         formatted_trades = []
-        for order in orders:
-            # Convert timestamp to datetime
-            order_time = datetime.fromtimestamp(int(order["time"]))
-            
-            # Extract symbol from pair
-            pair = order.get("pair", "")
-            symbol = pair.replace("XBT", "BTC").replace("XETH", "ETH").replace("ZUSD", "USD")
-            
-            # Calculate P&L
-            order_type = order.get("type", "")
-            cost = order.get("cost", 0)
-            fee = order.get("fee", 0)
-            
-            if order_type == "sell":
-                pnl_amount = cost - fee
-                pnl_pct = 0
-            else:
-                pnl_amount = -(cost + fee)
-                pnl_pct = 0
-            
+        for order_id, order_data in orders.items():
+            close_time = order_data.get("closetm", 0)
+            if not close_time:
+                continue
+
+            if cutoff_timestamp and int(close_time) < cutoff_timestamp:
+                continue
+
+            order_time = datetime.fromtimestamp(float(close_time))
+
+            # Pair and type live inside "descr"
+            descr = order_data.get("descr", {})
+            pair = descr.get("pair", "")
+            order_type = descr.get("type", "")
+
+            # Extract base symbol by stripping quote currency
+            symbol = pair
+            for suffix in ["USD", "EUR", "USDT"]:
+                if symbol.endswith(suffix) and len(symbol) > len(suffix):
+                    symbol = symbol[:-len(suffix)]
+                    break
+            kraken_renames = {"XBT": "BTC", "XBTC": "BTC", "XETH": "ETH", "XDG": "DOGE", "XXBT": "BTC"}
+            symbol = kraken_renames.get(symbol, symbol)
+
+            cost = float(order_data.get("cost", 0))
+            fee = float(order_data.get("fee", 0))
+            vol_exec = float(order_data.get("vol_exec", 0))
+            price = float(order_data.get("price", 0))
+
             formatted_trades.append({
                 "timestamp": order_time.isoformat(),
                 "symbol": symbol,
                 "pair": pair,
                 "type": order_type,
-                "entry_price": order.get("price", 0),
-                "exit_price": order.get("price", 0) if order_type == "sell" else 0,
-                "shares": order.get("vol_exec", 0),
-                "pnl_amount": pnl_amount,
-                "pnl_pct": pnl_pct,
-                "reason": f"Order {order_type.title()}",
-                "fee": fee,
+                "price": price,
+                "vol": vol_exec,
+                "volume": vol_exec,
                 "cost": cost,
-                "status": order.get("status", "closed")
+                "fee": fee,
+                "trade_id": order_id,
+                "raw_data": order_data,
             })
-        
+
         return formatted_trades
-        
+
     except Exception as e:
         print(f"  ⚠️ Error getting Kraken orders history: {e}")
         return []
@@ -843,27 +836,13 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     
     # Get trade history from Kraken API
     print("  🔄 Fetching trade history from Kraken API...")
-    
-    # Try both trade history and closed orders for comprehensive data
-    api_trades = get_kraken_trade_history(period_days, count=200)
-    api_orders = get_kraken_orders_history(period_days, count=200)
-    
-    # Combine both sources (remove duplicates)
-    all_trades = api_trades + api_orders
-    
-    if not all_trades:
+
+    trades = get_kraken_trade_history(period_days, count=200)
+
+    if not trades:
         print("  📝 No trading history found in Kraken API")
         print("  💡 Make sure you have API permissions and recent trading activity")
         return
-    
-    # Remove duplicates by timestamp and pair
-    unique_trades = {}
-    for trade in all_trades:
-        key = f"{trade['timestamp']}_{trade['pair']}_{trade['type']}"
-        if key not in unique_trades:
-            unique_trades[key] = trade
-    
-    trades = list(unique_trades.values())
     
     print(f"  📊 Found {len(trades)} raw trades")
     
