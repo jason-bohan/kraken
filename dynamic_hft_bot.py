@@ -44,7 +44,8 @@ RESCAN_SECS      = 900          # rescan for new top pairs every 15 min
 CHECK_SECS       = 30           # how often each pair thread checks price
 PROFIT_PCT       = 0.08         # 8% profit target — 2:1 reward/risk vs 4% stop
 STOP_PCT         = 0.04         # 4% stop loss — cut losses fast
-RSI_OVERSOLD     = 40           # entry RSI threshold
+RSI_OVERSOLD     = 40           # entry RSI threshold (buy when RSI is below this)
+RSI_OVERBOUGHT   = 70           # never enter when RSI is above this (too pumped)
 DIP_MIN          = 0.02         # enter on 2%+ dip
 DIP_MAX          = 0.15         # skip if drop > 15% (crash territory)
 RSI_PERIOD       = 14
@@ -410,6 +411,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
             else:
                 rsi_signal = rsi <= RSI_OVERSOLD
                 dip_signal = DIP_MIN <= dip <= DIP_MAX
+                not_overbought = rsi < RSI_OVERBOUGHT  # block entry if RSI is too pumped
 
                 # Trend filter: only buy if price is above 20-period MA (uptrend)
                 uptrend = price >= ma20 if ma20 else True
@@ -423,7 +425,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 held_str  = " HELD" if already_held else ""
                 print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | Trend {trend_str}{held_str}{bal_str}")
 
-                if (rsi_signal or dip_signal) and uptrend and not already_held:
+                if (rsi_signal or dip_signal) and not_overbought and uptrend and not already_held:
                     reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
 
                     volume = get_trade_size(pair, price, dry_run)

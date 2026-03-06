@@ -31,7 +31,7 @@ Usage in any bot:
 """
 
 from kraken_connection import (
-    get_balance, get_ticker, get_open_orders, cancel_order, place_order, get_asset_pairs
+    get_balance, get_ticker, get_open_orders, cancel_order, place_order, place_oco_order, get_asset_pairs
 )
 
 _pair_decimals_cache: dict = {}
@@ -62,46 +62,46 @@ def place_exit_orders(
     stop_pct: float,
 ) -> dict:
     """
-    Place a take-profit and a stop-loss sell order on Kraken's servers.
+    Place a single OCO (One-Cancels-Other) sell order covering both take-profit and stop-loss.
+
+    Uses OCO so Kraken only locks the coins once — avoids 'Insufficient funds' when
+    placing separate SL and TP orders against the same balance.
 
     Returns dict: {"tp": txid_or_None, "sl": txid_or_None}
-    Both orders are live on Kraken — they fire even if the bot is dead.
-    When one fills, call cancel_remaining_exit(exit_orders) to cancel the other.
+    Both orders are live on Kraken. When one fills, Kraken auto-cancels the other.
     """
     tp_price_str = _fmt_price(entry_price * (1 + profit_pct), pair)
     sl_price_str = _fmt_price(entry_price * (1 - stop_pct),  pair)
     vol_str      = str(round(volume, 8))
 
-    result = {"tp": None, "sl": None}
-
-    # Stop-loss first — most critical, protects against big losses
-    ok_sl, r_sl = place_order(
-        pair, "sell", "stop-loss",
-        volume=volume,
-        price=sl_price_str,
+    ok, r = place_oco_order(
+        pair=pair,
+        side="sell",
+        volume=vol_str,
+        price=tp_price_str,   # take-profit limit
+        price2=sl_price_str,  # stop-loss trigger
     )
-    if ok_sl:
-        txids = r_sl.get("txid", [])
-        result["sl"] = txids[0] if txids else None
-        print(f"  SL order set: {pair} sell {vol_str} @ {sl_price_str} (-{stop_pct*100:.1f}%)  [{result['sl']}]")
-    else:
-        print(f"  WARNING: stop-loss order failed for {pair}: {r_sl.get('error', r_sl)}")
 
-    # Take-profit second — Kraken may reject if SL already locked the coins.
-    # If it fails, the bot's polling loop handles take-profit instead.
-    ok_tp, r_tp = place_order(
-        pair, "sell", "take-profit",
-        volume=volume,
-        price=tp_price_str,
-    )
-    if ok_tp:
-        txids = r_tp.get("txid", [])
-        result["tp"] = txids[0] if txids else None
-        print(f"  TP order set: {pair} sell {vol_str} @ {tp_price_str} (+{profit_pct*100:.1f}%)  [{result['tp']}]")
+    if ok:
+        txids = r.get("txid", [])
+        result = {
+            "tp": txids[0] if len(txids) > 0 else None,
+            "sl": txids[1] if len(txids) > 1 else txids[0] if txids else None,
+        }
+        print(f"  OCO exit set: {pair} sell {vol_str} | TP @ {tp_price_str} (+{profit_pct*100:.1f}%) | SL @ {sl_price_str} (-{stop_pct*100:.1f}%)  {txids}")
+        return result
     else:
-        print(f"  WARNING: take-profit order failed for {pair}: {r_tp.get('error', r_tp)}")
-
-    return result
+        error = r.get("error", r) if isinstance(r, dict) else r
+        print(f"  WARNING: OCO exit order failed for {pair}: {error}")
+        # Fallback: try separate SL only to at least protect the position
+        ok_sl, r_sl = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
+        if ok_sl:
+            txids = r_sl.get("txid", [])
+            sl_id = txids[0] if txids else None
+            print(f"  Fallback SL set: {pair} sell {vol_str} @ {sl_price_str} (-{stop_pct*100:.1f}%)  [{sl_id}]")
+            return {"tp": None, "sl": sl_id}
+        print(f"  WARNING: fallback SL also failed for {pair}: {r_sl.get('error', r_sl)}")
+        return {"tp": None, "sl": None}
 
 
 def check_exit_orders(exit_orders: dict) -> bool:
