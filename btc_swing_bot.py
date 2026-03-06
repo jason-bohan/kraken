@@ -104,7 +104,7 @@ def calculate_rsi(closes: list, period: int = 14) -> float:
 
 def get_btc_data() -> tuple:
     """
-    Fetch current SOL price, RSI, and recent high.
+    Fetch current BTC price, RSI, and recent high.
     Returns (price: float, rsi: float, recent_high: float)
 
     NOTE: Uses 5-min candles. To rediscover fields: print(get_ohlc("XBTUSD", 5)[0])
@@ -213,7 +213,7 @@ def run(dry_run: bool = False):
                     "entry_price": start_price,
                     "volume": round(btc_held - RESERVE_BTC, 4),
                     "entry_time": datetime.now().strftime("%H:%M:%S"),
-                    "mode": "sell"   # we're holding SOL, looking to sell it
+                    "mode": "sell"   # we're holding BTC, looking to sell it
                 }
                 print(f"  📦 Found existing BTC: {btc_held} — tracking as open position @ ${start_price:.2f}")
                 tg(f"📦 *Existing BTC detected* {btc_held} @ ${start_price:.2f} — watching to sell")
@@ -327,10 +327,11 @@ def run(dry_run: bool = False):
 
                 rsi_signal  = rsi <= RSI_OVERSOLD
                 dip_signal  = DIP_MIN <= dip_from_high <= DIP_MAX
-                rsi_high    = rsi >= 70   # overbought — good time to sell SOL
+                not_overbought = rsi < 70  # don't buy a dip when already overbought
+                rsi_high    = rsi >= 70   # overbought — good time to sell BTC
                 rip_signal  = dip_from_high < 0.05  # price near recent high — sell opportunity
 
-                # SELL signal: SOL is near its high or RSI overbought — sell existing SOL
+                # SELL signal: BTC is near its high or RSI overbought — sell existing BTC
                 if has_btc and (rsi_high or rip_signal):
                     reason = []
                     if rsi_high:   reason.append(f"RSI overbought {rsi:.1f}")
@@ -350,7 +351,7 @@ def run(dry_run: bool = False):
                                     "entry_price": price,
                                     "volume": volume,
                                     "entry_time": ts,
-                                    "mode": "buy"  # sold SOL, now watching to buy dip
+                                    "mode": "buy"  # sold BTC, now watching to buy dip
                                 }
                                 tg(f"💸 *BTC sold* {volume} @ ${price:.2f} | {reason_str} — waiting for dip to rebuy")
                             else:
@@ -362,10 +363,10 @@ def run(dry_run: bool = False):
                                 "entry_time": ts,
                                 "mode": "buy"
                             }
-                            print(f"  [DRY] Would sell {volume} SOL @ ${price:.2f}")
+                            print(f"  [DRY] Would sell {volume} BTC @ ${price:.2f}")
 
-                # BUY signal: dip in 20-30% zone or RSI oversold — buy SOL with USD
-                elif has_usd and (rsi_signal or dip_signal):
+                # BUY signal: dip or RSI oversold — but never buy when RSI is overbought
+                elif has_usd and (rsi_signal or dip_signal) and not_overbought:
                     reason = []
                     if rsi_signal: reason.append(f"RSI {rsi:.1f}")
                     if dip_signal: reason.append(f"dip -{dip_from_high*100:.1f}% (20-30% zone)")
@@ -399,7 +400,7 @@ def run(dry_run: bool = False):
                             }
                             print(f"  [DRY] Would buy {volume} BTC @ ${price:.2f}")
 
-                # SOL held but no sell signal yet — just monitor
+                # BTC held but no sell signal yet — just monitor
                 elif has_btc:
                     print(f"  👀 Holding BTC — waiting for sell signal (RSI≥70 or near high)")
 
@@ -412,7 +413,7 @@ def run(dry_run: bool = False):
                 btc_bal  = float(balances.get(ASSET, 0))
                 usd_bal  = float(balances.get(QUOTE, balances.get("ZUSD", 0)))
                 total    = usd_bal + (btc_bal * price)
-                print(f"\n  📊 Cycle {cycle} | SOL: {btc_bal:.4f} | USD: ${usd_bal:.2f} | Total: ~${total:.2f}")
+                print(f"\n  📊 Cycle {cycle} | BTC: {btc_bal:.6f} | USD: ${usd_bal:.2f} | Total: ~${total:.2f}")
 
             time.sleep(CHECK_SECS)
 

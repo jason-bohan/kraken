@@ -30,10 +30,11 @@ import time
 import argparse
 from datetime import datetime, timedelta
 from kraken_connection import (
-    get_balance, get_ticker, get_ohlc, get_orderbook, 
+    get_balance, get_ticker, get_ohlc, get_orderbook,
     place_order, place_oco_order, get_open_orders, cancel_order,
     calculate_order_size
 )
+from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 
 # ─────────────────────────────────────────────
 # SETTINGS
@@ -43,12 +44,13 @@ ASSET          = "XDG"         # DOGE asset name in balance
 QUOTE          = "ZUSD"        # Quote currency
 
 # DOGE-specific trading parameters (optimized for meme coin volatility)
-PROFIT_PCT     = 0.20          # 20% profit target - DOGE pumps are explosive
-STOP_PCT       = 0.03          # 3% trailing stop - protect pump profits
+PROFIT_PCT     = 0.15          # 15% profit target - realistic DOGE pump target
+STOP_PCT       = 0.08          # 8% stop loss - wide enough for DOGE noise (was 3%, too tight)
 RSI_PERIOD     = 14            # RSI lookback periods
 RSI_OVERSOLD   = 25            # Extreme oversold for DOGE bounce
-RSI_OVERBOUGHT = 80            # Extreme overbought for DOGE dump
+RSI_OVERBOUGHT = 75            # Overbought — don't buy into pumps
 VOLUME_SPIKE_MULTIPLIER = 5.0  # 5x average volume = pump signal
+MIN_SIGNAL_STRENGTH = 3        # require volume spike + at least one other signal
 MIN_TRADE_USD  = 10.0          # minimum USD per trade
 MIN_TRADE_DOGE = 100.0         # minimum DOGE per trade
 RESERVE_USD    = 2.0           # keep this much USD in reserve
@@ -251,8 +253,9 @@ def execute_doge_buy(analysis: dict, dry_run: bool = False) -> dict:
         signal_strength = analysis["signal_strength"]
         signals = analysis["signals"]
         
-        # Only buy if we have strong signals
-        if signal_strength < 2:
+        # Require meaningful signal strength and don't chase overbought conditions
+        rsi = analysis.get("rsi", 50)
+        if signal_strength < MIN_SIGNAL_STRENGTH or rsi > RSI_OVERBOUGHT:
             return {"success": False, "reason": f"Weak signals (strength: {signal_strength})"}
         
         # Calculate position size
@@ -276,7 +279,7 @@ def execute_doge_buy(analysis: dict, dry_run: bool = False) -> dict:
         
         if dry_run:
             print(f"  🔵 [DRY RUN] Would place DOGE buy order")
-            return {"success": True, "action": "DRY_RUN_BUY", "volume": buy_volume}
+            return {"success": True, "action": "DRY_RUN_BUY", "volume": buy_volume, "entry_price": current_price, "signals": signals}
         
         # Place real order
         success, order = place_order(
@@ -406,7 +409,7 @@ def scan_mode():
         print(f"  📈 Signal Strength: {analysis['signal_strength']}/10")
         
         # Recommend action
-        if analysis["signal_strength"] >= 2:
+        if analysis["signal_strength"] >= MIN_SIGNAL_STRENGTH:
             print(f"\n  💡 *RECOMMENDATION*: BUY DOGE")
             print(f"      🚀 Pump signals indicate big move coming!")
             print(f"      🎯 Target: +{PROFIT_PCT*100:.1f}% profit")
@@ -423,81 +426,90 @@ def scan_mode():
         print(f"\n  📊 *NO PUMP SIGNALS*: DOGE looks calm")
         print(f"      💡 Wait for volume spike or RSI extremes")
 
-def monitor_mode():
+def monitor_mode(dry_run: bool = False):
     """Continuous monitoring with automatic pump trading."""
-    print("🚀 DOGE Swing Bot — Continuous Pump Monitoring")
+    mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
+    print(f"🚀 DOGE Swing Bot — Continuous Pump Monitoring  {mode}")
     print("=" * 60)
     print(f"  📊 Monitoring DOGE every {CHECK_SECS}s")
-    print(f"  🚀 Auto-buying on volume spikes (strength >= 2)")
+    print(f"  🚀 Auto-buying on volume spikes (strength >= {MIN_SIGNAL_STRENGTH})")
     print(f"  💰 Profit target: +{PROFIT_PCT*100:.1f}%")
-    print(f"  🛡️ Trailing stop: -{STOP_PCT*100:.1f}%")
+    print(f"  🛡️ Stop loss: -{STOP_PCT*100:.1f}%")
     print(f"  💵 Minimum trade: ${MIN_TRADE_USD}")
     print("=" * 60)
+
+    tg(f"🚀 *DOGE Swing Bot started* ({mode})")
     
-    tg(f"🚀 *DOGE Swing Bot started* - Pump monitoring mode")
-    
-    position = None  # Track active DOGE position
+    position = None   # Track active DOGE position
+    exit_orders = None
     cycle = 0
-    
+
     try:
         while True:
             cycle += 1
             analysis = get_doge_data()
-            
+
             if "error" in analysis:
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] ⚠️ No DOGE data, waiting...")
                 time.sleep(CHECK_SECS)
                 continue
-            
+
             print(f"  [{datetime.now().strftime('%H:%M:%S')}] Cycle {cycle}")
             print(f"  💰 DOGE: ${analysis['current_price']:.6f} | RSI: {analysis['rsi']:.1f}")
             print(f"  📊 15min: {analysis['change_15min']*100:+.2f}% | Signals: {analysis['signal_strength']}/10")
-            
-            # Show current signals
+
             if analysis["signals"]:
-                signal_str = ', '.join(analysis["signals"])
-                print(f"  🚨 Pump: {signal_str}")
+                print(f"  🚨 Pump: {', '.join(analysis['signals'])}")
             else:
                 print(f"  📊 No pump signals")
-            
+
             # Handle existing position
             if position:
-                # Check if we should sell (profit target or stop loss)
+                # Check if Kraken already closed via server-side OCO order
+                if not dry_run and exit_orders and check_exit_orders(exit_orders):
+                    position = None
+                    exit_orders = None
+                    print(f"  ✅ DOGE position closed by server-side order")
+                    continue
+
                 current_price = analysis["current_price"]
                 entry_price = position["entry_price"]
-                
                 profit_pct = (current_price - entry_price) / entry_price
-                
+
+                print(f"  📊 Position: {position['volume']:,.0f} DOGE @ ${entry_price:.6f} | P&L: {profit_pct*100:+.1f}%")
+
                 if profit_pct >= PROFIT_PCT:
                     print(f"  🎯 Profit target hit: +{profit_pct*100:.1f}%")
-                    result = execute_doge_sell(analysis, dry_run=False)
+                    if not dry_run and exit_orders: cancel_remaining_exit(exit_orders)
+                    result = execute_doge_sell(analysis, dry_run=dry_run)
                     if result["success"]:
                         position = None
+                        exit_orders = None
                         print(f"  ✅ DOGE position closed with profit!")
                 elif profit_pct <= -STOP_PCT:
-                    print(f"  🛡️ Trailing stop hit: {profit_pct*100:.1f}%")
-                    result = execute_doge_sell(analysis, dry_run=False)
+                    print(f"  🛡️ Stop loss hit: {profit_pct*100:.1f}%")
+                    if not dry_run and exit_orders: cancel_remaining_exit(exit_orders)
+                    result = execute_doge_sell(analysis, dry_run=dry_run)
                     if result["success"]:
                         position = None
-                        print(f"  ⚠️ DOGE position closed with stop loss")
-                else:
-                    # Show position progress
-                    print(f"  📊 Position: {position['volume']:,.0f} DOGE @ ${entry_price:.6f}")
-                    print(f"  📈 P&L: {profit_pct*100:+.1f}%")
-            
+                        exit_orders = None
+                        print(f"  ⚠️ DOGE position closed at stop loss")
+
             # No position - look for entry signals
             else:
-                if analysis["signal_strength"] >= 2:
-                    print(f"  🚨 Strong pump signals - buying DOGE")
-                    result = execute_doge_buy(analysis, dry_run=False)
+                if analysis["signal_strength"] >= MIN_SIGNAL_STRENGTH:
+                    print(f"  🚨 Strong pump signals - {'would buy' if dry_run else 'buying'} DOGE")
+                    result = execute_doge_buy(analysis, dry_run=dry_run)
                     if result["success"]:
                         position = {
-                            "entry_price": result["entry_price"],
+                            "entry_price": result.get("entry_price", analysis["current_price"]),
                             "volume": result["volume"],
                             "entry_time": datetime.now(),
-                            "signals": result["signals"]
+                            "signals": result.get("signals", [])
                         }
-                        print(f"  ✅ DOGE position opened!")
+                        if not dry_run:
+                            exit_orders = place_exit_orders(PAIR, result["volume"], result["entry_price"], PROFIT_PCT, STOP_PCT)
+                        print(f"  ✅ DOGE position {'simulated' if dry_run else 'opened'}!")
                 else:
                     print(f"  📊 No entry signals (strength: {analysis['signal_strength']})")
             
@@ -524,27 +536,9 @@ def main():
     if args.scan:
         scan_mode()
     elif args.monitor:
-        monitor_mode()
+        monitor_mode(dry_run=False)
     elif args.dry:
-        print("🚀 DOGE Swing Bot — Dry Run Mode")
-        print("=" * 50)
-        analysis = get_doge_data()
-        if "error" not in analysis:
-            print(f"\n  📊 DOGECOIN ANALYSIS:")
-            print(f"  💰 Current Price: ${analysis['current_price']:.6f}")
-            print(f"  📈 RSI: {analysis['rsi']:.1f}")
-            print(f"  📊 15min Change: {analysis['change_15min']*100:+.2f}%")
-            print(f"  📊 Volume: {analysis['current_volume']:,.0f} (avg: {analysis['avg_volume']:,.0f})")
-            
-            if analysis["signals"]:
-                print(f"\n  🚨 PUMP SIGNALS DETECTED:")
-                for signal in analysis["signals"]:
-                    print(f"      🚀 {signal}")
-                print(f"  📈 Signal Strength: {analysis['signal_strength']}/10")
-                print(f"\n  💡 *WOULD BUY DOGE*")
-                execute_doge_buy(analysis, dry_run=True)
-            else:
-                print(f"\n  📊 *NO PUMP SIGNALS*")
+        monitor_mode(dry_run=True)
     else:
         print("🚀 DOGE Swing Bot — Kraken")
         print("Usage:")
@@ -552,8 +546,9 @@ def main():
         print("  python3 doge_swing_bot.py --monitor # Continuous monitoring")
         print("  python3 doge_swing_bot.py --dry     # Dry run mode")
         print("\nStrategy: Buy DOGE on volume spikes and pump signals")
-        print("Profit target: 20% when DOGE pumps")
-        print("Trailing stop: 3% to protect profits")
+        print(f"Profit target: {PROFIT_PCT*100:.0f}% when DOGE pumps")
+        print(f"Stop loss: {STOP_PCT*100:.0f}% to limit losses")
+        print(f"Min signal strength: {MIN_SIGNAL_STRENGTH} (volume spike + confirmation)")
         print("Optimized for meme coin volatility and rapid moves")
 
 if __name__ == "__main__":

@@ -329,6 +329,7 @@ def run(dry_run: bool = False):
 
                 rsi_signal  = rsi <= RSI_OVERSOLD
                 dip_signal  = DIP_MIN <= dip_from_high <= DIP_MAX
+                not_overbought = rsi < 70  # don't buy a dip when already overbought
                 rsi_high    = rsi >= 70   # overbought — good time to sell SOL
                 rip_signal  = dip_from_high < 0.05  # price near recent high — sell opportunity
 
@@ -366,8 +367,8 @@ def run(dry_run: bool = False):
                             }
                             print(f"  [DRY] Would sell {volume} SOL @ ${price:.2f}")
 
-                # BUY signal: dip in 20-30% zone or RSI oversold — buy SOL with USD
-                elif has_usd and (rsi_signal or dip_signal):
+                # BUY signal: dip or RSI oversold — but never buy when RSI is overbought
+                elif has_usd and (rsi_signal or dip_signal) and not_overbought:
                     reason = []
                     if rsi_signal: reason.append(f"RSI {rsi:.1f}")
                     if dip_signal: reason.append(f"dip -{dip_from_high*100:.1f}% (20-30% zone)")

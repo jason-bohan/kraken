@@ -29,22 +29,24 @@ import time
 import argparse
 from datetime import datetime
 from kraken_connection import (
-    get_balance, get_ticker, get_ohlc, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order,
+    get_balance, get_ticker, get_ohlc, place_order, get_open_orders, cancel_order,
     calculate_order_size
 )
+from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 
 # ─────────────────────────────────────────────
 # SETTINGS
 # ─────────────────────────────────────────────
 PAIR           = "DOTUSD"      # DOT trading pair on Kraken
 ASSET          = "DOT"         # base asset name in balance
-QUOTE          = "USDT"        # quote currency (change to ZUSD if using USD)
-PROFIT_PCT     = 0.08          # 8% profit target — optimized for DOT volatility
-STOP_PCT       = 0.25          # 25% stop loss — DOT is less volatile than SOL
+QUOTE          = "ZUSD"        # Kraken USD (not USDT)
+PROFIT_PCT     = 0.12          # 12% profit target — 1.5:1 R/R vs 8% stop
+STOP_PCT       = 0.08          # 8% stop loss — tight enough to limit losses (was 25%)
 RSI_PERIOD     = 14            # RSI lookback periods
-RSI_OVERSOLD   = 35            # enter when RSI below this (higher than SOL's 40)
-DIP_MIN        = 0.15          # only enter when DOT is AT LEAST 15% below recent high
-DIP_MAX        = 0.25          # skip entry if drop exceeds 25% (possible crash, not bounce)
+RSI_OVERSOLD   = 38            # enter when RSI below this
+RSI_OVERBOUGHT = 68            # sell/block entry when RSI above this
+DIP_MIN        = 0.05          # buy on 5%+ dip (was 15% — too rare to trigger)
+DIP_MAX        = 0.20          # skip if drop exceeds 20% (possible breakdown)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
 MIN_TRADE_DOT  = 1.0           # minimum DOT to sell per trade
 RESERVE_USD    = 2.0           # keep this much USD in reserve
@@ -187,211 +189,128 @@ def run(dry_run: bool = False):
     print("=" * 55)
     tg(f"🤖 *DOT Swing Bot started* ({mode})")
 
-    # position tracks an active trade: entry_price, volume, mode ("buy" or "sell")
-    position = None
-    cycle    = 0
+    position    = None
+    exit_orders = None
+    cycle       = 0
 
-    # On startup, check if we already hold DOT and treat it as an open position
+    # On startup, check if we already hold DOT — track it as open position, don't blindly sell
     if not dry_run:
         balances = get_balance()
-        dot_balance = float(balances.get(ASSET, 0))
-        if dot_balance > RESERVE_DOT:
-            price, _, _ = get_dot_data()
-            if price:
-                entry_price = price
+        dot_held = float(balances.get(ASSET, 0))
+        if dot_held > RESERVE_DOT:
+            ticker = get_ticker(PAIR)
+            start_price = float(ticker.get("a", [0])[0]) if ticker else 0
+            if start_price > 0:
                 position = {
-                    "mode": "sell",
-                    "entry_price": entry_price,
-                    "volume": dot_balance - RESERVE_DOT,
-                    "entry_time": datetime.now()
+                    "entry_price": start_price,
+                    "volume": round(dot_held - RESERVE_DOT, 4),
+                    "entry_time": datetime.now(),
+                    "mode": "sell"  # holding DOT, waiting to sell at profit
                 }
-                print(f"  📊 Found existing DOT position: {position['volume']:.2f} @ ${entry_price:.4f}")
-                tg(f"📊 *DOT position detected*: {position['volume']:.2f} @ ${entry_price:.4f}")
+                print(f"  📦 Found existing DOT: {dot_held} — tracking as open position @ ${start_price:.4f}")
+                tg(f"📦 *Existing DOT detected* {dot_held} @ ${start_price:.4f}")
 
     try:
         while True:
             cycle += 1
+            ts = datetime.now().strftime("%H:%M:%S")
             price, rsi, recent_high = get_dot_data()
-            
+
             if not price:
-                print(f"  [{datetime.now().strftime('%H:%M:%S')}] ⚠️ No DOT data, waiting...")
+                print(f"  [{ts}] ⚠️ No DOT data, waiting...")
                 time.sleep(CHECK_SECS)
                 continue
 
-            print(f"  [{datetime.now().strftime('%H:%M:%S')}] Cycle {cycle}")
-            print(f"  💰 DOT: ${price:.4f} | RSI: {rsi:.0f} | High: ${recent_high:.4f}")
+            dip_pct = (recent_high - price) / recent_high if recent_high else 0
+            print(f"\n  [{ts}] DOT ${price:.4f} | RSI {rsi:.0f} | High ${recent_high:.4f} | Dip {dip_pct*100:.1f}%")
 
-            # Entry conditions
-            dip_pct = (recent_high - price) / recent_high
-            rsi_entry = rsi < RSI_OVERSOLD
-            dip_entry = DIP_MIN <= dip_pct <= DIP_MAX
-
-            # Show market status
-            if rsi < 30:
-                print(f"  📉 Oversold (RSI<30): DOTUSD({rsi:.0f})")
-            elif rsi > 70:
-                print(f"  📈 Overbought (RSI>70): DOTUSD({rsi:.0f})")
-            elif rsi_entry:
-                print(f"  📉 Oversold (RSI<{RSI_OVERSOLD}): DOTUSD({rsi:.0f})")
-
-            # Handle existing position
+            # ── MANAGE OPEN POSITION ──────────────────────
             if position:
-                if position["mode"] == "sell":
-                    # Selling DOT - wait for dip to buy back
-                    if dip_entry:
-                        buy_price = price
-                        buy_volume = get_buy_size(buy_price, dry_run)
-                        
-                        if buy_volume > 0:
-                            print(f"  🔄 Dip detected: buying back {buy_volume:.2f} DOT @ ${buy_price:.4f}")
-                            
-                            if not dry_run:
-                                order = place_order(
-                                    pair=PAIR,
-                                    type="buy",
-                                    ordertype="market",
-                                    volume=buy_volume,
-                                    validate=False
-                                )
-                                
-                                if order.get('error'):
-                                    print(f"  ❌ Buy order failed: {order['error']}")
-                                else:
-                                    print(f"  ✅ Buy order placed: {order['descr']['order']}")
-                                    tg(f"🔄 *DOT dip buy*: {buy_volume:.2f} @ ${buy_price:.4f}")
-                            
-                            # Reset position (now holding DOT again)
-                            position = None
-                        else:
-                            print(f"  💸 Insufficient USD to buy back DOT")
-                    
-                elif position["mode"] == "buy":
-                    # Bought DOT - wait for profit target
-                    profit_pct = (price - position["entry_price"]) / position["entry_price"]
-                    
-                    if profit_pct >= PROFIT_PCT:
-                        print(f"  🎯 Profit target hit: +{profit_pct*100:.1f}%")
-                        print(f"  💰 Selling {position['volume']:.2f} DOT @ ${price:.4f}")
-                        
-                        if not dry_run:
-                            order = place_order(
-                                pair=PAIR,
-                                type="sell",
-                                ordertype="market",
-                                volume=position["volume"],
-                                validate=False
-                            )
-                            
-                            if order.get('error'):
-                                print(f"  ❌ Sell order failed: {order['error']}")
-                            else:
-                                print(f"  ✅ Sell order placed: {order['descr']['order']}")
-                                profit_usd = profit_pct * position["entry_price"] * position["volume"]
-                                tg(f"🎯 *DOT profit taken*: +{profit_pct*100:.1f}% (${profit_usd:.2f})")
-                        
-                        # Reset position
-                        position = None
-                    
-                    elif profit_pct <= -STOP_PCT:
-                        print(f"  🛡️ Stop loss hit: {profit_pct*100:.1f}%")
-                        print(f"  💰 Selling {position['volume']:.2f} DOT @ ${price:.4f}")
-                        
-                        if not dry_run:
-                            order = place_order(
-                                pair=PAIR,
-                                type="sell",
-                                ordertype="market",
-                                volume=position["volume"],
-                                validate=False
-                            )
-                            
-                            if order.get('error'):
-                                print(f"  ❌ Stop loss order failed: {order['error']}")
-                            else:
-                                loss_usd = abs(profit_pct) * position["entry_price"] * position["volume"]
-                                tg(f"🛡️ *DOT stop loss*: {profit_pct*100:.1f}% (${loss_usd:.2f})")
-                        
-                        # Reset position
-                        position = None
-                    
-                    else:
-                        # Still in position - show progress
-                        print(f"  📊 Position: BUY {position['volume']:.2f} DOT @ ${position['entry_price']:.4f} | PnL: {profit_pct*100:+.1f}%")
+                # Check if Kraken already closed via server-side OCO order
+                if not dry_run and exit_orders and check_exit_orders(exit_orders):
+                    position = None
+                    exit_orders = None
+                    continue
 
-            # No position - look for entry
+                entry    = position["entry_price"]
+                volume   = position["volume"]
+                pnl_pct  = (price - entry) / entry
+                pnl_usd  = (price - entry) * volume
+
+                print(f"  📦 {volume:.4f} DOT | Entry ${entry:.4f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.2f})")
+
+                if pnl_pct >= PROFIT_PCT:
+                    print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} DOT @ ${price:.4f}")
+                    if not dry_run:
+                        if exit_orders: cancel_remaining_exit(exit_orders)
+                        ok, result = place_order(PAIR, "sell", "market", volume=volume)
+                        if ok:
+                            tg(f"💰 *DOT sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.4f}")
+                            position = None; exit_orders = None
+                        else:
+                            print(f"  ❌ Sell failed: {result}")
+                    else:
+                        print(f"  [DRY] Would sell {volume} DOT")
+                        position = None; exit_orders = None
+
+                elif pnl_pct <= -STOP_PCT:
+                    print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} DOT @ ${price:.4f}")
+                    if not dry_run:
+                        if exit_orders: cancel_remaining_exit(exit_orders)
+                        ok, result = place_order(PAIR, "sell", "market", volume=volume)
+                        if ok:
+                            tg(f"🛑 *DOT stop loss* {pnl_pct*100:.2f}% @ ${price:.4f}")
+                            position = None; exit_orders = None
+                        else:
+                            print(f"  ❌ Stop sell failed: {result}")
+                    else:
+                        print(f"  [DRY] Would stop-sell {volume} DOT")
+                        position = None; exit_orders = None
+
+                else:
+                    print(f"  ⏳ Holding DOT... waiting for +{PROFIT_PCT*100:.1f}% to sell")
+
+            # ── NO POSITION — LOOK FOR ENTRY ─────────────
             else:
-                balances = get_balance()
-                usd_balance = float(balances.get(QUOTE, balances.get("ZUSD", 0)))
-                dot_balance = float(balances.get(ASSET, 0))
-                
-                # Priority 1: Sell existing DOT holdings
-                if dot_balance > RESERVE_DOT:
-                    sell_volume = get_sell_size(dry_run)
-                    
-                    if sell_volume > 0:
-                        print(f"  💰 Selling {sell_volume:.2f} DOT @ ${price:.4f}")
-                        
-                        if not dry_run:
-                            order = place_order(
-                                pair=PAIR,
-                                type="sell",
-                                ordertype="market",
-                                volume=sell_volume,
-                                validate=False
-                            )
-                            
-                            if order.get('error'):
-                                print(f"  ❌ Sell order failed: {order['error']}")
-                            else:
-                                print(f"  ✅ Sell order placed: {order['descr']['order']}")
-                                tg(f"💰 *DOT position opened*: {sell_volume:.2f} @ ${price:.4f}")
-                                
-                                # Track position for later buy-back
-                                position = {
-                                    "mode": "sell",
-                                    "entry_price": price,
-                                    "volume": sell_volume,
-                                    "entry_time": datetime.now()
-                                }
+                balances    = get_balance() if not dry_run else {}
+                dot_bal     = float(balances.get(ASSET, 0)) if not dry_run else 0
+                usd_bal     = float(balances.get(QUOTE, 0)) if not dry_run else 0
+                has_usd     = usd_bal > MIN_TRADE_USD + RESERVE_USD
+
+                rsi_signal     = rsi <= RSI_OVERSOLD
+                dip_signal     = DIP_MIN <= dip_pct <= DIP_MAX
+                not_overbought = rsi < RSI_OVERBOUGHT
+
+                if has_usd and (rsi_signal or dip_signal) and not_overbought:
+                    reasons = []
+                    if rsi_signal: reasons.append(f"RSI {rsi:.0f}")
+                    if dip_signal: reasons.append(f"dip -{dip_pct*100:.1f}%")
+                    reason_str = ", ".join(reasons)
+
+                    volume = get_buy_size(price, dry_run)
+                    if volume <= 0:
+                        print(f"  ⚠️ Not enough USD (need ${MIN_TRADE_USD:.0f}+), skipping")
                     else:
-                        print(f"  💸 DOT balance too low to sell (need >{RESERVE_DOT})")
-                
-                # Priority 2: Buy DOT with USD
-                elif usd_balance > MIN_TRADE_USD and (rsi_entry or dip_entry):
-                    buy_volume = get_buy_size(price, dry_run)
-                    
-                    if buy_volume > 0:
-                        entry_reason = "RSI oversold" if rsi_entry else f"{dip_pct*100:.0f}% dip"
-                        print(f"  📈 Entry signal: {entry_reason}")
-                        print(f"  💰 Buying {buy_volume:.2f} DOT @ ${price:.4f}")
-                        
+                        print(f"  🎯 BUY signal: {reason_str}")
+                        print(f"  🛒 Buying {volume:.4f} DOT @ ${price:.4f} (${volume*price:.2f})")
                         if not dry_run:
-                            order = place_order(
-                                pair=PAIR,
-                                type="buy",
-                                ordertype="market",
-                                volume=buy_volume,
-                                validate=False
-                            )
-                            
-                            if order.get('error'):
-                                print(f"  ❌ Buy order failed: {order['error']}")
-                            else:
-                                print(f"  ✅ Buy order placed: {order['descr']['order']}")
-                                tg(f"📈 *DOT position opened*: {buy_volume:.2f} @ ${price:.4f} ({entry_reason})")
-                                
-                                # Track position for profit taking
+                            ok, result = place_order(PAIR, "buy", "market", volume=volume)
+                            if ok:
                                 position = {
-                                    "mode": "buy",
                                     "entry_price": price,
-                                    "volume": buy_volume,
-                                    "entry_time": datetime.now()
+                                    "volume": volume,
+                                    "entry_time": datetime.now(),
+                                    "mode": "sell"
                                 }
-                    else:
-                        if usd_balance <= MIN_TRADE_USD:
-                            print(f"  💸 Insufficient USD (need >${MIN_TRADE_USD})")
-                        elif not (rsi_entry or dip_entry):
-                            print(f"  ⏳ No entry signal (RSI: {rsi:.0f}, Dip: {dip_pct*100:.1f}%)")
+                                exit_orders = place_exit_orders(PAIR, volume, price, PROFIT_PCT, STOP_PCT)
+                                tg(f"🛒 *DOT bought* {volume:.4f} @ ${price:.4f} | {reason_str}")
+                            else:
+                                print(f"  ❌ Buy failed: {result}")
+                        else:
+                            position = {"entry_price": price, "volume": volume, "entry_time": datetime.now(), "mode": "sell"}
+                            print(f"  [DRY] Would buy {volume:.4f} DOT @ ${price:.4f}")
+                else:
+                    print(f"  💤 No signal (RSI: {rsi:.0f}, Dip: {dip_pct*100:.1f}%) | USD: ${usd_bal:.2f}")
 
             print(f"  ──────────────────────────────────")
             time.sleep(CHECK_SECS)
