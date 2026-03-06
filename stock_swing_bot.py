@@ -18,6 +18,7 @@ import math
 from datetime import datetime, timedelta
 from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order
 from kraken_connection import calculate_order_size
+from learning_engine import LearningEngine
 
 # ─────────────────────────────────────────────
 # 📈 DYNAMIC STOCK CONFIGURATION
@@ -155,6 +156,9 @@ SYMBOL = ""
 PAIR = ""
 ASSET = ""
 CONFIG = {}
+BOT_NAME = "stock_swing_bot"
+LEARNER = LearningEngine()
+active_trade_id = None
 
 # 🎯 Order management
 stop_loss_order_id = None
@@ -178,6 +182,50 @@ def tg(msg: str):
         )
     except:
         pass
+
+
+def extract_learning_features(signal_info: dict, current_price: float) -> dict:
+    """Capture a compact feature snapshot at trade entry for later evaluation."""
+    analysis = signal_info.get("analysis", {})
+    one_hour = analysis.get("1h", {})
+    fifteen_min = analysis.get("15m", {})
+    five_min = analysis.get("5m", {})
+    return {
+        "price": current_price,
+        "confidence": float(signal_info.get("confidence", 0.0)),
+        "signal_reason": signal_info.get("reason", ""),
+        "rsi_1h": one_hour.get("rsi"),
+        "rsi_15m": fifteen_min.get("rsi"),
+        "rsi_5m": five_min.get("rsi"),
+        "atr_1h": one_hour.get("atr"),
+        "trend_1h": one_hour.get("trend"),
+        "trend_4h": analysis.get("4h", {}).get("trend"),
+        "volume_trend_1h": one_hour.get("volume", {}).get("trend"),
+        "macd_histogram_1h": one_hour.get("macd", {}).get("histogram"),
+        "price_change_20_1h": one_hour.get("price_change_20"),
+    }
+
+
+def load_learning_config(symbol: str, base_config: dict) -> dict:
+    """Apply bounded parameter tuning from recent closed trades."""
+    base_config.setdefault("min_confidence", 0.60)
+    tuned_config, metrics = LEARNER.tune_config(BOT_NAME, symbol, base_config)
+    print(
+        f"  Learning: {metrics['sample_size']} closed trades | "
+        f"win rate {metrics['win_rate'] * 100:.1f}% | "
+        f"avg P&L {metrics['avg_pnl_pct'] * 100:+.2f}%"
+    )
+    if metrics.get("tuning_applied"):
+        print(
+            f"  Tuned params: confidence>={tuned_config['min_confidence']:.2f}, "
+            f"RSI<{tuned_config['rsi_oversold']}, "
+            f"target {tuned_config['profit_target'] * 100:.1f}%, "
+            f"stop {tuned_config['stop_loss'] * 100:.1f}%"
+        )
+    else:
+        print(f"  Learning status: {metrics.get('tuning_reason', 'not enough data')}")
+    return tuned_config
+
 
 # ─────────────────────────────────────────────
 # TECHNICAL ANALYSIS FUNCTIONS
@@ -569,7 +617,7 @@ def check_order_status():
             
             # Get current price for P&L calculation
             ticker = get_ticker(PAIR)
-            current_price = float(ticker.get("c", [0])[0])) if ticker else entry_price
+            current_price = float(ticker.get("c", [0])[0]) if ticker else entry_price
             
             # Execute sell logic for record keeping
             execute_sell(current_price, exit_reason, dry_run=False)
@@ -705,7 +753,7 @@ def get_sell_size(dry_run: bool) -> float:
 
 def execute_buy(signal_info: dict, dry_run: bool) -> bool:
     """Execute a buy order with proper risk management."""
-    global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal
+    global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal, active_trade_id
     
     try:
         current_price = signal_info["price"]
@@ -815,6 +863,17 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
             if not dry_run:
                 place_limit_orders(current_price, position_shares, stop_loss_price, take_profit_price)
             
+            active_trade_id = LEARNER.record_entry(
+                bot_name=BOT_NAME,
+                symbol=SYMBOL,
+                side="buy",
+                entry_price=current_price,
+                position_size=position_shares,
+                confidence=float(signal_info.get("confidence", 0.0)),
+                features=extract_learning_features(signal_info, current_price),
+                config=CONFIG,
+            )
+
             # Send notification
             msg = f"📈 *{SYMBOL} BUY EXECUTED*\n"
             msg += f"Shares: {position_shares:.2f} @ ${current_price:.2f}\n"
@@ -824,7 +883,7 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
             msg += f"Risk/Reward: {risk_reward_ratio:.2f}\n"
             msg += f"Signal: {signal_info['reason']}"
             tg(msg)
-            
+
             return True
         else:
             print(f"  ❌ Buy order failed: {order_info}")
@@ -836,7 +895,7 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
 
 def execute_sell(current_price: float, reason: str, dry_run: bool) -> bool:
     """Execute a sell order."""
-    global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal, trade_history
+    global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal, trade_history, active_trade_id
     
     try:
         if not in_position:
@@ -887,13 +946,23 @@ def execute_sell(current_price: float, reason: str, dry_run: bool) -> bool:
             if not dry_run:
                 cancel_all_limit_orders()
             
+            if active_trade_id:
+                LEARNER.record_exit(
+                    trade_id=active_trade_id,
+                    exit_price=current_price,
+                    pnl_amount=pnl_amount,
+                    pnl_pct=pnl_pct / 100,
+                    exit_reason=reason,
+                )
+                active_trade_id = None
+
             # Send notification
             msg = f"📈 *{SYMBOL} SELL EXECUTED*\n"
             msg += f"Shares: {position_size:.2f} @ ${current_price:.2f}\n"
             msg += f"P&L: ${pnl_amount:+.2f} ({pnl_pct:+.2f}%)\n"
             msg += f"Reason: {reason}"
             tg(msg)
-            
+
             # Reset position state
             in_position = False
             entry_price = 0
@@ -971,7 +1040,7 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
     else:
         ASSET = SYMBOL
     
-    CONFIG = get_stock_config(SYMBOL)
+    CONFIG = load_learning_config(SYMBOL, get_stock_config(SYMBOL))
     
     mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
     entry_mode = "🖱️ MANUAL" if manual_entry else "🤖 AUTO"
@@ -1074,7 +1143,7 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
                 print(f"  📝 Reason: {signal['reason']}")
                 
                 # Execute trades based on signal
-                if signal['signal'] == 'buy' and signal['confidence'] > 0.6:
+                if signal['signal'] == 'buy' and signal['confidence'] >= CONFIG['min_confidence']:
                     if execute_buy(signal, dry_run):
                         print("  ✅ Buy order placed")
                     else:
