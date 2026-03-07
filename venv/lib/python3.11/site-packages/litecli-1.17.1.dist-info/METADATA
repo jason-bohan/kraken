@@ -1,0 +1,80 @@
+Metadata-Version: 2.4
+Name: litecli
+Version: 1.17.1
+Summary: CLI for SQLite Databases with auto-completion and syntax highlighting.
+Author-email: dbcli <litecli-users@googlegroups.com>
+License: BSD
+Project-URL: homepage, https://github.com/dbcli/litecli
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: cli-helpers[styles]>=2.2.1
+Requires-Dist: click!=8.1.*,>=4.1
+Requires-Dist: configobj>=5.0.5
+Requires-Dist: prompt-toolkit<4.0.0,>=3.0.3
+Requires-Dist: pygments>=1.6
+Requires-Dist: sqlparse>=0.4.4
+Provides-Extra: ai
+Requires-Dist: llm>=0.25.0; extra == "ai"
+Requires-Dist: setuptools; extra == "ai"
+Requires-Dist: pip; extra == "ai"
+Provides-Extra: sqlean
+Requires-Dist: sqlean-py>=3.47.0; extra == "sqlean"
+Requires-Dist: sqlean-stubs>=0.0.3; extra == "sqlean"
+Provides-Extra: dev
+Requires-Dist: behave>=1.2.6; extra == "dev"
+Requires-Dist: coverage>=7.2.7; extra == "dev"
+Requires-Dist: pexpect>=4.9.0; extra == "dev"
+Requires-Dist: pytest>=7.4.4; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
+Requires-Dist: tox>=4.8.0; extra == "dev"
+Requires-Dist: pdbpp>=0.10.3; extra == "dev"
+Requires-Dist: llm>=0.25.0; extra == "dev"
+Requires-Dist: setuptools; extra == "dev"
+Requires-Dist: pip; extra == "dev"
+Requires-Dist: ty>=0.0.4; extra == "dev"
+Dynamic: license-file
+
+# litecli
+
+[![GitHub Actions](https://github.com/dbcli/litecli/actions/workflows/ci.yml/badge.svg)](https://github.com/dbcli/litecli/actions/workflows/ci.yml "GitHub Actions")
+
+[Docs](https://litecli.com)
+
+A command-line client for SQLite databases that has auto-completion and syntax highlighting.
+
+![Completion](https://raw.githubusercontent.com/dbcli/litecli/refs/heads/main/screenshots/litecli.png)
+![CompletionGif](https://raw.githubusercontent.com/dbcli/litecli/refs/heads/main/screenshots/litecli.gif)
+
+## Installation
+
+If you already know how to install python packages, then you can install it via pip:
+
+You might need sudo on linux.
+
+```
+$ pip install -U litecli[sqlean]
+```
+
+For MacOS users, you can also use Homebrew to install it:
+
+```
+$ brew install litecli
+```
+
+## Usage
+
+```
+$ litecli --help
+
+Usage: litecli [OPTIONS] [DATABASE]
+
+Examples:
+  - litecli sqlite_db_name
+```
+
+A config file is automatically created at `~/.config/litecli/config` at first launch. For Windows machines a config file is created at `~\AppData\Local\dbcli\litecli\config` at first launch. See the file itself for a description of all available options.
+
+## Docs
+
+Visit: [litecli.com/features](https://litecli.com/features)

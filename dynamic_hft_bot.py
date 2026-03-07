@@ -32,7 +32,11 @@ from kraken_connection import (
     get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
+from learning_engine import LearningEngine
 import requests as req
+
+BOT_NAME = "dynamic_hft_bot"
+LEARNER  = LearningEngine()
 
 BASE_URL = "https://api.kraken.com"
 
@@ -63,8 +67,10 @@ TELEGRAM_CHAT    = os.getenv("TELEGRAM_CHAT_ID", "")
 # ─────────────────────────────────────────────
 # SHARED STATE
 # ─────────────────────────────────────────────
-positions      = {}             # { pair: { entry_price, volume, cost } }
-positions_lock = threading.Lock()
+positions        = {}             # { pair: { entry_price, volume, cost } }
+positions_lock   = threading.Lock()
+active_trade_ids = {}             # { pair: learning DB trade id }
+trade_ids_lock   = threading.Lock()
 deployed_usd   = 0.0
 deployed_lock  = threading.Lock()
 active_threads = {}
@@ -186,8 +192,12 @@ def get_all_tickers() -> dict:
 
 def score_pairs(tickers: dict) -> list:
     """
-    Score all pairs by volatility and volume.
-    Volatility = (24h high - 24h low) / 24h low
+    Score all pairs by volatility * volume, adjusted by historical performance.
+
+    Performance multiplier from learning.db:
+      - win rate > 60% and positive avg P&L  -> up to 1.5x boost
+      - win rate < 40% or negative avg P&L   -> down to 0.5x penalty
+      - no history                            -> neutral 1.0x
     """
     scored = []
     for pair, data in tickers.items():
@@ -206,10 +216,29 @@ def score_pairs(tickers: dict) -> list:
             if volatility < MIN_VOLATILITY or last < 0.000001:
                 continue
 
-            scored.append((pair, volatility, volume_usd))
+            # Base score: volatility weighted by log volume
+            import math
+            base_score = volatility * math.log1p(volume_usd)
+
+            # Performance multiplier from learning history
+            metrics = LEARNER.summarize(BOT_NAME, pair, lookback=30)
+            if metrics["sample_size"] >= 5:
+                win_rate  = metrics["win_rate"]
+                avg_pnl   = metrics["avg_pnl_pct"]
+                if win_rate > 0.60 and avg_pnl > 0:
+                    perf_mult = 1.0 + min(0.5, win_rate - 0.60 + avg_pnl * 5)
+                elif win_rate < 0.40 or avg_pnl < 0:
+                    perf_mult = max(0.5, win_rate + 0.1)
+                else:
+                    perf_mult = 1.0
+            else:
+                perf_mult = 1.0
+
+            final_score = base_score * perf_mult
+            scored.append((pair, final_score, volume_usd, perf_mult))
 
             if DEBUG_PAIRS:
-                print(f"  {pair:<20} vol={volatility*100:.1f}% vol_usd=${volume_usd:,.0f}")
+                print(f"  {pair:<20} vol={volatility*100:.1f}% score={final_score:.2f} perf={perf_mult:.2f}x")
 
         except (KeyError, ValueError, ZeroDivisionError):
             continue
@@ -219,7 +248,7 @@ def score_pairs(tickers: dict) -> list:
 
 
 def get_top_pairs(n: int = TOP_N) -> list:
-    """Returns top N most volatile pairs on Kraken right now."""
+    """Returns top N pairs by combined volatility + performance score."""
     tickers = get_all_tickers()
     if not tickers:
         return []
@@ -227,11 +256,12 @@ def get_top_pairs(n: int = TOP_N) -> list:
     scored = score_pairs(tickers)
     top    = scored[:n]
 
-    print(f"\n  🔍 Top {n} volatile pairs right now:")
-    for pair, vol, vol_usd in top:
-        print(f"     {pair:<20} {vol*100:.1f}% swing | ${vol_usd:,.0f} 24h volume")
+    print(f"\n  🔍 Top {n} pairs (volatility + performance score):")
+    for pair, score, vol_usd, perf_mult in top:
+        boost = f" {perf_mult:.2f}x" if perf_mult != 1.0 else ""
+        print(f"     {pair:<20} score={score:.2f}{boost} | ${vol_usd:,.0f} 24h volume")
 
-    return [pair for pair, _, _ in top]
+    return [pair for pair, _, _, _ in top]
 
 
 # ─────────────────────────────────────────────
@@ -378,6 +408,10 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             time.sleep(CHECK_SECS)
                             continue
                         tg(f"💰 *{pair}* +{pnl_pct*100:.2f}% (${pnl_usd:+.4f})")
+                        with trade_ids_lock:
+                            tid = active_trade_ids.pop(pair, None)
+                        if tid:
+                            LEARNER.record_exit(tid, price, pnl_usd, pnl_pct, "take_profit")
 
                     with deployed_lock:
                         deployed_usd = max(0, deployed_usd - (entry * volume))
@@ -400,6 +434,10 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             time.sleep(CHECK_SECS)
                             continue
                         tg(f"🛑 *{pair}* stop {pnl_pct*100:.2f}% (${pnl_usd:+.4f})")
+                        with trade_ids_lock:
+                            tid = active_trade_ids.pop(pair, None)
+                        if tid:
+                            LEARNER.record_exit(tid, price, pnl_usd, pnl_pct, "stop_loss")
 
                     with deployed_lock:
                         deployed_usd = max(0, deployed_usd - (entry * volume))
@@ -458,6 +496,18 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                                 with deployed_lock:
                                     deployed_usd += cost
                                 tg(f"🛒 *{pair}* buy @ ${price:.4f} | {reason}")
+                                trade_id = LEARNER.record_entry(
+                                    bot_name=BOT_NAME,
+                                    symbol=pair,
+                                    side="buy",
+                                    entry_price=price,
+                                    position_size=volume,
+                                    confidence=min(1.0, (RSI_OVERSOLD - rsi) / RSI_OVERSOLD + dip),
+                                    features={"rsi": rsi, "dip": dip, "price": price, "ma20": ma20},
+                                    config={"rsi_oversold": RSI_OVERSOLD, "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT},
+                                )
+                                with trade_ids_lock:
+                                    active_trade_ids[pair] = trade_id
                             else:
                                 print(f"  ❌ Buy failed: {result}")
 
