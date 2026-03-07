@@ -243,7 +243,9 @@ def run(dry_run: bool = False):
                     print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling {volume} DOT @ ${price:.4f}")
                     if not dry_run:
                         if exit_orders: cancel_remaining_exit(exit_orders)
-                        ok, result = place_order(PAIR, "sell", "market", volume=volume)
+                        ok, result = place_order(PAIR, "sell", "market", volume=volume,
+            userref=5
+        )
                         if ok:
                             tg(f"💰 *DOT sold* +{pnl_pct*100:.2f}% (${pnl_usd:+.2f}) @ ${price:.4f}")
                             position = None; exit_orders = None
@@ -257,7 +259,9 @@ def run(dry_run: bool = False):
                     print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling {volume} DOT @ ${price:.4f}")
                     if not dry_run:
                         if exit_orders: cancel_remaining_exit(exit_orders)
-                        ok, result = place_order(PAIR, "sell", "market", volume=volume)
+                        ok, result = place_order(PAIR, "sell", "market", volume=volume,
+            userref=5
+        )
                         if ok:
                             tg(f"🛑 *DOT stop loss* {pnl_pct*100:.2f}% @ ${price:.4f}")
                             position = None; exit_orders = None
@@ -294,7 +298,9 @@ def run(dry_run: bool = False):
                         print(f"  🎯 BUY signal: {reason_str}")
                         print(f"  🛒 Buying {volume:.4f} DOT @ ${price:.4f} (${volume*price:.2f})")
                         if not dry_run:
-                            ok, result = place_order(PAIR, "buy", "market", volume=volume)
+                            ok, result = place_order(PAIR, "buy", "market", volume=volume,
+            userref=5
+        )
                             if ok:
                                 position = {
                                     "entry_price": price,

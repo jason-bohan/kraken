@@ -254,6 +254,7 @@ def execute_btc_buy(analysis: dict, dry_run: bool = False) -> dict:
             side="buy",
             order_type="market",
             volume=buy_volume,
+            userref=7
         )
 
         if not ok:
@@ -317,6 +318,7 @@ def execute_btc_sell(analysis: dict, dry_run: bool = False) -> dict:
             side="sell",
             order_type="market",
             volume=sell_volume,
+            userref=7
         )
 
         if not ok:

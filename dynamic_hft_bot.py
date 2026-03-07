@@ -372,7 +372,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             new_bal = dry_balance
                         print(f"  [DRY] Sold {volume} {pair} | P&L: ${actual_pnl:+.4f} | Balance: ${new_bal:.2f}")
                     else:
-                        ok, result = place_order(pair, "sell", "market", volume)
+                        ok, result = place_order(pair, "sell", "market", volume, userref=8)
                         if not ok:
                             print(f"  ❌ Sell failed: {result}")
                             time.sleep(CHECK_SECS)
@@ -394,7 +394,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             new_bal = dry_balance
                         print(f"  [DRY] Stop sold {volume} {pair} | P&L: ${actual_pnl:+.4f} | Balance: ${new_bal:.2f}")
                     else:
-                        ok, result = place_order(pair, "sell", "market", volume)
+                        ok, result = place_order(pair, "sell", "market", volume, userref=8)
                         if not ok:
                             print(f"  ❌ Stop sell failed: {result}")
                             time.sleep(CHECK_SECS)
@@ -449,7 +449,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             else:
                                 print(f"  [DRY] ⚠️ Insufficient virtual balance")
                         else:
-                            ok, result = place_order(pair, "buy", "market", volume)
+                            ok, result = place_order(pair, "buy", "market", volume, userref=8)
                             if ok:
                                 eo = place_exit_orders(pair, volume, price, PROFIT_PCT, STOP_PCT)
                                 position = {"entry_price": price, "volume": volume, "exit_orders": eo}

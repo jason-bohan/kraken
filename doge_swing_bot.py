@@ -288,6 +288,8 @@ def execute_doge_buy(analysis: dict, dry_run: bool = False) -> dict:
             order_type="market",
             volume=buy_volume,
             validate=False
+        ,
+            userref=6
         )
         
         if not success:
@@ -354,6 +356,8 @@ def execute_doge_sell(analysis: dict, dry_run: bool = False) -> dict:
             order_type="market",
             volume=sell_volume,
             validate=False
+        ,
+            userref=6
         )
         
         if not success:

@@ -929,6 +929,8 @@ def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0
             volume=volume,
             price=formatted_stop_price,
             validate=False
+        ,
+            userref=9
         )
         
         # If trailing-stop-limit fails, try regular trailing-stop
@@ -941,7 +943,9 @@ def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0
                 volume=volume,
                 price=formatted_stop_price,
                 validate=False
-            )
+            ,
+            userref=9
+        )
         
         # If both fail, try regular stop-loss
         if not result:
@@ -953,7 +957,9 @@ def place_trailing_stop_loss(pair: str, volume: str, trail_percentage: float = 0
                 volume=volume,
                 price=formatted_stop_price,
                 validate=False
-            )
+            ,
+            userref=9
+        )
         
         if result:
             order_id = info.get('txid', [None])[0]
@@ -1006,6 +1012,8 @@ def update_trailing_stop(pair: str, order_id: str, new_stop_price: float, dry_ru
             volume=asset_balance,
             price=new_stop_price,
             validate=False
+        ,
+            userref=9
         )
         
         if result:
@@ -1077,6 +1085,8 @@ def check_sell_signals(asset, dry_run=False):
             order_type="market",
             volume=asset_balance,
             validate=False
+        ,
+            userref=9
         )
         
         if sell_result:

@@ -97,45 +97,25 @@ def get_kraken_trade_history(period_days=None, count=100):
         return []
 
 def identify_trade_source(trade):
-    """Identify which bot made the trade based on timing and patterns."""
-    timestamp = trade.get('timestamp', '')
-    pair = trade.get('pair', '')
-    
-    # Convert timestamp to datetime for analysis
-    try:
-        trade_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-    except:
-        trade_time = datetime.now()
-    
-    # Bot identification patterns
-    hour = trade_time.hour
-    
-    # Manual trades (odd hours, irregular patterns)
-    if hour in [0, 1, 2, 3, 4, 5, 22, 23]:  # Late night/early morning
-        return "Manual"
-    
-    # Bot patterns by pair and time
-    if 'BTC' in pair or 'XBT' in pair:
-        if 6 <= hour <= 21:  # Trading hours
-            return "BTC Bot"
-    elif 'ETH' in pair:
-        if 6 <= hour <= 21:
-            return "ETH Bot"
-    elif 'SOL' in pair:
-        if 6 <= hour <= 21:
-            return "SOL Bot"
-    elif 'ADA' in pair:
-        if 6 <= hour <= 21:
-            return "ADA Bot"
-    elif 'DOT' in pair:
-        if 6 <= hour <= 21:
-            return "DOT Bot"
-    elif 'SOXS' in pair:  # Leveraged ETF
-        if 9 <= hour <= 16:  # Stock market hours
-            return "Stock Bot"
-    
-    # Default to generic bot
-    return "Unknown Bot"
+    """Identify which bot made the trade using Kraken userref tag."""
+    # Enum: each bot sets a unique userref integer when placing orders
+    BOT_USERREFS = {
+        1: "stock_swing_bot",
+        2: "btc_swing_bot",
+        3: "eth_swing_bot",
+        4: "sol_swing_bot",
+        5: "dot_swing_bot",
+        6: "doge_swing_bot",
+        7: "btc_momentum_bot",
+        8: "dynamic_hft_bot",
+        9: "universal_bull_bot",
+    }
+
+    raw = trade.get('raw_data', {})
+    userref = int(raw.get('userref', 0))
+    if userref and userref in BOT_USERREFS:
+        return BOT_USERREFS[userref]
+    return "Manual"
 
 def calculate_realized_pnl(trades):
     """Calculate realized P&L by matching buy/sell pairs with bot tracking."""
@@ -376,6 +356,7 @@ def get_kraken_orders_history(period_days=None, count=100):
                 "cost": cost,
                 "fee": fee,
                 "trade_id": order_id,
+                "userref": int(order_data.get("userref", 0)),
                 "raw_data": order_data,
             })
 
@@ -423,7 +404,7 @@ def create_pnl_chart(pnl_values, width=CHART_WIDTH, height=CHART_HEIGHT):
                 elif value < 0:
                     line += "🔴"
                 else:
-                    line += "⚪"
+                    line += "🔵"
             else:
                 line += " "
         
@@ -465,7 +446,7 @@ def create_bar_chart(data, labels, width=CHART_WIDTH):
             bar = "🔴" * bar_length
             prefix = f"${value:+8.2f} │"
         else:
-            bar = "⚪"
+            bar = "🔵"
             prefix = f"${value:+8.2f} │"
         
         chart_lines.append(f"{prefix}{bar} {label}")
@@ -616,7 +597,7 @@ def display_trade_list(trades, limit=20):
             emoji = "🔴"
             status = "LOSS"
         else:
-            emoji = "⚪"
+            emoji = "🔵"
             status = "BREAKEVEN"
         
         # Format timestamp
@@ -663,7 +644,7 @@ def display_symbol_breakdown(symbol_stats):
         elif pnl < 0:
             emoji = "🔴"
         else:
-            emoji = "⚪"
+            emoji = "🔵"
         
         print(f"  {emoji} {symbol:6} | ${pnl:+8.2f} | {trades:3} trades | {win_rate:5.1f}% win rate")
 
@@ -758,7 +739,7 @@ def display_period_breakdown(period_stats, period_type='monthly'):
         elif pnl < 0:
             emoji = "🔴"
         else:
-            emoji = "⚪"
+            emoji = "🔵"
         
         print(f"  {emoji} {period} | ${pnl:+8.2f} | {trades:3} trades")
 

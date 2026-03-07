@@ -327,7 +327,11 @@ def place_order(
     volume: float = None,       # amount of base currency
     price: float = None,      # required for limit orders
     cost: float = None,       # for USD-based orders (e.g., $1 = cost="1")
-    validate: bool = False     # True = dry run, won't actually place
+    validate: bool = False,    # True = dry run, won't actually place
+    userref: int = 0,          # bot identifier (see BOT_USERREFS in portfolio_analyzer)
+    close_ordertype: str = None,  # conditional close order type (e.g. "stop-loss")
+    close_price: float = None,    # conditional close price (stop-loss trigger)
+    close_price2: float = None,   # conditional close price2 (for stop-loss-limit)
 ) -> tuple[bool, dict]:
     """
     Place a spot order on Kraken.
@@ -366,6 +370,14 @@ def place_order(
         data["price"] = price if isinstance(price, str) else str(price)
     if validate:
         data["validate"] = "true"  # dry run — Kraken won't execute
+    if userref:
+        data["userref"] = str(userref)
+    if close_ordertype:
+        data["close[ordertype]"] = close_ordertype
+    if close_price is not None:
+        data["close[price]"] = str(close_price)
+    if close_price2 is not None:
+        data["close[price2]"] = str(close_price2)
 
     try:
         headers = get_kraken_headers(path, data)
@@ -401,63 +413,41 @@ def cancel_order(txid: str) -> bool:
 
 def place_oco_order(pair: str, side: str, volume: str, price: str, price2: str, validate: bool = False) -> tuple[bool, dict]:
     """
-    Place OCO (One-Cancels-Other) order - combines stop-loss and take-profit.
-    
-    OCO orders place two conditions in a single order:
-    - price: Take-profit limit order
-    - price2: Stop-loss trigger order
-    - Only one executes, other cancels automatically
-    
-    Args:
-        pair: Trading pair (e.g., "XBTUSD", "SOLUSD")
-        side: "buy" or "sell"
-        volume: Amount to trade
-        price: Take-profit price (for limit orders)
-        price2: Stop-loss price (for stop-loss orders)
-        validate: True = dry run, False = live execution
-    
-    Returns:
-        (success: bool, result_dict)
+    Place a market order with a conditional close (stop-loss) attached.
+
+    Kraken does not support a native OCO ordertype. Two separate sell orders
+    on the same holding fail because the first reserves the asset. Instead,
+    we attach the stop-loss as a conditional close on a limit take-profit order.
+
+    - price:  take-profit limit (the primary order)
+    - price2: stop-loss trigger (attached as conditional close)
+
+    When the take-profit limit fills, the conditional close is void.
+    If price drops to price2, Kraken fires the conditional close.
+
+    Returns (success: bool, result_dict).
     """
-    path = "/0/private/AddOrder"
-    data = {
-        "pair": pair,
-        "type": side,
-        "ordertype": "oco",  # One-Cancels-Other
-        "volume": volume,
-        "price": price,      # Take-profit limit
-        "price2": price2,     # Stop-loss trigger
-        "oflags": "fciq"   # Standard flags
-    }
-    
-    if validate:
-        data["validate"] = "true"  # dry run — Kraken won't execute
-    
     try:
-        headers = get_kraken_headers(path, data)
-        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
-        body = res.json()
-        
-        if body.get("error"):
-            error_msg = body["error"][0] if isinstance(body["error"], list) else str(body["error"])
-            print(f"  ❌ OCO Order failed: {error_msg}")
-            return False, body
-        
-        # Extract order info
-        order_info = body.get("result", {})
-        order_ids = order_info.get("txid", [])
-        
-        if order_ids:
-            print(f"  ✅ OCO Order placed: {order_ids}")
-            print(f"  📊 Take-profit: ${price} | Stop-loss: ${price2}")
-            return True, order_info
+        ok, result = place_order(
+            pair=pair,
+            side=side,
+            order_type="limit",
+            volume=float(volume),
+            price=float(price),
+            validate=validate,
+            close_ordertype="stop-loss",
+            close_price=float(price2),
+        )
+        if ok:
+            txid = result.get("txid", [])
+            print(f"  ✅ TP+SL order placed: {txid} | TP @ {price} | SL @ {price2}")
         else:
-            print(f"  ❌ No order ID returned")
-            return False, body
-            
+            err = result.get("error", result)
+            print(f"  ❌ OCO Order failed: {err}")
+        return ok, result
     except Exception as e:
         print(f"  ❌ OCO Order exception: {e}")
-        return False, str(e)
+        return False, {"error": str(e)}
 
 def validate_order(order_data: dict) -> str:
     """Validate order data before placing."""

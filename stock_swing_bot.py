@@ -840,7 +840,8 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
             order_type="market",
             volume=position_shares,
             cost=required_cost,
-            validate=False
+            validate=False,
+            userref=1
         )
         
         if order_result:
@@ -926,7 +927,8 @@ def execute_sell(current_price: float, reason: str, dry_run: bool, skip_order: b
                 order_type="market",
                 volume=position_size,
                 cost=position_size * current_price,
-                validate=False
+                validate=False,
+                userref=1
             )
         
         if order_result:
@@ -1001,7 +1003,7 @@ def get_pair_format(symbol: str) -> str:
         return "XBTUSD"
     elif symbol == "ETH":
         return "ETHUSD"
-    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI"]:
+    elif symbol in ["SOL", "DOT", "ADA", "LINK", "UNI", "WAR"]:
         return f"{symbol}USD"
     
     # Stock/ETF pairs (3-4 letter tickers)
@@ -1026,7 +1028,7 @@ def is_stock_or_etf(symbol: str) -> bool:
         clean_symbol.isalpha() and 
         len(clean_symbol) <= 5 and
         not any(clean_symbol.startswith(prefix) for prefix in crypto_prefixes) and
-        clean_symbol not in ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI"]
+        clean_symbol not in ["BTC", "ETH", "SOL", "DOT", "ADA", "LINK", "UNI", "WAR"]
     )
     
     return stock_like

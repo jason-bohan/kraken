@@ -256,7 +256,9 @@ def run(dry_run: bool = False):
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling BTC @ ${price:.2f}")
                         if not dry_run:
                             if exit_orders: cancel_remaining_exit(exit_orders)
-                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            ok, result = place_order(PAIR, "sell", "market", volume,
+            userref=2
+        )
                             if not ok:
                                 print(f"  ❌ Sell failed: {result}")
                             else:
@@ -270,7 +272,9 @@ def run(dry_run: bool = False):
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling BTC @ ${price:.2f}")
                         if not dry_run:
                             if exit_orders: cancel_remaining_exit(exit_orders)
-                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            ok, result = place_order(PAIR, "sell", "market", volume,
+            userref=2
+        )
                             if not ok:
                                 print(f"  ❌ Stop sell failed: {result}")
                             else:
@@ -290,7 +294,9 @@ def run(dry_run: bool = False):
                         print(f"  💰 TARGET HIT +{pnl_pct*100:.2f}% | Selling BTC @ ${price:.2f}")
                         if not dry_run:
                             if exit_orders: cancel_remaining_exit(exit_orders)
-                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            ok, result = place_order(PAIR, "sell", "market", volume,
+            userref=2
+        )
                             if not ok:
                                 print(f"  ❌ Sell failed: {result}")
                             else:
@@ -304,7 +310,9 @@ def run(dry_run: bool = False):
                         print(f"  🛑 STOP LOSS {pnl_pct*100:.2f}% | Selling BTC @ ${price:.2f}")
                         if not dry_run:
                             if exit_orders: cancel_remaining_exit(exit_orders)
-                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            ok, result = place_order(PAIR, "sell", "market", volume,
+            userref=2
+        )
                             if not ok:
                                 print(f"  ❌ Stop sell failed: {result}")
                             else:
@@ -345,7 +353,9 @@ def run(dry_run: bool = False):
                         print(f"  🎯 SELL signal: {reason_str}")
                         print(f"  💸 Selling BTC @ ${price:.2f} (${volume*price:.2f})")
                         if not dry_run:
-                            ok, result = place_order(PAIR, "sell", "market", volume)
+                            ok, result = place_order(PAIR, "sell", "market", volume,
+            userref=2
+        )
                             if ok:
                                 position = {
                                     "entry_price": price,
@@ -379,7 +389,9 @@ def run(dry_run: bool = False):
                         print(f"  🎯 BUY signal: {reason_str}")
                         print(f"  🛒 Buying BTC @ ${price:.2f} (${volume*price:.2f})")
                         if not dry_run:
-                            ok, result = place_order(PAIR, "buy", "market", volume)
+                            ok, result = place_order(PAIR, "buy", "market", volume,
+            userref=2
+        )
                             if ok:
                                 position = {
                                     "entry_price": price,
