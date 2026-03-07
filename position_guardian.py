@@ -31,7 +31,7 @@ Usage in any bot:
 """
 
 from kraken_connection import (
-    get_balance, get_ticker, get_open_orders, cancel_order, place_order, place_oco_order, get_asset_pairs
+    get_balance, get_ticker, get_open_orders, cancel_order, place_order, get_asset_pairs
 )
 
 _pair_decimals_cache: dict = {}
@@ -62,56 +62,35 @@ def place_exit_orders(
     stop_pct: float,
 ) -> dict:
     """
-    Place a single OCO (One-Cancels-Other) sell order covering both take-profit and stop-loss.
+    Place an exchange-hosted stop-loss and let the bot handle take-profit logic.
 
-    Uses OCO so Kraken only locks the coins once — avoids 'Insufficient funds' when
-    placing separate SL and TP orders against the same balance.
+    Kraken spot support for attached closes is reliable for stop protection, but this
+    helper should not pretend both exits are simultaneously live as a native OCO pair.
 
-    Returns dict: {"tp": txid_or_None, "sl": txid_or_None}
-    Both orders are live on Kraken. When one fills, Kraken auto-cancels the other.
+    Returns dict: {"tp": None, "sl": txid_or_None}
     """
     tp_price_str = _fmt_price(entry_price * (1 + profit_pct), pair)
-    sl_price_str = _fmt_price(entry_price * (1 - stop_pct),  pair)
-    vol_str      = str(round(volume, 8))
+    sl_price_str = _fmt_price(entry_price * (1 - stop_pct), pair)
+    vol_str = str(round(volume, 8))
 
-    ok, r = place_oco_order(
-        pair=pair,
-        side="sell",
-        volume=vol_str,
-        price=tp_price_str,   # take-profit limit
-        price2=sl_price_str,  # stop-loss trigger
-    )
+    ok_sl, r_sl = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
+    if ok_sl:
+        txids = r_sl.get("txid", [])
+        sl_id = txids[0] if txids else None
+        print(f"  Exit protection set: {pair} sell {vol_str} | TP handled by bot @ {tp_price_str} | SL @ {sl_price_str} (-{stop_pct*100:.1f}%)  [{sl_id}]")
+        return {"tp": None, "sl": sl_id}
 
-    if ok:
-        txids = r.get("txid", [])
-        result = {
-            "tp": txids[0] if len(txids) > 0 else None,
-            "sl": txids[1] if len(txids) > 1 else txids[0] if txids else None,
-        }
-        print(f"  OCO exit set: {pair} sell {vol_str} | TP @ {tp_price_str} (+{profit_pct*100:.1f}%) | SL @ {sl_price_str} (-{stop_pct*100:.1f}%)  {txids}")
-        return result
-    else:
-        error = r.get("error", r) if isinstance(r, dict) else r
-        print(f"  WARNING: OCO exit order failed for {pair}: {error}")
-        # Fallback: try separate SL only to at least protect the position
-        ok_sl, r_sl = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
-        if ok_sl:
-            txids = r_sl.get("txid", [])
-            sl_id = txids[0] if txids else None
-            print(f"  Fallback SL set: {pair} sell {vol_str} @ {sl_price_str} (-{stop_pct*100:.1f}%)  [{sl_id}]")
-            return {"tp": None, "sl": sl_id}
-        print(f"  WARNING: fallback SL also failed for {pair}: {r_sl.get('error', r_sl)}")
-        return {"tp": None, "sl": None}
-
+    print(f"  WARNING: stop-loss protection failed for {pair}: {r_sl.get('error', r_sl)}")
+    return {"tp": None, "sl": None}
 
 def check_exit_orders(exit_orders: dict) -> bool:
     """
-    Check open orders to see if either exit order was filled by Kraken.
-    If one was filled, cancels the other automatically.
+    Check open orders to see if the exchange-hosted stop-loss fired.
 
-    Returns True if position was closed (one order filled), False if both still open.
+    Returns True if the stop-loss is no longer open, which implies the position was
+    likely closed or the order was manually removed and needs attention.
     """
-    if not exit_orders or (not exit_orders.get("tp") and not exit_orders.get("sl")):
+    if not exit_orders or not exit_orders.get("sl"):
         return False
 
     try:
@@ -120,31 +99,14 @@ def check_exit_orders(exit_orders: dict) -> bool:
         print(f"  WARNING: could not check open orders: {e}")
         return False
 
-    tp_txid = exit_orders.get("tp")
     sl_txid = exit_orders.get("sl")
-
-    tp_open = tp_txid in open_orders if tp_txid else False
     sl_open = sl_txid in open_orders if sl_txid else False
 
-    # Take-profit filled — cancel the stop-loss
-    if tp_txid and not tp_open and sl_txid and sl_open:
-        print(f"  Take-profit filled [{tp_txid}] — cancelling stop-loss [{sl_txid}]")
-        cancel_order(sl_txid)
-        return True
-
-    # Stop-loss filled — cancel the take-profit
-    if sl_txid and not sl_open and tp_txid and tp_open:
-        print(f"  Stop-loss fired [{sl_txid}] — cancelling take-profit [{tp_txid}]")
-        cancel_order(tp_txid)
-        return True
-
-    # Both gone (edge case: both filled or both cancelled)
-    if tp_txid and not tp_open and sl_txid and not sl_open:
-        print(f"  Both exit orders gone for position — marking closed")
+    if sl_txid and not sl_open:
+        print(f"  Stop-loss no longer open [{sl_txid}] — marking position closed")
         return True
 
     return False
-
 
 def cancel_remaining_exit(exit_orders: dict) -> None:
     """Cancel whichever exit orders are still open (call when manually closing a position)."""
@@ -163,7 +125,7 @@ def scan_and_protect(
 ) -> None:
     """
     On bot startup: find held coins with no open sell orders and
-    place protective stop-loss + take-profit orders automatically.
+    place protective stop-loss orders automatically and keep take-profit logic in the bot.
 
     pairs_config format:
         {
@@ -213,3 +175,4 @@ def scan_and_protect(
 
         print(f"  {pair}: found {held:.6g} {asset} (~${price*held:.2f}) with no exit orders — protecting")
         place_exit_orders(pair, held, price, profit_pct, stop_pct)
+

@@ -22,11 +22,30 @@ import base64
 import hashlib
 import urllib.parse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BASE_URL = "https://api.kraken.com"
+_PUBLIC_TTL_SECS = 300
+_PRIVATE_TTL_SECS = 5
+_asset_pairs_cache = {"ts": 0.0, "data": {}}
+_balance_cache = {"ts": 0.0, "data": {}}
+
+_session = requests.Session()
+_retry = Retry(
+    total=3,
+    connect=3,
+    read=3,
+    backoff_factor=0.4,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET", "POST"}),
+)
+_adapter = HTTPAdapter(max_retries=_retry)
+_session.mount("https://", _adapter)
+_session.mount("http://", _adapter)
 
 
 # ─────────────────────────────────────────────
@@ -75,6 +94,26 @@ def get_kraken_headers(uri_path: str, data: dict) -> dict:
     }
 
 
+def _request_json(method: str, path: str, *, data: dict | None = None, private: bool = False, timeout: int = 10) -> dict:
+    """Send a Kraken request and return parsed JSON or {} on failure."""
+    payload = dict(data or {})
+    try:
+        headers = get_kraken_headers(path, payload) if private else None
+        if method == "GET":
+            res = _session.get(BASE_URL + path, timeout=timeout)
+        else:
+            res = _session.post(BASE_URL + path, headers=headers, data=payload, timeout=timeout)
+        res.raise_for_status()
+        body = res.json()
+        if body.get("error"):
+            print(f"  ⚠️ Kraken API error on {path}: {body['error']}")
+            return {}
+        return body
+    except Exception as e:
+        print(f"  ⚠️ Kraken request failed on {path}: {e}")
+        return {}
+
+
 # ─────────────────────────────────────────────
 # ACCOUNT
 # ─────────────────────────────────────────────
@@ -84,21 +123,16 @@ def get_balance() -> dict:
     Returns dict of all asset balances, e.g. {"ZUSD": "1234.56", "XXBT": "0.5"}
     Kraken asset names: ZUSD = USD, XXBT = BTC, XETH = ETH, etc.
     """
-    path = "/0/private/Balance"
-    data = {}
-    try:
-        headers = get_kraken_headers(path, data)
-        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
-        if res.status_code == 200:
-            body = res.json()
-            if body.get("error"):
-                print(f"  ⚠️ Balance error: {body['error']}")
-                return {}
-            return body.get("result", {})
-    except Exception as e:
-        print(f"  ⚠️ Balance exception: {e}")
-    return {}
+    now = time.time()
+    if now - _balance_cache["ts"] <= _PRIVATE_TTL_SECS and _balance_cache["data"]:
+        return dict(_balance_cache["data"])
 
+    body = _request_json("POST", "/0/private/Balance", data={}, private=True, timeout=10)
+    result = body.get("result", {}) if body else {}
+    if result:
+        _balance_cache["ts"] = now
+        _balance_cache["data"] = dict(result)
+    return result
 
 def get_usd_balance() -> float:
     """Convenience: return USD balance as float."""
@@ -111,20 +145,8 @@ def get_trade_balance(base_asset: str = "ZUSD") -> dict:
     Extended balance info: equity, margin, free margin, etc.
     Useful for margin accounts.
     """
-    path = "/0/private/TradeBalance"
-    data = {"asset": base_asset}
-    try:
-        headers = get_kraken_headers(path, data)
-        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
-        if res.status_code == 200:
-            body = res.json()
-            if body.get("error"):
-                print(f"  ⚠️ TradeBalance error: {body['error']}")
-                return {}
-            return body.get("result", {})
-    except Exception as e:
-        print(f"  ⚠️ TradeBalance exception: {e}")
-    return {}
+    body = _request_json("POST", "/0/private/TradeBalance", data={"asset": base_asset}, private=True, timeout=10)
+    return body.get("result", {}) if body else {}
 
 
 # ─────────────────────────────────────────────
@@ -139,59 +161,101 @@ def get_ticker(pair: str) -> dict:
     NOTE: To rediscover ticker fields:
         print(get_ticker("XBTUSD"))
     """
-    path = f"/0/public/Ticker?pair={pair}"
-    try:
-        res = requests.get(BASE_URL + path, timeout=8)
-        if res.status_code == 200:
-            body = res.json()
-            if body.get("error"):
-                print(f"  ⚠️ Ticker error: {body['error']}")
-                return {}
-            result = body.get("result", {})
-            # Kraken sometimes returns the pair with a different key name
-            # e.g. "XBTUSD" → "XXBTZUSD". Grab first value to be safe.
-            return next(iter(result.values()), {})
-    except Exception as e:
-        print(f"  ⚠️ Ticker exception: {e}")
-    return {}
-
+    body = _request_json("GET", f"/0/public/Ticker?pair={pair}", timeout=8)
+    result = body.get("result", {}) if body else {}
+    return next(iter(result.values()), {})
 
 def get_ohlc(pair: str, interval: int = 1) -> list:
     """
     Get OHLC candles. interval in minutes: 1, 5, 15, 30, 60, 240, 1440, 10080, 21600
     Returns list of [time, open, high, low, close, vwap, volume, count]
     """
-    path = f"/0/public/OHLC?pair={pair}&interval={interval}"
-    try:
-        res = requests.get(BASE_URL + path, timeout=8)
-        if res.status_code == 200:
-            body = res.json()
-            result = body.get("result", {})
-            # Remove the "last" key, keep only the candle list
-            candles = [v for k, v in result.items() if k != "last"]
-            return candles[0] if candles else []
-    except Exception as e:
-        print(f"  ⚠️ OHLC exception: {e}")
-    return []
-
+    body = _request_json("GET", f"/0/public/OHLC?pair={pair}&interval={interval}", timeout=8)
+    result = body.get("result", {}) if body else {}
+    candles = [v for k, v in result.items() if k != "last"]
+    return candles[0] if candles else []
 
 def get_asset_pairs() -> dict:
     """
     Get all tradable asset pairs with their minimum order sizes.
     Returns dict with pair info including 'ordermin', 'costmin'.
     """
-    path = "/0/public/AssetPairs"
-    try:
-        res = requests.get(BASE_URL + path, timeout=8)
-        if res.status_code == 200:
-            body = res.json()
-            if body.get("error"):
-                print(f"  ⚠️ AssetPairs error: {body['error']}")
-                return {}
-            return body.get("result", {})
-    except Exception as e:
-        print(f"  ⚠️ AssetPairs exception: {e}")
+    now = time.time()
+    if now - _asset_pairs_cache["ts"] <= _PUBLIC_TTL_SECS and _asset_pairs_cache["data"]:
+        return dict(_asset_pairs_cache["data"])
+
+    body = _request_json("GET", "/0/public/AssetPairs", timeout=8)
+    result = body.get("result", {}) if body else {}
+    if result:
+        _asset_pairs_cache["ts"] = now
+        _asset_pairs_cache["data"] = dict(result)
+    return result
+
+def resolve_pair_assets(pair: str) -> dict:
+    """
+    Return Kraken pair metadata with stable base/quote asset codes.
+
+    Looks up by canonical pair key, altname, or wsname.
+    Returns {} if the pair is unknown.
+    """
+    pair_upper = pair.upper()
+    for key, info in get_asset_pairs().items():
+        names = {
+            key.upper(),
+            str(info.get("altname", "")).upper(),
+            str(info.get("wsname", "")).replace("/", "").upper(),
+        }
+        if pair_upper in names:
+            return {
+                "pair_key": key,
+                "altname": info.get("altname", key),
+                "wsname": info.get("wsname", ""),
+                "base": info.get("base"),
+                "quote": info.get("quote"),
+                "ordermin": float(info.get("ordermin", 0) or 0),
+                "costmin": float(info.get("costmin", 0) or 0),
+                "pair_decimals": int(info.get("pair_decimals", 2) or 2),
+            }
     return {}
+
+
+def get_balance_for_asset(asset_code: str, balances: dict | None = None) -> float:
+    """Return a numeric balance for a Kraken asset code, handling common aliases."""
+    balances = balances or get_balance()
+    if asset_code in balances:
+        return float(balances.get(asset_code, 0) or 0)
+
+    aliases = {
+        "USD": ("ZUSD", "USD"),
+        "ZUSD": ("ZUSD", "USD"),
+        "USDT": ("USDT",),
+        "XBT": ("XXBT", "XBT"),
+        "XXBT": ("XXBT", "XBT"),
+        "ETH": ("XETH", "ETH"),
+        "XETH": ("XETH", "ETH"),
+        "DOGE": ("XDG", "DOGE"),
+        "XDG": ("XDG", "DOGE"),
+    }
+    for alias in aliases.get(asset_code, (asset_code,)):
+        if alias in balances:
+            return float(balances.get(alias, 0) or 0)
+    return 0.0
+
+
+def get_pair_base_balance(pair: str, balances: dict | None = None) -> float:
+    """Return the held base-asset balance for a Kraken pair."""
+    meta = resolve_pair_assets(pair)
+    if not meta.get("base"):
+        return 0.0
+    return get_balance_for_asset(meta["base"], balances=balances)
+
+
+def get_pair_quote_balance(pair: str, balances: dict | None = None) -> float:
+    """Return the held quote-asset balance for a Kraken pair."""
+    meta = resolve_pair_assets(pair)
+    if not meta.get("quote"):
+        return 0.0
+    return get_balance_for_asset(meta["quote"], balances=balances)
 
 
 def get_min_order_info(pair: str) -> dict:
@@ -199,8 +263,7 @@ def get_min_order_info(pair: str) -> dict:
     Get minimum order requirements for a specific pair.
     Returns {'ordermin': float, 'costmin': float} or empty dict.
     """
-    pairs = get_asset_pairs()
-    pair_info = pairs.get(pair, {})
+    pair_info = resolve_pair_assets(pair)
     return {
         'ordermin': float(pair_info.get('ordermin', 0)),
         'costmin': float(pair_info.get('costmin', 0))
@@ -387,6 +450,8 @@ def place_order(
             print(f"  ❌ Order error: {body['error']}")
             return False, body
         print(f"  ✅ Order placed: {body.get('result', {})}")
+        _balance_cache["ts"] = 0.0
+        _balance_cache["data"] = {}
         return True, body.get("result", {})
     except Exception as e:
         print(f"  ⚠️ Order exception: {e}")
@@ -405,6 +470,8 @@ def cancel_order(txid: str) -> bool:
             print(f"  ❌ Cancel error: {body['error']}")
             return False
         print(f"  ✅ Cancelled: {txid}")
+        _balance_cache["ts"] = 0.0
+        _balance_cache["data"] = {}
         return True
     except Exception as e:
         print(f"  ⚠️ Cancel exception: {e}")
@@ -568,3 +635,10 @@ def test_connection() -> dict:
 
 if __name__ == "__main__":
     test_connection()
+
+
+
+
+
+
+
