@@ -619,8 +619,8 @@ def check_order_status():
             ticker = get_ticker(PAIR)
             current_price = float(ticker.get("c", [0])[0]) if ticker else entry_price
             
-            # Execute sell logic for record keeping
-            execute_sell(current_price, exit_reason, dry_run=False)
+            # Reconcile state — position already closed by exchange order, no new order needed
+            execute_sell(current_price, exit_reason, dry_run=False, skip_order=True)
             
             return True
         
@@ -893,14 +893,19 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
         print(f"  ❌ Buy execution error: {e}")
         return False
 
-def execute_sell(current_price: float, reason: str, dry_run: bool) -> bool:
-    """Execute a sell order."""
+def execute_sell(current_price: float, reason: str, dry_run: bool, skip_order: bool = False) -> bool:
+    """Execute a sell order.
+
+    skip_order=True skips placing a market sell (used when the exchange already
+    closed the position via a limit/stop order) but still reconciles local state
+    and records the outcome in the learning DB.
+    """
     global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal, trade_history, active_trade_id
-    
+
     try:
         if not in_position:
             return False
-        
+
         if dry_run:
             pnl_pct = (current_price - entry_price) / entry_price * 100
             print(f"  📊 [DRY] Sell Signal:")
@@ -909,16 +914,20 @@ def execute_sell(current_price: float, reason: str, dry_run: bool) -> bool:
             print(f"     P&L: {pnl_pct:+.2f}%")
             print(f"     Reason: {reason}")
             return True
-        
-        # Place sell order
-        order_result, order_info = place_order(
-            pair=PAIR,
-            side="sell",
-            order_type="market",
-            volume=position_size,
-            cost=position_size * current_price,
-            validate=False
-        )
+
+        if skip_order:
+            order_result = True
+            order_info = "exchange-managed exit"
+        else:
+            # Place sell order
+            order_result, order_info = place_order(
+                pair=PAIR,
+                side="sell",
+                order_type="market",
+                volume=position_size,
+                cost=position_size * current_price,
+                validate=False
+            )
         
         if order_result:
             # Calculate P&L
@@ -1024,7 +1033,7 @@ def is_stock_or_etf(symbol: str) -> bool:
 
 def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
     """Main trading loop."""
-    global SYMBOL, PAIR, ASSET, CONFIG
+    global SYMBOL, PAIR, ASSET, CONFIG, active_trade_id
     
     # Set global variables for this symbol
     SYMBOL = symbol.upper()
@@ -1041,7 +1050,25 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
         ASSET = SYMBOL
     
     CONFIG = load_learning_config(SYMBOL, get_stock_config(SYMBOL))
-    
+
+    # Recover learning state after restart/crash
+    try:
+        balances = get_balance()
+        asset_balance = float(balances.get(ASSET, 0))
+        if asset_balance > 0:
+            recovered_id = LEARNER.recover_open_trade(BOT_NAME, SYMBOL)
+            if recovered_id:
+                active_trade_id = recovered_id
+                print(f"  Recovered open trade id={recovered_id} for {SYMBOL}")
+            else:
+                print(f"  Position detected but no open trade row found — entry was not logged")
+        else:
+            orphaned = LEARNER.close_orphaned_trades(BOT_NAME, SYMBOL)
+            if orphaned:
+                print(f"  Closed {orphaned} orphaned trade row(s) — no live position at startup")
+    except Exception as e:
+        print(f"  Warning: could not check learning state at startup: {e}")
+
     mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
     entry_mode = "🖱️ MANUAL" if manual_entry else "🤖 AUTO"
     asset_type = "📈 Stock/ETF" if is_stock_or_etf(SYMBOL) else "🪙 Crypto"

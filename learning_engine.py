@@ -133,6 +133,42 @@ class LearningEngine:
                 (exit_time, exit_price, pnl_amount, pnl_pct, exit_reason, trade_id),
             )
 
+    def recover_open_trade(self, bot_name: str, symbol: str) -> int | None:
+        """Return the DB id of an unfinished open trade, or None.
+
+        Call this at bot startup after confirming a position is still live on
+        the exchange. If the returned id is not None, assign it to active_trade_id
+        so the eventual exit can close the correct row.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM trade_log
+                WHERE bot_name = ? AND symbol = ? AND status = 'open'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (bot_name, symbol),
+            ).fetchone()
+        return int(row["id"]) if row else None
+
+    def close_orphaned_trades(self, bot_name: str, symbol: str) -> int:
+        """Mark all open trade rows as 'orphaned' when no live position exists.
+
+        Returns the number of rows updated.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE trade_log
+                SET status = 'orphaned',
+                    exit_reason = 'no_position_at_restart'
+                WHERE bot_name = ? AND symbol = ? AND status = 'open'
+                """,
+                (bot_name, symbol),
+            )
+            return cursor.rowcount
+
     # ------------------------------------------------------------------
     # Analysis
     # ------------------------------------------------------------------
@@ -247,15 +283,23 @@ class LearningEngine:
             elif rsi_loss + 2 < rsi_win:
                 tuned["rsi_oversold"] = min(45, int(round(cur_rsi + 2)))
 
-        # Profit target: aim for 75% of typical win
+        # Profit target: step toward 75% of typical win, max 0.005 per cycle
         if metrics["avg_win_pct"] > 0:
-            suggested = metrics["avg_win_pct"] * 0.75
-            tuned["profit_target"] = round(min(0.15, max(0.02, suggested)), 3)
+            target = min(0.15, max(0.02, metrics["avg_win_pct"] * 0.75))
+            step = min(0.005, abs(target - cur_profit))
+            if target > cur_profit:
+                tuned["profit_target"] = round(cur_profit + step, 3)
+            elif target < cur_profit:
+                tuned["profit_target"] = round(cur_profit - step, 3)
 
-        # Stop loss: tighten to 90% of typical loss magnitude
+        # Stop loss: step toward 90% of typical loss magnitude, max 0.003 per cycle
         if metrics["avg_loss_pct"] < 0:
-            suggested_stop = abs(metrics["avg_loss_pct"]) * 0.90
-            tuned["stop_loss"] = round(min(0.08, max(0.01, suggested_stop)), 3)
+            target_stop = min(0.08, max(0.01, abs(metrics["avg_loss_pct"]) * 0.90))
+            step = min(0.003, abs(target_stop - cur_stop))
+            if target_stop < cur_stop:
+                tuned["stop_loss"] = round(cur_stop - step, 3)
+            elif target_stop > cur_stop:
+                tuned["stop_loss"] = round(cur_stop + step, 3)
 
         metrics["tuning_applied"] = True
         metrics["tuning_reason"] = "bounded adjustments from recent closed trades"
