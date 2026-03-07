@@ -478,19 +478,24 @@ def cancel_order(txid: str) -> bool:
         return False
 
 
-def place_oco_order(pair: str, side: str, volume: str, price: str, price2: str, validate: bool = False) -> tuple[bool, dict]:
+def place_bracket_order(pair: str, side: str, volume: str, price: str, price2: str, validate: bool = False) -> tuple[bool, dict]:
     """
-    Place a market order with a conditional close (stop-loss) attached.
+    Place a limit order with a conditional close (stop-loss) attached — Kraken OTO bracket.
 
-    Kraken does not support a native OCO ordertype. Two separate sell orders
-    on the same holding fail because the first reserves the asset. Instead,
-    we attach the stop-loss as a conditional close on a limit take-profit order.
+    Kraken does not support native OCO. Two separate sell orders on the same
+    holding fail because the first reserves the asset. Instead we place a
+    single limit take-profit as the primary order with a stop-loss attached
+    as a conditional close:
 
-    - price:  take-profit limit (the primary order)
-    - price2: stop-loss trigger (attached as conditional close)
+    - price:  take-profit limit price (primary, live immediately)
+    - price2: stop-loss trigger (conditional close, managed by Kraken)
 
-    When the take-profit limit fills, the conditional close is void.
-    If price drops to price2, Kraken fires the conditional close.
+    Behavior:
+      TP fills  → conditional SL is void (position already closed)
+      TP cancelled → SL activates as a live order
+      Price hits SL trigger while TP is open → Kraken fires the SL and cancels TP
+
+    Kraken shows this as an OTO (One-Triggers-Other) order in the UI.
 
     Returns (success: bool, result_dict).
     """
@@ -507,14 +512,18 @@ def place_oco_order(pair: str, side: str, volume: str, price: str, price2: str, 
         )
         if ok:
             txid = result.get("txid", [])
-            print(f"  ✅ TP+SL order placed: {txid} | TP @ {price} | SL @ {price2}")
+            print(f"  ✅ TP+SL bracket placed: {txid} | TP @ {price} | SL @ {price2}")
         else:
             err = result.get("error", result)
-            print(f"  ❌ OCO Order failed: {err}")
+            print(f"  ❌ Bracket order failed: {err}")
         return ok, result
     except Exception as e:
-        print(f"  ❌ OCO Order exception: {e}")
+        print(f"  ❌ Bracket order exception: {e}")
         return False, {"error": str(e)}
+
+
+# Keep old name as alias for backwards compatibility
+place_oco_order = place_bracket_order
 
 def validate_order(order_data: dict) -> str:
     """Validate order data before placing."""
