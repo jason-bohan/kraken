@@ -29,7 +29,8 @@ import argparse
 import threading
 from datetime import datetime
 from kraken_connection import (
-    get_balance, get_ticker, get_ohlc, place_order, calculate_order_size
+    get_balance, get_ticker, get_ohlc, place_order, calculate_order_size,
+    get_pair_base_balance,
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 from learning_engine import LearningEngine
@@ -341,7 +342,7 @@ def get_trade_size(pair: str, price: float, dry_run: bool) -> float:
         return 0.0
 
     # calculate_order_size fetches Kraken's real ordermin for this pair
-    info = calculate_order_size(pair, price, trade_usd)
+    info = calculate_order_size(pair, price, available_usd=trade_usd)
     if not info.get("can_afford"):
         return 0.0
     return info["volume"]
@@ -455,8 +456,8 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 uptrend = price >= ma20 if ma20 else True
 
                 # Holdings check: don't buy if we already hold this asset
-                asset_key = pair.replace("USD", "").replace("ZUSD", "")
-                already_held = not dry_run and float(get_balance().get(asset_key, 0)) * price > 5.0
+                balances_snapshot = get_balance() if not dry_run else {}
+                already_held = not dry_run and get_pair_base_balance(pair, balances=balances_snapshot) * price > 5.0
 
                 bal_str   = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
                 trend_str = "UP" if uptrend else "DOWN"
@@ -630,3 +631,4 @@ if __name__ == "__main__":
                         help=f"Starting virtual balance for dry run (default: ${DRY_START_BAL})")
     args = parser.parse_args()
     run(dry_run=args.dry, sim_balance=args.sim_balance)
+

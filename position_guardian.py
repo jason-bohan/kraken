@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """
-Position Guardian — server-side exit orders using Kraken's native order types.
+Position Guardian — server-side exit protection using Kraken's OTO bracket orders.
 
-Kraken supports two relevant native order types:
-  stop-loss   : market sell triggers when price DROPS below `price`
-  take-profit : market sell triggers when price RISES above `price`
+Places a limit take-profit as the primary order with a stop-loss attached as a
+conditional close. Kraken manages both server-side — they fire even if the bot
+crashes. Kraken shows these as OTO (One-Triggers-Other) in the UI.
 
-These live on Kraken's servers — they fire even if the bot crashes.
+Behavior:
+  TP fills         → conditional SL is void (position already closed)
+  TP cancelled     → SL activates as a live order
+  Price hits SL    → Kraken fires the SL and cancels the TP
+
+Only the TP order reserves coins — no 'Insufficient funds' errors.
 
 Usage in any bot:
 
     from position_guardian import place_exit_orders, scan_and_protect, check_exit_orders
 
-    # After a successful buy — place both orders on Kraken:
+    # After a successful buy — place bracket TP+SL on Kraken:
     exit_orders = place_exit_orders(pair, volume, entry_price, PROFIT_PCT, STOP_PCT)
-    # exit_orders = {"tp": "TXID-TP", "sl": "TXID-SL"}  (None values if order failed)
+    # exit_orders = {"tp": "TXID-TP", "sl": None}
+    # Note: sl txid is None because the SL is a conditional close, not a separate order.
+    # Kraken manages the SL internally — it fires if TP is cancelled or price hits trigger.
 
     # In the monitor loop — check if Kraken already closed the position:
     if exit_orders:
@@ -31,7 +38,7 @@ Usage in any bot:
 """
 
 from kraken_connection import (
-    get_balance, get_ticker, get_open_orders, cancel_order, place_order, place_oco_order, get_asset_pairs
+    get_balance, get_ticker, get_open_orders, cancel_order, place_order, place_bracket_order, get_asset_pairs
 )
 
 _pair_decimals_cache: dict = {}
@@ -62,24 +69,26 @@ def place_exit_orders(
     stop_pct: float,
 ) -> dict:
     """
-    Place a single OCO (One-Cancels-Other) sell order covering both take-profit and stop-loss.
+    Place a Kraken OTO bracket: limit TP with conditional close SL.
 
-    Uses OCO so Kraken only locks the coins once — avoids 'Insufficient funds' when
-    placing separate SL and TP orders against the same balance.
+    A single order reserves the coins once — avoids 'Insufficient funds' from
+    two separate sell orders. Kraken manages the SL as a conditional close
+    attached to the primary TP limit order.
 
     Returns dict: {"tp": txid_or_None, "sl": txid_or_None}
-    Both orders are live on Kraken. When one fills, Kraken auto-cancels the other.
+    The SL txid may mirror the TP txid since Kraken tracks the conditional
+    close internally rather than as a separate order.
     """
     tp_price_str = _fmt_price(entry_price * (1 + profit_pct), pair)
     sl_price_str = _fmt_price(entry_price * (1 - stop_pct),  pair)
     vol_str      = str(round(volume, 8))
 
-    ok, r = place_oco_order(
+    ok, r = place_bracket_order(
         pair=pair,
         side="sell",
         volume=vol_str,
-        price=tp_price_str,   # take-profit limit
-        price2=sl_price_str,  # stop-loss trigger
+        price=tp_price_str,   # take-profit limit (primary order)
+        price2=sl_price_str,  # stop-loss trigger (conditional close)
     )
 
     if ok:
@@ -88,12 +97,12 @@ def place_exit_orders(
             "tp": txids[0] if len(txids) > 0 else None,
             "sl": txids[1] if len(txids) > 1 else txids[0] if txids else None,
         }
-        print(f"  OCO exit set: {pair} sell {vol_str} | TP @ {tp_price_str} (+{profit_pct*100:.1f}%) | SL @ {sl_price_str} (-{stop_pct*100:.1f}%)  {txids}")
+        print(f"  Bracket exit set: {pair} sell {vol_str} | TP @ {tp_price_str} (+{profit_pct*100:.1f}%) | SL @ {sl_price_str} (-{stop_pct*100:.1f}%)  {txids}")
         return result
     else:
         error = r.get("error", r) if isinstance(r, dict) else r
-        print(f"  WARNING: OCO exit order failed for {pair}: {error}")
-        # Fallback: try separate SL only to at least protect the position
+        print(f"  WARNING: bracket exit failed for {pair}: {error}")
+        # Fallback: place standalone SL to at least protect the position
         ok_sl, r_sl = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
         if ok_sl:
             txids = r_sl.get("txid", [])
@@ -106,10 +115,13 @@ def place_exit_orders(
 
 def check_exit_orders(exit_orders: dict) -> bool:
     """
-    Check open orders to see if either exit order was filled by Kraken.
-    If one was filled, cancels the other automatically.
+    Check if the bracket exit has closed the position.
 
-    Returns True if position was closed (one order filled), False if both still open.
+    With Kraken's OTO model the conditional close (SL) is managed internally,
+    so normally only the TP txid appears in open orders. If the TP disappears,
+    either it filled (SL is void) or Kraken fired the SL (TP was cancelled).
+
+    Returns True if position was closed, False if TP is still open.
     """
     if not exit_orders or (not exit_orders.get("tp") and not exit_orders.get("sl")):
         return False
@@ -163,7 +175,7 @@ def scan_and_protect(
 ) -> None:
     """
     On bot startup: find held coins with no open sell orders and
-    place protective stop-loss + take-profit orders automatically.
+    place protective OTO bracket orders (TP + conditional SL) automatically.
 
     pairs_config format:
         {

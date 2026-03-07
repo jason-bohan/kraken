@@ -27,8 +27,10 @@ import subprocess
 import signal
 import sys
 from datetime import datetime
-from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook
-from kraken_connection import calculate_order_size
+from kraken_connection import (
+    get_ticker, get_ohlc, get_balance, get_orderbook, calculate_order_size,
+    get_pair_base_balance, get_pair_quote_balance,
+)
 
 # ─────────────────────────────────────────────
 # 🎛️ CONFIGURATION
@@ -84,7 +86,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # 📈 Track running bots and last launch times
-running_bots = set()
+running_bots = {}  # { symbol: {"process": Popen, "cmd": list[str], "log_path": str} }
 last_launch_time = {}
 
 # ─────────────────────────────────────────────
@@ -108,6 +110,42 @@ def tg(msg: str):
 # ─────────────────────────────────────────────
 # UTILITY FUNCTIONS
 # ─────────────────────────────────────────────
+
+def refresh_running_bots() -> None:
+    """Drop any tracked bot processes that are no longer alive."""
+    dead = []
+    for symbol, info in running_bots.items():
+        proc = info.get("process")
+        if proc and proc.poll() is None:
+            continue
+        dead.append(symbol)
+    for symbol in dead:
+        info = running_bots.pop(symbol, {})
+        proc = info.get("process")
+        rc = proc.poll() if proc else "unknown"
+        print(f"  ℹ️ {symbol} bot exited (rc={rc})")
+
+
+def build_bot_command(bot_file: str) -> list[str]:
+    return [sys.executable, "-u", bot_file]
+
+
+def stop_all_bots() -> None:
+    """Terminate launched bot subprocesses and close log handles."""
+    for symbol, info in list(running_bots.items()):
+        proc = info.get("process")
+        log_handle = info.get("log_handle")
+        if proc and proc.poll() is None:
+            print(f"  🛑 Stopping {symbol} bot (pid={proc.pid})")
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        if log_handle:
+            log_handle.close()
+        running_bots.pop(symbol, None)
+
 
 def calculate_rsi(closes: list, period: int = 14) -> float:
     """Calculate RSI from closing prices."""
@@ -252,75 +290,70 @@ def analyze_orderbook(symbol: str, config: dict, current_price: float) -> dict:
         return {"deep_value": False, "reason": f"Analysis error: {e}"}
 
 def get_portfolio_value() -> dict:
-    """Calculate total portfolio value in USD."""
+    """Calculate total portfolio value in USD without double-counting shared cash balances."""
     try:
         balances = get_balance()
-        portfolio_value = 0.0
         holdings = {}
-        
-        # Get current prices for all assets
-        prices = {}
+        tracked_quotes = set()
+        cash_total = 0.0
+        asset_total = 0.0
+
         for symbol, config in ASSETS.items():
             ticker = get_ticker(config["pair"])
-            if ticker:
-                prices[symbol] = float(ticker.get("c", [0])[0])
-            else:
-                prices[symbol] = 0.0
-        
-        # Calculate USD value of each asset
-        for symbol, config in ASSETS.items():
-            asset_balance = float(balances.get(config["asset"], 0))
-            usd_balance = float(balances.get(config["quote"], 0))
-            
-            asset_value_usd = asset_balance * prices.get(symbol, 0)
-            total_usd_for_asset = usd_balance + asset_value_usd
-            
+            price = float(ticker.get("c", [0])[0]) if ticker else 0.0
+            asset_balance = get_pair_base_balance(config["pair"], balances=balances)
+            quote_balance = get_pair_quote_balance(config["pair"], balances=balances)
+            asset_value_usd = asset_balance * price
+
             holdings[symbol] = {
-                "usd_balance": usd_balance,
+                "usd_balance": quote_balance,
                 "asset_balance": asset_balance,
                 "asset_value_usd": asset_value_usd,
-                "total_usd": total_usd_for_asset,
-                "price": prices.get(symbol, 0)
+                "total_usd": quote_balance + asset_value_usd,
+                "price": price,
             }
-            
-            portfolio_value += total_usd_for_asset
-        
+
+            asset_total += asset_value_usd
+            tracked_quotes.add(config["quote"])
+
+        for quote_asset in tracked_quotes:
+            cash_total += float(balances.get(quote_asset, 0) or 0)
+
         return {
-            "total_usd": portfolio_value,
-            "holdings": holdings
+            "total_usd": cash_total + asset_total,
+            "cash_usd": cash_total,
+            "asset_usd": asset_total,
+            "holdings": holdings,
         }
-        
+
     except Exception as e:
         print(f"  ⚠️ Error calculating portfolio value: {e}")
-        return {"total_usd": 0.0, "holdings": {}}
+        return {"total_usd": 0.0, "cash_usd": 0.0, "asset_usd": 0.0, "holdings": {}}
 
 def check_balance_requirements(config: dict) -> tuple[bool, dict]:
     try:
         balances = get_balance()
-        usd_balance = float(balances.get(config["quote"], 0))
-        asset_balance = float(balances.get(config["asset"], 0))
-        
-        # Check minimum USD requirement
-        has_usd = usd_balance >= config["min_usd"]
-        
-        # Check if we can afford minimum order
-        if has_usd:
+        quote_balance = get_pair_quote_balance(config["pair"], balances=balances)
+        asset_balance = get_pair_base_balance(config["pair"], balances=balances)
+
+        has_quote = quote_balance >= config["min_usd"]
+        if has_quote:
             order_info = calculate_order_size(
-                config["pair"], 
-                100,  # rough price estimate
-                available_usd=usd_balance
+                config["pair"],
+                100,
+                available_usd=quote_balance,
             )
-            can_afford_min = order_info['can_afford']
+            can_afford_min = order_info["can_afford"]
         else:
             can_afford_min = False
-            
-        return has_usd or asset_balance > 0, {
-            "usd_balance": usd_balance,
+
+        return has_quote or asset_balance > 0, {
+            "usd_balance": quote_balance,
             "asset_balance": asset_balance,
-            "has_usd": has_usd,
-            "can_afford_min": can_afford_min
+            "has_usd": has_quote,
+            "can_afford_min": can_afford_min,
         }
-        
+
     except Exception as e:
         print(f"  ⚠️ Error checking balances: {e}")
         return False, {}
@@ -379,50 +412,62 @@ def check_entry_conditions(symbol: str, config: dict, market_data: dict) -> dict
         }
 
 def launch_bot(symbol: str, config: dict, signal_info: dict, dry_run: bool = False) -> bool:
-    """Print command to launch a trading bot."""
-    # Get absolute path to bot file
+    """Launch a trading bot as a supervised subprocess with file logging."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     bot_file = os.path.join(script_dir, config["bot_file"])
-    
-    # Check cooldown
+
     now = time.time()
     if symbol in last_launch_time and (now - last_launch_time[symbol]) < LAUNCH_COOLDOWN:
         print(f"  ⏰ {symbol} bot launched recently, skipping (cooldown)")
         return False
-    
+
     if dry_run:
         print(f"  🚀 [DRY] Would launch {symbol} bot: {signal_info['type'].upper()} signal - {signal_info['reason']}")
         return True
-    
+
     try:
-        # Print the command to run instead of launching terminal
-        cmd = f'python "{bot_file}"'
-        print(f"\n" + "="*60)
-        print(f"🚀 {symbol} BOT LAUNCH COMMAND:")
+        os.makedirs(os.path.join(script_dir, "logs"), exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = os.path.join(script_dir, "logs", f"launcher_{symbol.lower()}_{timestamp}.log")
+        cmd = build_bot_command(bot_file)
+
+        log_handle = open(log_path, "a", encoding="utf-8")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=script_dir,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+        print(f"\n" + "=" * 60)
+        print(f"🚀 {symbol} BOT LAUNCHED")
+        print(f"   PID: {proc.pid}")
         print(f"   Signal: {signal_info['type'].upper()} - {signal_info['reason']}")
         print(f"   Price: ${signal_info['price']:.2f}")
         print(f"   RSI: {signal_info['rsi']:.1f}")
         print(f"   Dip: {signal_info['dip']*100:.1f}%")
-        print(f"\n   RUN THIS COMMAND:")
-        print(f"   {cmd}")
-        print(f"="*60)
-        
-        # Send notification
-        msg = f"🤖 *{symbol} Bot Signal Detected*\n"
+        print(f"   Log: {log_path}")
+        print("=" * 60)
+
+        msg = f"🤖 *{symbol} Bot Launched*\n"
         msg += f"Signal: {signal_info['type'].upper()}\n"
         msg += f"Reason: {signal_info['reason']}\n"
         msg += f"Price: ${signal_info['price']:.2f}\n"
-        msg += f"Command: `{cmd}`"
+        msg += f"PID: `{proc.pid}`"
         tg(msg)
-        
-        # Update tracking
-        running_bots.add(symbol)
+
+        running_bots[symbol] = {
+            "process": proc,
+            "cmd": cmd,
+            "log_path": log_path,
+            "log_handle": log_handle,
+        }
         last_launch_time[symbol] = now
-        
         return True
-        
+
     except Exception as e:
-        print(f"  ❌ Failed to prepare {symbol} bot command: {e}")
+        print(f"  ❌ Failed to launch {symbol} bot: {e}")
         return False
 
 # ─────────────────────────────────────────────
@@ -451,10 +496,11 @@ def monitor(dry_run: bool = False):
             cycle += 1
             ts = datetime.now().strftime("%H:%M:%S")
             print(f"\n[{ts}] Cycle {cycle} - Checking conditions...")
+            refresh_running_bots()
             
             # Get portfolio value once per cycle
             portfolio = get_portfolio_value()
-            print(f"\n💼 Portfolio Total: ${portfolio['total_usd']:.2f} USD")
+            print(f"\n💼 Portfolio Total: ${portfolio['total_usd']:.2f} USD (cash ${portfolio.get('cash_usd', 0.0):.2f} + assets ${portfolio.get('asset_usd', 0.0):.2f})")
             
             for symbol, config in ASSETS.items():
                 print(f"\n📊 {symbol}:")
@@ -532,9 +578,11 @@ def monitor(dry_run: bool = False):
     except KeyboardInterrupt:
         print(f"\n\n👋 Monitor stopped by user")
         tg("👋 *Bot Monitor stopped*")
+        stop_all_bots()
     except Exception as e:
         print(f"\n❌ Monitor error: {e}")
         tg(f"❌ *Bot Monitor error*: {e}")
+        stop_all_bots()
 
 # ─────────────────────────────────────────────
 # SIGNAL HANDLING
@@ -543,6 +591,7 @@ def monitor(dry_run: bool = False):
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
     print(f"\n👋 Shutting down monitor...")
+    stop_all_bots()
     sys.exit(0)
 
 # ─────────────────────────────────────────────
@@ -561,3 +610,10 @@ if __name__ == "__main__":
     
     # Start monitoring
     monitor(dry_run=args.dry)
+
+
+
+
+
+
+
