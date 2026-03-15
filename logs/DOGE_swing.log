@@ -1,0 +1,560 @@
+🚀 DOGE Swing Bot — Continuous Pump Monitoring  🟢 LIVE
+============================================================
+  📊 Monitoring DOGE every 30s
+  🚀 Auto-buying on volume spikes (strength >= 3)
+  💰 Profit target: +15.0%
+  🛡️ Stop loss: -8.0%
+  💵 Minimum trade: $10.0
+============================================================
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:27:17] Cycle 1
+  💰 DOGE: $0.095238 | RSI: 42.0
+  📊 15min: -0.12% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:27:47] Cycle 2
+  💰 DOGE: $0.095217 | RSI: 41.4
+  📊 15min: -0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:28:18] Cycle 3
+  💰 DOGE: $0.095217 | RSI: 41.4
+  📊 15min: -0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:28:48] Cycle 4
+  💰 DOGE: $0.095217 | RSI: 41.4
+  📊 15min: -0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:29:18] Cycle 5
+  💰 DOGE: $0.095217 | RSI: 41.4
+  📊 15min: -0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:29:48] Cycle 6
+  💰 DOGE: $0.095290 | RSI: 43.4
+  📊 15min: -0.07% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:30:19] Cycle 7
+  💰 DOGE: $0.095281 | RSI: 41.3
+  📊 15min: +0.06% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:30:49] Cycle 8
+  💰 DOGE: $0.095263 | RSI: 40.9
+  📊 15min: +0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:31:19] Cycle 9
+  💰 DOGE: $0.095221 | RSI: 40.1
+  📊 15min: -0.00% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:31:49] Cycle 10
+  💰 DOGE: $0.095300 | RSI: 41.8
+  📊 15min: +0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:32:19] Cycle 11
+  💰 DOGE: $0.095328 | RSI: 42.6
+  📊 15min: +0.11% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:32:50] Cycle 12
+  💰 DOGE: $0.095328 | RSI: 42.6
+  📊 15min: +0.11% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:33:20] Cycle 13
+  💰 DOGE: $0.095328 | RSI: 42.6
+  📊 15min: +0.11% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:33:50] Cycle 14
+  💰 DOGE: $0.095367 | RSI: 43.7
+  📊 15min: +0.15% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:34:20] Cycle 15
+  💰 DOGE: $0.095376 | RSI: 44.0
+  📊 15min: +0.16% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:34:51] Cycle 16
+  💰 DOGE: $0.095376 | RSI: 44.0
+  📊 15min: +0.16% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:35:21] Cycle 17
+  💰 DOGE: $0.095376 | RSI: 44.6
+  📊 15min: +0.09% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:35:51] Cycle 18
+  💰 DOGE: $0.095148 | RSI: 40.0
+  📊 15min: -0.15% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:36:21] Cycle 19
+  💰 DOGE: $0.095148 | RSI: 40.0
+  📊 15min: -0.15% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:36:52] Cycle 20
+  💰 DOGE: $0.095277 | RSI: 42.5
+  📊 15min: -0.01% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:37:22] Cycle 21
+  💰 DOGE: $0.095317 | RSI: 43.3
+  📊 15min: +0.03% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:37:52] Cycle 22
+  💰 DOGE: $0.095325 | RSI: 43.5
+  📊 15min: +0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:38:22] Cycle 23
+  💰 DOGE: $0.095325 | RSI: 43.5
+  📊 15min: +0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:38:53] Cycle 24
+  💰 DOGE: $0.095290 | RSI: 42.7
+  📊 15min: +0.00% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:39:23] Cycle 25
+  💰 DOGE: $0.095290 | RSI: 42.7
+  📊 15min: +0.00% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:39:53] Cycle 26
+  💰 DOGE: $0.095264 | RSI: 42.2
+  📊 15min: -0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:40:23] Cycle 27
+  💰 DOGE: $0.095302 | RSI: 50.8
+  📊 15min: -0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:40:54] Cycle 28
+  💰 DOGE: $0.095242 | RSI: 49.7
+  📊 15min: -0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:41:24] Cycle 29
+  💰 DOGE: $0.095359 | RSI: 52.8
+  📊 15min: -0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:41:54] Cycle 30
+  💰 DOGE: $0.095359 | RSI: 52.8
+  📊 15min: -0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:42:24] Cycle 31
+  💰 DOGE: $0.095352 | RSI: 52.7
+  📊 15min: -0.03% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:42:54] Cycle 32
+  💰 DOGE: $0.095410 | RSI: 54.1
+  📊 15min: +0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:43:25] Cycle 33
+  💰 DOGE: $0.095410 | RSI: 54.3
+  📊 15min: +0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:43:55] Cycle 34
+  💰 DOGE: $0.095422 | RSI: 54.4
+  📊 15min: +0.05% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:44:25] Cycle 35
+  💰 DOGE: $0.095422 | RSI: 54.4
+  📊 15min: +0.05% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:44:55] Cycle 36
+  💰 DOGE: $0.095432 | RSI: 54.6
+  📊 15min: +0.06% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:45:26] Cycle 37
+  💰 DOGE: $0.095495 | RSI: 73.3
+  📊 15min: +0.24% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:45:56] Cycle 38
+  💰 DOGE: $0.095446 | RSI: 72.4
+  📊 15min: +0.19% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:46:26] Cycle 39
+  💰 DOGE: $0.095458 | RSI: 72.6
+  📊 15min: +0.20% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:46:56] Cycle 40
+  💰 DOGE: $0.095448 | RSI: 72.4
+  📊 15min: +0.19% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:47:27] Cycle 41
+  💰 DOGE: $0.095448 | RSI: 72.4
+  📊 15min: +0.19% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:47:57] Cycle 42
+  💰 DOGE: $0.095397 | RSI: 70.5
+  📊 15min: +0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:48:27] Cycle 43
+  💰 DOGE: $0.095438 | RSI: 72.2
+  📊 15min: +0.18% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:48:57] Cycle 44
+  💰 DOGE: $0.095495 | RSI: 73.3
+  📊 15min: +0.24% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:49:27] Cycle 45
+  💰 DOGE: $0.095495 | RSI: 73.3
+  📊 15min: +0.24% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:49:57] Cycle 46
+  💰 DOGE: $0.095495 | RSI: 73.3
+  📊 15min: +0.24% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:50:28] Cycle 47
+  💰 DOGE: $0.095450 | RSI: 66.6
+  📊 15min: +0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:50:58] Cycle 48
+  💰 DOGE: $0.095450 | RSI: 66.6
+  📊 15min: +0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:51:28] Cycle 49
+  💰 DOGE: $0.095450 | RSI: 66.6
+  📊 15min: +0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:51:58] Cycle 50
+  💰 DOGE: $0.095500 | RSI: 67.9
+  📊 15min: +0.07% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:52:28] Cycle 51
+  💰 DOGE: $0.095500 | RSI: 67.9
+  📊 15min: +0.07% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:52:58] Cycle 52
+  💰 DOGE: $0.095525 | RSI: 68.5
+  📊 15min: +0.10% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:53:29] Cycle 53
+  💰 DOGE: $0.095525 | RSI: 68.5
+  📊 15min: +0.10% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:53:59] Cycle 54
+  💰 DOGE: $0.095525 | RSI: 68.5
+  📊 15min: +0.10% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:54:29] Cycle 55
+  💰 DOGE: $0.095521 | RSI: 68.4
+  📊 15min: +0.09% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:55:00] Cycle 56
+  💰 DOGE: $0.095507 | RSI: 68.1
+  📊 15min: +0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:55:30] Cycle 57
+  💰 DOGE: $0.095500 | RSI: 69.0
+  📊 15min: +0.05% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:56:00] Cycle 58
+  💰 DOGE: $0.095500 | RSI: 69.0
+  📊 15min: +0.05% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:56:30] Cycle 59
+  💰 DOGE: $0.095525 | RSI: 69.8
+  📊 15min: +0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:57:01] Cycle 60
+  💰 DOGE: $0.095525 | RSI: 69.8
+  📊 15min: +0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:57:31] Cycle 61
+  💰 DOGE: $0.095525 | RSI: 69.8
+  📊 15min: +0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:58:01] Cycle 62
+  💰 DOGE: $0.095546 | RSI: 70.3
+  📊 15min: +0.10% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:58:31] Cycle 63
+  💰 DOGE: $0.095550 | RSI: 70.4
+  📊 15min: +0.11% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:59:02] Cycle 64
+  💰 DOGE: $0.095550 | RSI: 70.4
+  📊 15min: +0.11% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [14:59:32] Cycle 65
+  💰 DOGE: $0.095584 | RSI: 71.1
+  📊 15min: +0.14% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:00:02] Cycle 66
+  💰 DOGE: $0.095618 | RSI: 70.1
+  📊 15min: +0.12% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:00:33] Cycle 67
+  💰 DOGE: $0.095620 | RSI: 70.2
+  📊 15min: +0.12% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:01:03] Cycle 68
+  💰 DOGE: $0.095518 | RSI: 65.1
+  📊 15min: +0.01% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:01:33] Cycle 69
+  💰 DOGE: $0.095476 | RSI: 63.2
+  📊 15min: -0.03% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:02:03] Cycle 70
+  💰 DOGE: $0.095465 | RSI: 62.7
+  📊 15min: -0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:02:34] Cycle 71
+  💰 DOGE: $0.095465 | RSI: 62.7
+  📊 15min: -0.04% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:03:04] Cycle 72
+  💰 DOGE: $0.095528 | RSI: 65.6
+  📊 15min: +0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:03:34] Cycle 73
+  💰 DOGE: $0.095528 | RSI: 65.6
+  📊 15min: +0.02% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:04:04] Cycle 74
+  💰 DOGE: $0.095518 | RSI: 65.1
+  📊 15min: +0.01% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:04:34] Cycle 75
+  💰 DOGE: $0.095518 | RSI: 65.1
+  📊 15min: +0.01% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:05:04] Cycle 76
+  💰 DOGE: $0.095543 | RSI: 60.5
+  📊 15min: -0.08% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:05:35] Cycle 77
+  💰 DOGE: $0.095496 | RSI: 58.2
+  📊 15min: -0.13% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:06:05] Cycle 78
+  💰 DOGE: $0.095340 | RSI: 51.7
+  📊 15min: -0.29% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)
+  ──────────────────────────────────
+  🔍 Analyzing Dogecoin for pump signals...
+  [15:06:35] Cycle 79
+  💰 DOGE: $0.095287 | RSI: 49.7
+  📊 15min: -0.35% | Signals: 0/10
+  📊 No pump signals
+  📊 No entry signals (strength: 0)

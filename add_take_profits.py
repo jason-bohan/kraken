@@ -49,6 +49,16 @@ ASSET_TO_PAIR = {
     "IDOS":   "IDOSUSD",
     "LINK":   "LINKUSD",
     "XPL":    "XPLUSD",
+    "ALCX":   "ALCXUSD",
+    "NEAR":   "NEARUSD",
+    "PEPE":   "PEPEUSD",
+    "BABY":   "BABYUSD",
+    "FARTCOIN": "FARTCOINUSD",
+    "HBAR":   "HBARUSD",
+    "NIGHT":  "NIGHTUSD",
+    "RENDER": "RENDERUSD",
+    "TRUMP":  "TRUMPUSD",
+    "XCN":    "XCNUSD",
 }
 
 # Per-pair max decimal places Kraken allows on price
@@ -73,6 +83,16 @@ PAIR_DECIMALS = {
     "IDOSUSD":  5,
     "LINKUSD":  3,
     "XPLUSD":   4,
+    "ALCXUSD":  2,
+    "NEARUSD":  3,
+    "PEPECOINUSD": 5,
+    "BABYUSD":  5,
+    "FARTCOINUSD": 4,
+    "HBARUSD":  5,
+    "NIGHTUSD": 5,
+    "RENDERUSD": 3,
+    "TRUMPUSD": 3,
+    "XCNUSD":   5,
 }
 
 # Skip these (quote currencies, staking tokens, etc.)

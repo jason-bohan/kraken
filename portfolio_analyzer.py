@@ -24,7 +24,7 @@ import json
 import csv
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
-from kraken_connection import get_balance, get_ticker, get_trade_history, get_closed_orders
+from kraken_connection import get_balance, get_ticker, get_trade_history, get_closed_orders, query_orders
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -96,23 +96,46 @@ def get_kraken_trade_history(period_days=None, count=100):
         print(f"  ⚠️ Error getting Kraken trade history: {e}")
         return []
 
+BOT_USERREFS = {
+    1: "stock_swing_bot",
+    2: "btc_swing_bot",
+    3: "eth_swing_bot",
+    4: "sol_swing_bot",
+    5: "dot_swing_bot",
+    6: "doge_swing_bot",
+    7: "btc_momentum_bot",
+    8: "dynamic_hft_bot",
+    9: "universal_bull_bot",
+}
+
+# Cache: ordertxid -> userref (populated once per run)
+_order_userref_cache: dict[str, int] = {}
+
+
+def _populate_userref_cache(trades: list) -> None:
+    """Batch-lookup ordertxids via QueryOrders to get userref for each trade."""
+    ordertxids = list({
+        t.get("raw_data", {}).get("ordertxid", "")
+        for t in trades
+    } - {""})
+    if not ordertxids:
+        return
+
+    # Kraken QueryOrders accepts up to 20 txids per call
+    for i in range(0, len(ordertxids), 20):
+        batch = ordertxids[i:i+20]
+        orders = query_orders(batch)
+        for txid, info in orders.items():
+            ref = int(info.get("userref", 0))
+            if ref:
+                _order_userref_cache[txid] = ref
+
+
 def identify_trade_source(trade):
     """Identify which bot made the trade using Kraken userref tag."""
-    # Enum: each bot sets a unique userref integer when placing orders
-    BOT_USERREFS = {
-        1: "stock_swing_bot",
-        2: "btc_swing_bot",
-        3: "eth_swing_bot",
-        4: "sol_swing_bot",
-        5: "dot_swing_bot",
-        6: "doge_swing_bot",
-        7: "btc_momentum_bot",
-        8: "dynamic_hft_bot",
-        9: "universal_bull_bot",
-    }
-
     raw = trade.get('raw_data', {})
-    userref = int(raw.get('userref', 0))
+    ordertxid = raw.get('ordertxid', '')
+    userref = _order_userref_cache.get(ordertxid, 0)
     if userref and userref in BOT_USERREFS:
         return BOT_USERREFS[userref]
     return "Manual"
@@ -826,7 +849,10 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
         return
     
     print(f"  📊 Found {len(trades)} raw trades")
-    
+
+    # Batch-lookup order userrefs for bot identification
+    _populate_userref_cache(trades)
+
     # Calculate realized P&L by matching buy/sell pairs
     print("  🔄 Calculating realized P&L...")
     pnl_trades, open_positions = calculate_realized_pnl(trades)

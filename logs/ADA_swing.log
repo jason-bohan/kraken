@@ -19538,3 +19538,464 @@
   📝 Reason: 5m: MACD bullish; 15m: MACD bearish; 1h: MACD bearish; 4h: RSI oversold (19.4)
 
 [16:15:31] Cycle 1792
+  Learning: 0 closed trades | win rate 0.0% | avg P&L +0.00%
+  Learning status: need 12 closed trades, have 0
+  Position detected but no open trade row found — entry was not logged
+============================================================
+  🪙 Crypto ADA Swing Trading Bot 🟢 LIVE 🤖 AUTO
+  Pair: ADAUSD
+  Risk per trade: 2.0%
+  Min risk/reward: 2.0:1
+  Profit target: 6.0%
+  Stop loss: 3.0%
+  RSI thresholds: 30/70
+============================================================
+
+[14:27:17] Cycle 1
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:27:48] Cycle 2
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:28:18] Cycle 3
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:28:49] Cycle 4
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:29:20] Cycle 5
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:29:50] Cycle 6
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:30:21] Cycle 7
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:30:51] Cycle 8
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:31:22] Cycle 9
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:31:52] Cycle 10
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:32:23] Cycle 11
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:32:54] Cycle 12
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:33:24] Cycle 13
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:33:55] Cycle 14
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:34:25] Cycle 15
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:34:56] Cycle 16
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:35:27] Cycle 17
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:35:57] Cycle 18
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:36:28] Cycle 19
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:36:59] Cycle 20
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:37:30] Cycle 21
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:38:01] Cycle 22
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:38:31] Cycle 23
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:39:02] Cycle 24
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:39:32] Cycle 25
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:40:03] Cycle 26
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:40:34] Cycle 27
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:41:04] Cycle 28
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:41:35] Cycle 29
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:42:06] Cycle 30
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:42:36] Cycle 31
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:43:07] Cycle 32
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:43:38] Cycle 33
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:44:09] Cycle 34
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:44:39] Cycle 35
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:45:10] Cycle 36
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:45:40] Cycle 37
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:46:11] Cycle 38
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:46:42] Cycle 39
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:47:12] Cycle 40
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:47:43] Cycle 41
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:48:14] Cycle 42
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:48:44] Cycle 43
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:49:15] Cycle 44
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:49:45] Cycle 45
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:50:16] Cycle 46
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:50:47] Cycle 47
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:51:17] Cycle 48
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:51:48] Cycle 49
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:52:18] Cycle 50
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:52:49] Cycle 51
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:53:20] Cycle 52
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:53:50] Cycle 53
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:54:21] Cycle 54
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:54:51] Cycle 55
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:55:22] Cycle 56
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:55:52] Cycle 57
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:56:23] Cycle 58
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:56:54] Cycle 59
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:57:24] Cycle 60
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:57:55] Cycle 61
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:58:25] Cycle 62
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:58:56] Cycle 63
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:59:27] Cycle 64
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[14:59:58] Cycle 65
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:00:28] Cycle 66
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:00:59] Cycle 67
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:01:30] Cycle 68
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:02:01] Cycle 69
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:02:31] Cycle 70
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:03:02] Cycle 71
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:03:33] Cycle 72
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:04:04] Cycle 73
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:04:34] Cycle 74
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish
+  ⚠️ Sell signal but no position
+
+[15:05:05] Cycle 75
+  💰 Current Price: $0.26
+  🎯 Signal: SELL (confidence: 0.20)
+  📝 Reason: 5m: MACD bearish; 15m: MACD bearish; 1h: MACD bullish; 4h: MACD bearish

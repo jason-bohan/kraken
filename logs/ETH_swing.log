@@ -18364,3 +18364,224 @@
 
 [16:09:35] Cycle 1779
   💰 Current Price: $1979.35
+  Learning: 0 closed trades | win rate 0.0% | avg P&L +0.00%
+  Learning status: need 12 closed trades, have 0
+  Position detected but no open trade row found — entry was not logged
+============================================================
+  🪙 Crypto ETH Swing Trading Bot 🟢 LIVE 🤖 AUTO
+  Pair: ETHUSD
+  Risk per trade: 2.0%
+  Min risk/reward: 2.0:1
+  Profit target: 6.0%
+  Stop loss: 3.0%
+  RSI thresholds: 35/75
+============================================================
+
+[14:27:17] Cycle 1
+  💰 Current Price: $2092.54
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:27:48] Cycle 2
+  💰 Current Price: $2092.68
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:28:18] Cycle 3
+  💰 Current Price: $2093.19
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.4); 15m: MACD bearish; 1h: MACD bullish
+
+[14:28:49] Cycle 4
+  💰 Current Price: $2093.19
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.4); 15m: MACD bearish; 1h: MACD bullish
+
+[14:29:20] Cycle 5
+  💰 Current Price: $2093.54
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.5); 15m: MACD bearish; 1h: MACD bullish
+
+[14:29:50] Cycle 6
+  💰 Current Price: $2093.20
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.4); 15m: MACD bearish; 1h: MACD bullish
+
+[14:30:21] Cycle 7
+  💰 Current Price: $2093.21
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.7); 15m: MACD bearish; 1h: MACD bullish
+
+[14:30:51] Cycle 8
+  💰 Current Price: $2090.01
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.5); 15m: MACD bearish; 1h: MACD bullish
+
+[14:31:22] Cycle 9
+  💰 Current Price: $2089.34
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.2); 15m: MACD bearish; 1h: MACD bullish
+
+[14:31:52] Cycle 10
+  💰 Current Price: $2090.83
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.9); 15m: MACD bearish; 1h: MACD bullish
+
+[14:32:23] Cycle 11
+  💰 Current Price: $2090.76
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.8); 15m: MACD bearish; 1h: MACD bullish
+
+[14:32:54] Cycle 12
+  💰 Current Price: $2091.39
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:33:24] Cycle 13
+  💰 Current Price: $2092.05
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.4); 15m: MACD bearish; 1h: MACD bullish
+
+[14:33:55] Cycle 14
+  💰 Current Price: $2091.17
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.0); 15m: MACD bearish; 1h: MACD bullish
+
+[14:34:26] Cycle 15
+  💰 Current Price: $2091.29
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:34:56] Cycle 16
+  💰 Current Price: $2091.41
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:35:27] Cycle 17
+  💰 Current Price: $2087.79
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (21.6); 15m: MACD bearish; 1h: MACD bullish
+
+[14:35:57] Cycle 18
+  💰 Current Price: $2087.42
+  🎯 Signal: BUY (confidence: 0.50)
+  📝 Reason: 5m: RSI oversold (34.9); 5m: MACD bearish; 15m: RSI oversold (21.5); 15m: MACD bearish
+
+[14:36:28] Cycle 19
+  💰 Current Price: $2089.58
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.3); 15m: MACD bearish; 1h: MACD bullish
+
+[14:36:58] Cycle 20
+  💰 Current Price: $2089.24
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.2); 15m: MACD bearish; 1h: MACD bullish
+
+[14:37:29] Cycle 21
+  💰 Current Price: $2089.08
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:38:00] Cycle 22
+  💰 Current Price: $2089.17
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:38:30] Cycle 23
+  💰 Current Price: $2090.00
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.5); 15m: MACD bearish; 1h: MACD bullish
+
+[14:39:01] Cycle 24
+  💰 Current Price: $2089.67
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.4); 15m: MACD bearish; 1h: MACD bullish
+
+[14:39:31] Cycle 25
+  💰 Current Price: $2088.92
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.0); 15m: MACD bearish; 1h: MACD bullish
+
+[14:40:02] Cycle 26
+  💰 Current Price: $2089.06
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.0); 15m: MACD bearish; 1h: MACD bullish
+
+[14:40:32] Cycle 27
+  💰 Current Price: $2089.06
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:41:03] Cycle 28
+  💰 Current Price: $2089.06
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:41:33] Cycle 29
+  💰 Current Price: $2090.31
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.6); 15m: MACD bearish; 1h: MACD bullish
+
+[14:42:04] Cycle 30
+  💰 Current Price: $2089.97
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (22.5); 15m: MACD bearish; 1h: MACD bullish
+
+[14:42:35] Cycle 31
+  💰 Current Price: $2091.63
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.2); 15m: MACD bearish; 1h: MACD bullish
+
+[14:43:05] Cycle 32
+  💰 Current Price: $2091.18
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.0); 15m: MACD bearish; 1h: MACD bullish
+
+[14:43:36] Cycle 33
+  💰 Current Price: $2091.34
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.1); 15m: MACD bearish; 1h: MACD bullish
+
+[14:44:06] Cycle 34
+  💰 Current Price: $2091.90
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.3); 15m: MACD bearish; 1h: MACD bullish
+
+[14:44:37] Cycle 35
+  💰 Current Price: $2092.23
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (23.5); 15m: MACD bearish; 1h: MACD bullish
+
+[14:45:08] Cycle 36
+  💰 Current Price: $2092.47
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (25.3); 15m: MACD bearish; 1h: MACD bullish
+
+[14:45:38] Cycle 37
+  💰 Current Price: $2092.60
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (24.8); 15m: MACD bearish; 1h: MACD bullish
+
+[14:46:09] Cycle 38
+  💰 Current Price: $2092.60
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (24.8); 15m: MACD bearish; 1h: MACD bullish
+
+[14:46:39] Cycle 39
+  💰 Current Price: $2092.61
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (24.8); 15m: MACD bearish; 1h: MACD bullish
+
+[14:47:10] Cycle 40
+  💰 Current Price: $2092.86
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (25.2); 15m: MACD bearish; 1h: MACD bullish
+
+[14:47:40] Cycle 41
+  💰 Current Price: $2092.09
+  🎯 Signal: BUY (confidence: 0.40)
+  📝 Reason: 5m: MACD bearish; 15m: RSI oversold (24.4); 15m: MACD bearish; 1h: MACD bullish
+
+[14:48:11] Cycle 42
+  💰 Current Price: $2092.09
+  🎯 Signal: BUY (confidence: 0.40)

@@ -1,0 +1,804 @@
+============================================================
+  Dynamic HFT Bot — Kraken  🟢 LIVE
+  Top pairs       : 10 (rescanned every 15 min)
+  Profit target   : +8%
+  Stop loss       : -4%
+  Max per pair    : $15.0
+  Max total       : $30.0
+  Check every     : 30s per pair
+============================================================
+
+[14:27:17] 🔍 Scan #1 — finding top 10 volatile pairs...
+
+  🔍 Top 10 pairs (volatility + performance score):
+     XCNUSD               score=4.91 | $2,745,968 24h volume
+     TAOUSD               score=2.79 | $13,257,704 24h volume
+     TAOEUR               score=2.47 | $2,355,293 24h volume
+     FETUSD               score=2.24 | $1,420,819 24h volume
+     XZECZUSD             score=1.65 | $4,278,384 24h volume
+     RENDERUSD            score=1.38 | $1,504,619 24h volume
+     NEARUSD              score=1.28 | $1,603,275 24h volume
+     TRUMPUSD             score=1.00 | $2,545,972 24h volume
+     HBARUSD              score=0.98 | $4,314,949 24h volume
+  [14:27:17] ▶️ Adding TAOUSD to rotation
+  [14:27:17] 🚀 Starting thread for TAOUSD
+  [14:27:17] ▶️ Adding XCNUSD to rotation
+  [14:27:17] 🚀 Starting thread for XCNUSD
+  [14:27:17] ▶️ Adding FETUSD to rotation
+  [14:27:17] 🚀 Starting thread for FETUSD
+  [14:27:17] ▶️ Adding TRUMPUSD to rotation
+  [14:27:17] 🚀 Starting thread for TRUMPUSD
+  [14:27:17] ▶️ Adding NEARUSD to rotation
+  [14:27:17] 🚀 Starting thread for NEARUSD
+  [14:27:17] ▶️ Adding TAOEUR to rotation
+  [14:27:17] 🚀 Starting thread for TAOEUR
+  [14:27:17] ▶️ Adding XZECZUSD to rotation
+  [14:27:17] 🚀 Starting thread for XZECZUSD
+  [14:27:17] ▶️ Adding RENDERUSD to rotation
+  [14:27:17] 🚀 Starting thread for RENDERUSD
+  [14:27:17] ▶️ Adding HBARUSD to rotation
+  [14:27:17] 🚀 Starting thread for HBARUSD
+
+  📊 Positions: 0 | Deployed: $0.00 | USD balance: $2.37
+  [14:27:17] TAOUSD             $268.3105 | RSI 13 | Dip 1.4% | Trend DOWN HELD
+  [14:27:17] NEARUSD            $1.3340 | RSI 59 | Dip 1.1% | Trend DOWN
+  [14:27:17] TRUMPUSD           $3.9670 | RSI 94 | Dip 0.8% | Trend DOWN
+  [14:27:17] TAOEUR             $235.2863 | RSI 17 | Dip 1.4% | Trend DOWN HELD
+  [14:27:17] RENDERUSD          $1.8340 | RSI 80 | Dip 1.3% | Trend DOWN
+  [14:27:17] XCNUSD             $0.0063 | RSI 18 | Dip 0.8% | Trend UP HELD
+  [14:27:17] FETUSD             $0.1945 | RSI 12 | Dip 1.5% | Trend DOWN
+  [14:27:17] XZECZUSD           $226.6700 | RSI 15 | Dip 0.6% | Trend DOWN HELD
+  [14:27:17] HBARUSD            $0.0952 | RSI 9 | Dip 0.6% | Trend DOWN
+  [14:27:48] FETUSD             $0.1945 | RSI 12 | Dip 1.5% | Trend DOWN
+  [14:27:48] RENDERUSD          $1.8350 | RSI 80 | Dip 1.3% | Trend DOWN
+  [14:27:48] NEARUSD            $1.3340 | RSI 59 | Dip 1.1% | Trend DOWN
+  [14:27:48] XCNUSD             $0.0063 | RSI 20 | Dip 0.3% | Trend UP HELD
+  [14:27:48] TAOEUR             $235.5718 | RSI 18 | Dip 1.3% | Trend DOWN HELD
+  [14:27:48] XZECZUSD           $226.6000 | RSI 15 | Dip 0.7% | Trend DOWN HELD
+  [14:27:48] TRUMPUSD           $3.9680 | RSI 94 | Dip 0.8% | Trend DOWN
+  [14:27:48] TAOUSD             $268.5328 | RSI 14 | Dip 1.3% | Trend DOWN HELD
+  [14:27:48] HBARUSD            $0.0952 | RSI 9 | Dip 0.5% | Trend DOWN
+  [14:28:18] TAOUSD             $268.7801 | RSI 13 | Dip 1.2% | Trend DOWN HELD
+  [14:28:18] FETUSD             $0.1946 | RSI 11 | Dip 1.5% | Trend DOWN
+  [14:28:18] RENDERUSD          $1.8350 | RSI 79 | Dip 1.3% | Trend DOWN
+  [14:28:18] TRUMPUSD           $3.9680 | RSI 94 | Dip 0.8% | Trend DOWN
+  [14:28:18] XCNUSD             $0.0063 | RSI 22 | Dip 0.2% | Trend UP HELD
+  [14:28:18] NEARUSD            $1.3340 | RSI 59 | Dip 1.1% | Trend DOWN
+  [14:28:18] HBARUSD            $0.0952 | RSI 8 | Dip 0.5% | Trend DOWN
+  [14:28:18] XZECZUSD           $226.7100 | RSI 16 | Dip 0.6% | Trend DOWN HELD
+  [14:28:18] TAOEUR             $235.8951 | RSI 14 | Dip 1.1% | Trend DOWN HELD
+  [14:28:48] FETUSD             $0.1945 | RSI 11 | Dip 1.5% | Trend DOWN
+  [14:28:48] TRUMPUSD           $3.9660 | RSI 94 | Dip 0.8% | Trend DOWN
+  [14:28:48] XCNUSD             $0.0063 | RSI 21 | Dip 0.2% | Trend UP HELD
+  [14:28:48] RENDERUSD          $1.8350 | RSI 79 | Dip 1.3% | Trend DOWN
+  [14:28:48] NEARUSD            $1.3330 | RSI 59 | Dip 1.2% | Trend DOWN
+  [14:28:48] HBARUSD            $0.0952 | RSI 12 | Dip 0.5% | Trend DOWN
+  [14:28:48] TAOUSD             $269.2216 | RSI 16 | Dip 1.1% | Trend DOWN HELD
+  [14:28:48] TAOEUR             $236.2627 | RSI 14 | Dip 1.0% | Trend DOWN HELD
+  [14:28:48] XZECZUSD           $227.0900 | RSI 17 | Dip 0.5% | Trend UP HELD
+  [14:29:19] TRUMPUSD           $3.9660 | RSI 94 | Dip 0.8% | Trend DOWN
+  [14:29:19] TAOUSD             $269.6497 | RSI 14 | Dip 0.9% | Trend DOWN HELD
+  [14:29:19] FETUSD             $0.1947 | RSI 12 | Dip 1.4% | Trend DOWN
+  [14:29:19] XZECZUSD           $227.2900 | RSI 13 | Dip 0.4% | Trend UP HELD
+  [14:29:19] NEARUSD            $1.3330 | RSI 53 | Dip 1.2% | Trend DOWN
+  [14:29:19] RENDERUSD          $1.8340 | RSI 79 | Dip 1.3% | Trend DOWN
+  [14:29:19] XCNUSD             $0.0063 | RSI 25 | Dip 0.3% | Trend UP HELD
+  [14:29:19] TAOEUR             $236.5752 | RSI 19 | Dip 0.8% | Trend UP HELD
+  [14:29:19] HBARUSD            $0.0953 | RSI 9 | Dip 0.5% | Trend DOWN
+  [14:29:49] XZECZUSD           $227.2700 | RSI 13 | Dip 0.4% | Trend UP HELD
+  [14:29:49] TAOUSD             $269.5346 | RSI 14 | Dip 1.0% | Trend DOWN HELD
+  [14:29:49] TRUMPUSD           $3.9630 | RSI 94 | Dip 0.9% | Trend DOWN
+  [14:29:49] NEARUSD            $1.3330 | RSI 53 | Dip 1.2% | Trend DOWN
+  [14:29:49] FETUSD             $0.1946 | RSI 12 | Dip 1.5% | Trend DOWN
+  [14:29:49] RENDERUSD          $1.8350 | RSI 78 | Dip 1.3% | Trend DOWN
+  [14:29:49] TAOEUR             $236.3780 | RSI 19 | Dip 0.9% | Trend DOWN HELD
+  [14:29:49] XCNUSD             $0.0063 | RSI 25 | Dip 0.2% | Trend UP HELD
+  [14:29:49] HBARUSD            $0.0952 | RSI 10 | Dip 0.5% | Trend DOWN
+  [14:30:19] TAOUSD             $270.0000 | RSI 15 | Dip 0.8% | Trend UP HELD
+  [14:30:19] NEARUSD            $1.3330 | RSI 56 | Dip 1.2% | Trend DOWN
+  [14:30:19] TRUMPUSD           $3.9530 | RSI 81 | Dip 0.7% | Trend DOWN
+  [14:30:19] RENDERUSD          $1.8350 | RSI 78 | Dip 1.3% | Trend DOWN
+  [14:30:19] XCNUSD             $0.0063 | RSI 25 | Dip 0.2% | Trend UP HELD
+  [14:30:19] TAOEUR             $236.9241 | RSI 20 | Dip 0.7% | Trend UP HELD
+  [14:30:19] FETUSD             $0.1945 | RSI 10 | Dip 1.5% | Trend DOWN
+  [14:30:19] XZECZUSD           $227.2600 | RSI 14 | Dip 0.4% | Trend UP HELD
+  [14:30:20] HBARUSD            $0.0952 | RSI 9 | Dip 0.4% | Trend DOWN
+  [14:30:50] NEARUSD            $1.3320 | RSI 55 | Dip 1.3% | Trend DOWN
+  [14:30:50] TAOUSD             $270.1053 | RSI 16 | Dip 0.8% | Trend UP HELD
+  [14:30:50] XCNUSD             $0.0063 | RSI 26 | Dip 0.2% | Trend UP HELD
+  [14:30:50] RENDERUSD          $1.8360 | RSI 78 | Dip 1.2% | Trend DOWN
+  [14:30:50] HBARUSD            $0.0952 | RSI 9 | Dip 0.5% | Trend DOWN
+  [14:30:50] XZECZUSD           $227.2200 | RSI 14 | Dip 0.4% | Trend UP HELD
+  [14:30:50] FETUSD             $0.1945 | RSI 10 | Dip 1.5% | Trend DOWN
+  [14:30:50] TRUMPUSD           $3.9520 | RSI 81 | Dip 0.8% | Trend DOWN
+  [14:30:50] TAOEUR             $236.8968 | RSI 20 | Dip 0.7% | Trend UP HELD
+  [14:31:20] FETUSD             $0.1950 | RSI 10 | Dip 1.3% | Trend UP
+  [14:31:20] ⚠️ FETUSD signal but no budget left
+  [14:31:20] NEARUSD            $1.3320 | RSI 55 | Dip 1.3% | Trend DOWN
+  [14:31:20] TAOUSD             $270.0874 | RSI 17 | Dip 0.8% | Trend UP HELD
+  [14:31:20] XCNUSD             $0.0063 | RSI 22 | Dip 0.3% | Trend UP HELD
+  [14:31:20] RENDERUSD          $1.8340 | RSI 79 | Dip 1.3% | Trend DOWN
+  [14:31:20] HBARUSD            $0.0951 | RSI 10 | Dip 0.5% | Trend DOWN
+  [14:31:20] XZECZUSD           $227.2900 | RSI 15 | Dip 0.4% | Trend UP HELD
+  [14:31:20] TRUMPUSD           $3.9590 | RSI 81 | Dip 0.6% | Trend DOWN
+  [14:31:20] TAOEUR             $236.9534 | RSI 18 | Dip 0.7% | Trend UP HELD
+  [14:31:50] FETUSD             $0.1955 | RSI 16 | Dip 1.0% | Trend UP
+  [14:31:50] ⚠️ FETUSD signal but no budget left
+  [14:31:50] XZECZUSD           $227.6200 | RSI 16 | Dip 0.2% | Trend UP HELD
+  [14:31:50] TAOUSD             $269.5338 | RSI 17 | Dip 1.0% | Trend DOWN HELD
+  [14:31:50] TRUMPUSD           $3.9600 | RSI 81 | Dip 0.6% | Trend DOWN
+  [14:31:50] RENDERUSD          $1.8410 | RSI 79 | Dip 1.0% | Trend DOWN
+  [14:31:50] XCNUSD             $0.0063 | RSI 23 | Dip 0.2% | Trend UP HELD
+  [14:31:50] NEARUSD            $1.3330 | RSI 55 | Dip 1.2% | Trend DOWN
+  [14:31:50] HBARUSD            $0.0952 | RSI 10 | Dip 0.5% | Trend DOWN
+  [14:31:50] TAOEUR             $236.5462 | RSI 18 | Dip 0.9% | Trend DOWN HELD
+  [14:32:21] FETUSD             $0.1947 | RSI 17 | Dip 1.4% | Trend UP
+  [14:32:21] ⚠️ FETUSD signal but no budget left
+  [14:32:21] XCNUSD             $0.0064 | RSI 23 | Dip -0.2% | Trend UP HELD
+  [14:32:21] RENDERUSD          $1.8410 | RSI 85 | Dip 1.0% | Trend DOWN
+  [14:32:21] TRUMPUSD           $3.9600 | RSI 78 | Dip 0.6% | Trend DOWN
+  [14:32:21] NEARUSD            $1.3310 | RSI 67 | Dip 1.3% | Trend DOWN
+  [14:32:21] HBARUSD            $0.0952 | RSI 8 | Dip 0.5% | Trend DOWN
+  [14:32:21] XZECZUSD           $227.6500 | RSI 15 | Dip 0.2% | Trend UP HELD
+  [14:32:21] TAOUSD             $269.2863 | RSI 12 | Dip 1.1% | Trend DOWN HELD
+  [14:32:21] TAOEUR             $236.3445 | RSI 17 | Dip 0.9% | Trend DOWN HELD
+  [14:32:51] XCNUSD             $0.0063 | RSI 23 | Dip 0.3% | Trend UP HELD
+  [14:32:51] NEARUSD            $1.3310 | RSI 67 | Dip 1.3% | Trend DOWN
+  [14:32:51] RENDERUSD          $1.8400 | RSI 85 | Dip 1.0% | Trend DOWN
+  [14:32:51] FETUSD             $0.1947 | RSI 17 | Dip 1.4% | Trend UP
+  [14:32:51] ⚠️ FETUSD signal but no budget left
+  [14:32:51] HBARUSD            $0.0952 | RSI 10 | Dip 0.5% | Trend DOWN
+  [14:32:51] TRUMPUSD           $3.9590 | RSI 78 | Dip 0.6% | Trend DOWN
+  [14:32:52] XZECZUSD           $227.6200 | RSI 14 | Dip 0.2% | Trend UP HELD
+  [14:32:52] TAOUSD             $269.1053 | RSI 12 | Dip 1.1% | Trend DOWN HELD
+  [14:32:52] TAOEUR             $236.1305 | RSI 17 | Dip 1.0% | Trend DOWN HELD
+  [14:33:22] XCNUSD             $0.0063 | RSI 23 | Dip 0.9% | Trend UP HELD
+  [14:33:22] FETUSD             $0.1943 | RSI 18 | Dip 1.6% | Trend DOWN
+  [14:33:22] RENDERUSD          $1.8410 | RSI 85 | Dip 1.0% | Trend DOWN
+  [14:33:22] XZECZUSD           $228.0100 | RSI 17 | Dip 0.0% | Trend UP HELD
+  [14:33:22] TRUMPUSD           $3.9600 | RSI 77 | Dip 0.6% | Trend DOWN
+  [14:33:22] NEARUSD            $1.3300 | RSI 67 | Dip 1.4% | Trend DOWN
+  [14:33:22] HBARUSD            $0.0953 | RSI 13 | Dip 0.4% | Trend DOWN
+  [14:33:22] TAOEUR             $235.6418 | RSI 15 | Dip 1.2% | Trend DOWN HELD
+  [14:33:22] TAOUSD             $268.5283 | RSI 12 | Dip 1.3% | Trend DOWN HELD
+  [14:33:52] RENDERUSD          $1.8400 | RSI 85 | Dip 1.0% | Trend DOWN
+  [14:33:52] TAOEUR             $235.6053 | RSI 15 | Dip 1.3% | Trend DOWN HELD
+  [14:33:52] TAOUSD             $268.6467 | RSI 12 | Dip 1.3% | Trend DOWN HELD
+  [14:33:52] XCNUSD             $0.0063 | RSI 23 | Dip 0.8% | Trend UP HELD
+  [14:33:52] NEARUSD            $1.3300 | RSI 67 | Dip 1.4% | Trend DOWN
+  [14:33:52] XZECZUSD           $228.0100 | RSI 17 | Dip 0.2% | Trend UP HELD
+  [14:33:52] HBARUSD            $0.0953 | RSI 13 | Dip 0.4% | Trend UP
+  [14:33:52] ⚠️ HBARUSD signal but no budget left
+  [14:33:52] TRUMPUSD           $3.9600 | RSI 77 | Dip 0.6% | Trend DOWN
+  [14:33:52] FETUSD             $0.1941 | RSI 18 | Dip 1.7% | Trend DOWN
+  [14:34:23] RENDERUSD          $1.8380 | RSI 85 | Dip 1.1% | Trend DOWN
+  [14:34:23] XCNUSD             $0.0063 | RSI 23 | Dip 0.9% | Trend UP HELD
+  [14:34:23] TRUMPUSD           $3.9610 | RSI 77 | Dip 0.5% | Trend DOWN
+  [14:34:23] HBARUSD            $0.0953 | RSI 13 | Dip 0.4% | Trend UP
+  [14:34:23] ⚠️ HBARUSD signal but no budget left
+  [14:34:23] XZECZUSD           $228.2800 | RSI 16 | Dip 0.1% | Trend UP HELD
+  [14:34:23] FETUSD             $0.1940 | RSI 17 | Dip 1.8% | Trend DOWN
+  [14:34:23] TAOUSD             $269.0924 | RSI 13 | Dip 1.1% | Trend DOWN HELD
+  [14:34:23] NEARUSD            $1.3310 | RSI 68 | Dip 1.3% | Trend DOWN
+  [14:34:23] TAOEUR             $235.9830 | RSI 16 | Dip 1.1% | Trend DOWN HELD
+  [14:34:53] HBARUSD            $0.0953 | RSI 14 | Dip 0.4% | Trend UP
+  [14:34:53] ⚠️ HBARUSD signal but no budget left
+  [14:34:53] TAOEUR             $236.3645 | RSI 18 | Dip 0.9% | Trend DOWN HELD
+  [14:34:53] RENDERUSD          $1.8380 | RSI 85 | Dip 1.1% | Trend DOWN
+  [14:34:53] TRUMPUSD           $3.9660 | RSI 77 | Dip 0.4% | Trend DOWN
+  [14:34:53] FETUSD             $0.1940 | RSI 17 | Dip 1.8% | Trend DOWN
+  [14:34:53] XCNUSD             $0.0063 | RSI 24 | Dip 0.8% | Trend UP HELD
+  [14:34:53] NEARUSD            $1.3310 | RSI 68 | Dip 1.3% | Trend DOWN
+  [14:34:53] TAOUSD             $269.7455 | RSI 15 | Dip 0.9% | Trend UP HELD
+  [14:34:53] XZECZUSD           $228.6000 | RSI 16 | Dip -0.0% | Trend UP HELD
+  [14:35:23] HBARUSD            $0.0952 | RSI 15 | Dip 0.5% | Trend DOWN
+  [14:35:23] TAOEUR             $236.1308 | RSI 21 | Dip 1.0% | Trend DOWN HELD
+  [14:35:23] TAOUSD             $269.2579 | RSI 15 | Dip 1.1% | Trend DOWN HELD
+  [14:35:23] XZECZUSD           $228.0100 | RSI 17 | Dip 0.2% | Trend UP HELD
+  [14:35:23] FETUSD             $0.1938 | RSI 17 | Dip 1.9% | Trend DOWN
+  [14:35:23] TRUMPUSD           $3.9550 | RSI 79 | Dip 0.7% | Trend DOWN
+  [14:35:23] XCNUSD             $0.0063 | RSI 19 | Dip 0.9% | Trend UP HELD
+  [14:35:23] RENDERUSD          $1.8320 | RSI 84 | Dip 1.5% | Trend DOWN
+  [14:35:23] NEARUSD            $1.3290 | RSI 70 | Dip 1.5% | Trend DOWN
+  [14:35:54] FETUSD             $0.1933 | RSI 17 | Dip 2.1% | Trend DOWN
+  [14:35:54] TAOUSD             $269.0193 | RSI 15 | Dip 1.2% | Trend DOWN HELD
+  [14:35:54] TRUMPUSD           $3.9530 | RSI 79 | Dip 0.7% | Trend DOWN
+  [14:35:54] RENDERUSD          $1.8230 | RSI 79 | Dip 1.9% | Trend DOWN
+  [14:35:54] TAOEUR             $235.9732 | RSI 21 | Dip 1.1% | Trend DOWN HELD
+  [14:35:54] HBARUSD            $0.0951 | RSI 15 | Dip 0.6% | Trend DOWN
+  [14:35:54] XCNUSD             $0.0063 | RSI 19 | Dip 0.9% | Trend UP HELD
+  [14:35:54] XZECZUSD           $227.7000 | RSI 17 | Dip 0.4% | Trend UP HELD
+  [14:35:54] NEARUSD            $1.3270 | RSI 68 | Dip 1.6% | Trend DOWN
+  [14:36:24] FETUSD             $0.1934 | RSI 18 | Dip 2.1% | Trend DOWN
+  [14:36:24] HBARUSD            $0.0951 | RSI 17 | Dip 0.6% | Trend DOWN
+  [14:36:24] TAOEUR             $236.6974 | RSI 23 | Dip 0.8% | Trend UP HELD
+  [14:36:24] XZECZUSD           $227.6300 | RSI 19 | Dip 0.4% | Trend UP HELD
+  [14:36:24] NEARUSD            $1.3280 | RSI 67 | Dip 1.6% | Trend DOWN
+  [14:36:24] RENDERUSD          $1.8270 | RSI 82 | Dip 1.7% | Trend DOWN
+  [14:36:24] TRUMPUSD           $3.9500 | RSI 79 | Dip 0.8% | Trend DOWN
+  [14:36:24] XCNUSD             $0.0063 | RSI 19 | Dip 1.4% | Trend UP HELD
+  [14:36:24] TAOUSD             $269.7777 | RSI 20 | Dip 0.9% | Trend UP HELD
+  [14:36:54] FETUSD             $0.1936 | RSI 21 | Dip 2.0% | Trend DOWN
+  [14:36:55] NEARUSD            $1.3280 | RSI 67 | Dip 1.6% | Trend DOWN
+  [14:36:55] RENDERUSD          $1.8280 | RSI 82 | Dip 1.7% | Trend DOWN
+  [14:36:54] HBARUSD            $0.0952 | RSI 21 | Dip 0.5% | Trend DOWN
+  [14:36:55] TAOEUR             $238.3814 | RSI 23 | Dip 0.1% | Trend UP HELD
+  [14:36:55] TRUMPUSD           $3.9470 | RSI 79 | Dip 0.9% | Trend DOWN
+  [14:36:55] XZECZUSD           $227.7000 | RSI 20 | Dip 0.4% | Trend UP HELD
+  [14:36:55] TAOUSD             $271.6455 | RSI 24 | Dip 0.2% | Trend UP HELD
+  [14:36:55] XCNUSD             $0.0063 | RSI 20 | Dip 1.3% | Trend UP HELD
+  [14:37:25] XCNUSD             $0.0063 | RSI 16 | Dip 1.3% | Trend UP HELD
+  [14:37:25] FETUSD             $0.1937 | RSI 21 | Dip 1.9% | Trend DOWN
+  [14:37:25] NEARUSD            $1.3280 | RSI 68 | Dip 1.6% | Trend DOWN
+  [14:37:25] XZECZUSD           $227.8300 | RSI 19 | Dip 0.3% | Trend UP HELD
+  [14:37:25] HBARUSD            $0.0951 | RSI 22 | Dip 0.5% | Trend DOWN
+  [14:37:25] RENDERUSD          $1.8310 | RSI 84 | Dip 1.5% | Trend DOWN
+  [14:37:25] TRUMPUSD           $3.9500 | RSI 76 | Dip 0.8% | Trend DOWN
+  [14:37:25] TAOUSD             $272.3498 | RSI 26 | Dip -0.0% | Trend UP HELD
+  [14:37:25] TAOEUR             $238.8055 | RSI 26 | Dip -0.1% | Trend UP HELD
+  [14:37:55] XCNUSD             $0.0063 | RSI 16 | Dip 1.3% | Trend UP HELD
+  [14:37:56] XZECZUSD           $227.8200 | RSI 19 | Dip 0.3% | Trend UP HELD
+  [14:37:56] RENDERUSD          $1.8300 | RSI 85 | Dip 1.6% | Trend DOWN
+  [14:37:56] TRUMPUSD           $3.9520 | RSI 77 | Dip 0.8% | Trend DOWN
+  [14:37:55] FETUSD             $0.1938 | RSI 21 | Dip 1.9% | Trend DOWN
+  [14:37:56] NEARUSD            $1.3290 | RSI 70 | Dip 1.5% | Trend DOWN
+  [14:37:56] TAOUSD             $273.5729 | RSI 30 | Dip 0.2% | Trend UP HELD
+  [14:37:56] HBARUSD            $0.0952 | RSI 22 | Dip 0.5% | Trend DOWN
+  [14:37:56] TAOEUR             $240.0780 | RSI 29 | Dip 0.1% | Trend UP HELD
+  [14:38:26] XZECZUSD           $227.9900 | RSI 19 | Dip 0.3% | Trend UP HELD
+  [14:38:26] TRUMPUSD           $3.9510 | RSI 76 | Dip 0.8% | Trend DOWN
+  [14:38:26] NEARUSD            $1.3290 | RSI 67 | Dip 1.5% | Trend DOWN
+  [14:38:26] XCNUSD             $0.0063 | RSI 14 | Dip 1.1% | Trend UP HELD
+  [14:38:26] TAOUSD             $273.8073 | RSI 29 | Dip 0.2% | Trend UP HELD
+  [14:38:26] HBARUSD            $0.0952 | RSI 20 | Dip 0.4% | Trend DOWN
+  [14:38:26] FETUSD             $0.1937 | RSI 14 | Dip 1.9% | Trend DOWN
+  [14:38:26] TAOEUR             $239.9294 | RSI 31 | Dip 0.1% | Trend UP HELD
+  [14:38:26] RENDERUSD          $1.8350 | RSI 84 | Dip 1.3% | Trend DOWN
+  [14:38:56] XZECZUSD           $227.8400 | RSI 19 | Dip 0.3% | Trend UP HELD
+  [14:38:56] NEARUSD            $1.3290 | RSI 67 | Dip 1.5% | Trend DOWN
+  [14:38:56] TAOUSD             $273.7033 | RSI 29 | Dip 0.2% | Trend UP HELD
+  [14:38:56] FETUSD             $0.1933 | RSI 14 | Dip 2.1% | Trend DOWN
+  [14:38:56] TRUMPUSD           $3.9380 | RSI 72 | Dip 1.1% | Trend DOWN
+  [14:38:56] HBARUSD            $0.0952 | RSI 18 | Dip 0.5% | Trend DOWN
+  [14:38:56] XCNUSD             $0.0063 | RSI 14 | Dip 0.9% | Trend UP HELD
+  [14:38:57] TAOEUR             $239.9264 | RSI 31 | Dip 0.1% | Trend UP HELD
+  [14:39:04] RENDERUSD          $1.8380 | RSI 84 | Dip 1.1% | Trend UP
+  [14:39:27] XZECZUSD           $228.0000 | RSI 18 | Dip 0.3% | Trend UP HELD
+  [14:39:27] TAOUSD             $272.9024 | RSI 30 | Dip 0.5% | Trend UP HELD
+  [14:39:27] FETUSD             $0.1932 | RSI 17 | Dip 1.8% | Trend DOWN
+  [14:39:27] TRUMPUSD           $3.9400 | RSI 71 | Dip 1.1% | Trend DOWN
+  [14:39:27] HBARUSD            $0.0952 | RSI 23 | Dip 0.4% | Trend DOWN
+  [14:39:27] TAOEUR             $239.3704 | RSI 31 | Dip 0.4% | Trend UP HELD
+  [14:39:27] XCNUSD             $0.0063 | RSI 15 | Dip 1.1% | Trend UP HELD
+  [14:39:27] NEARUSD            $1.3290 | RSI 63 | Dip 1.5% | Trend DOWN
+  [14:39:35] RENDERUSD          $1.8360 | RSI 84 | Dip 1.2% | Trend DOWN
+  [14:39:57] HBARUSD            $0.0951 | RSI 20 | Dip 0.5% | Trend DOWN
+  [14:39:57] NEARUSD            $1.3290 | RSI 63 | Dip 1.5% | Trend DOWN
+  [14:39:57] TRUMPUSD           $3.9420 | RSI 71 | Dip 1.0% | Trend DOWN
+  [14:39:57] XCNUSD             $0.0063 | RSI 15 | Dip 1.3% | Trend UP HELD
+  [14:39:57] TAOEUR             $238.5381 | RSI 31 | Dip 0.7% | Trend UP HELD
+  [14:39:57] XZECZUSD           $228.0300 | RSI 18 | Dip 0.2% | Trend UP HELD
+  [14:39:57] FETUSD             $0.1930 | RSI 17 | Dip 1.9% | Trend DOWN
+  [14:39:57] TAOUSD             $272.1639 | RSI 30 | Dip 0.8% | Trend UP HELD
+  [14:40:05] RENDERUSD          $1.8360 | RSI 84 | Dip 1.2% | Trend UP
+  [14:40:28] NEARUSD            $1.3280 | RSI 66 | Dip 1.3% | Trend DOWN
+  [14:40:28] XCNUSD             $0.0063 | RSI 12 | Dip 1.4% | Trend UP HELD
+  [14:40:28] FETUSD             $0.1930 | RSI 18 | Dip 1.6% | Trend DOWN
+  [14:40:28] TAOEUR             $239.3032 | RSI 33 | Dip 0.4% | Trend UP HELD
+  [14:40:28] TAOUSD             $273.1562 | RSI 33 | Dip 0.4% | Trend UP HELD
+  [14:40:28] XZECZUSD           $227.8900 | RSI 19 | Dip 0.3% | Trend UP HELD
+  [14:40:28] HBARUSD            $0.0952 | RSI 23 | Dip 0.4% | Trend DOWN
+  [14:40:28] TRUMPUSD           $3.9440 | RSI 71 | Dip 1.0% | Trend DOWN
+  [14:40:36] RENDERUSD          $1.8340 | RSI 84 | Dip 1.3% | Trend DOWN
+  [14:40:58] FETUSD             $0.1929 | RSI 18 | Dip 1.6% | Trend DOWN
+  [14:40:58] TAOUSD             $273.1668 | RSI 33 | Dip 0.4% | Trend UP HELD
+  [14:40:58] XCNUSD             $0.0062 | RSI 12 | Dip 2.0% | Trend DOWN HELD
+  [14:40:58] NEARUSD            $1.3280 | RSI 66 | Dip 1.3% | Trend DOWN
+  [14:40:58] XZECZUSD           $227.9400 | RSI 19 | Dip 0.3% | Trend UP HELD
+  [14:40:58] TRUMPUSD           $3.9450 | RSI 71 | Dip 0.9% | Trend DOWN
+  [14:40:58] HBARUSD            $0.0951 | RSI 21 | Dip 0.5% | Trend DOWN
+  [14:40:58] TAOEUR             $239.6395 | RSI 33 | Dip 0.3% | Trend UP HELD
+  [14:41:06] RENDERUSD          $1.8360 | RSI 86 | Dip 1.2% | Trend UP
+  [14:41:28] XCNUSD             $0.0063 | RSI 11 | Dip 1.6% | Trend DOWN HELD
+  [14:41:28] TAOUSD             $273.0058 | RSI 31 | Dip 0.4% | Trend UP HELD
+  [14:41:28] TRUMPUSD           $3.9460 | RSI 72 | Dip 0.9% | Trend DOWN
+  [14:41:28] HBARUSD            $0.0953 | RSI 25 | Dip 0.3% | Trend UP
+  [14:41:28] ⚠️ HBARUSD signal but no budget left
+  [14:41:28] TAOEUR             $239.3537 | RSI 34 | Dip 0.4% | Trend UP HELD
+  [14:41:28] FETUSD             $0.1931 | RSI 18 | Dip 1.2% | Trend DOWN
+  [14:41:28] NEARUSD            $1.3300 | RSI 68 | Dip 1.1% | Trend DOWN
+  [14:41:28] XZECZUSD           $228.1000 | RSI 18 | Dip 0.2% | Trend UP HELD
+  [14:41:37] RENDERUSD          $1.8360 | RSI 86 | Dip 1.2% | Trend UP
+  [14:41:59] FETUSD             $0.1932 | RSI 20 | Dip 1.2% | Trend DOWN
+  [14:41:59] TAOUSD             $272.9085 | RSI 31 | Dip 0.5% | Trend UP HELD
+  [14:41:59] TRUMPUSD           $3.9490 | RSI 72 | Dip 0.8% | Trend DOWN
+  [14:41:59] HBARUSD            $0.0953 | RSI 25 | Dip 0.3% | Trend UP
+  [14:41:59] ⚠️ HBARUSD signal but no budget left
+  [14:41:59] TAOEUR             $239.4924 | RSI 34 | Dip 0.3% | Trend UP HELD
+  [14:41:59] XZECZUSD           $227.9400 | RSI 18 | Dip 0.3% | Trend UP HELD
+  [14:41:59] NEARUSD            $1.3300 | RSI 68 | Dip 1.1% | Trend DOWN
+  [14:41:59] XCNUSD             $0.0062 | RSI 11 | Dip 1.7% | Trend DOWN HELD
+  [14:42:07] RENDERUSD          $1.8360 | RSI 86 | Dip 1.2% | Trend UP
+
+[14:42:17] 🔍 Scan #2 — finding top 10 volatile pairs...
+
+  🔍 Top 10 pairs (volatility + performance score):
+     XCNUSD               score=4.92 | $2,771,331 24h volume
+     TAOUSD               score=2.93 | $13,515,752 24h volume
+     TAOEUR               score=2.59 | $2,428,989 24h volume
+     FETUSD               score=2.24 | $1,419,463 24h volume
+     XZECZUSD             score=1.66 | $4,611,812 24h volume
+     RENDERUSD            score=1.39 | $1,540,535 24h volume
+     NEARUSD              score=1.29 | $1,737,976 24h volume
+     TRUMPUSD             score=0.99 | $2,477,117 24h volume
+     HBARUSD              score=0.98 | $4,339,636 24h volume
+  ✅ Same top 10 pairs — no rotation needed
+
+  📊 Positions: 0 | Deployed: $0.00 | USD balance: $2.37
+  [14:42:29] TAOUSD             $274.2628 | RSI 30 | Dip 0.0% | Trend UP HELD
+  [14:42:29] TRUMPUSD           $3.9560 | RSI 72 | Dip 0.7% | Trend DOWN
+  [14:42:29] XZECZUSD           $228.1200 | RSI 16 | Dip 0.2% | Trend UP HELD
+  [14:42:29] TAOEUR             $240.4700 | RSI 30 | Dip -0.1% | Trend UP HELD
+  [14:42:29] FETUSD             $0.1938 | RSI 22 | Dip 0.9% | Trend DOWN
+  [14:42:29] XCNUSD             $0.0063 | RSI 6 | Dip 1.6% | Trend DOWN HELD
+  [14:42:29] NEARUSD            $1.3310 | RSI 70 | Dip 1.0% | Trend UP
+  [14:42:29] HBARUSD            $0.0954 | RSI 26 | Dip 0.2% | Trend UP
+  [14:42:29] ⚠️ HBARUSD signal but no budget left
+  [14:42:38] RENDERUSD          $1.8380 | RSI 86 | Dip 1.1% | Trend UP
+  [14:42:59] TRUMPUSD           $3.9530 | RSI 72 | Dip 0.7% | Trend DOWN
+  [14:42:59] TAOUSD             $274.1634 | RSI 30 | Dip 0.1% | Trend UP HELD
+  [14:42:59] FETUSD             $0.1936 | RSI 26 | Dip 0.9% | Trend DOWN
+  [14:42:59] XCNUSD             $0.0062 | RSI 6 | Dip 1.7% | Trend DOWN HELD
+  [14:43:00] NEARUSD            $1.3310 | RSI 75 | Dip 1.0% | Trend UP
+  [14:43:00] HBARUSD            $0.0953 | RSI 31 | Dip 0.2% | Trend UP
+  [14:43:00] ⚠️ HBARUSD signal but no budget left
+  [14:42:59] XZECZUSD           $227.8500 | RSI 16 | Dip 0.3% | Trend UP HELD
+  [14:42:59] TAOEUR             $240.2867 | RSI 31 | Dip -0.0% | Trend UP HELD
+  [14:43:08] RENDERUSD          $1.8400 | RSI 86 | Dip 1.0% | Trend UP
+  [14:43:30] FETUSD             $0.1937 | RSI 26 | Dip 0.8% | Trend DOWN
+  [14:43:30] XCNUSD             $0.0062 | RSI 6 | Dip 1.9% | Trend DOWN HELD
+  [14:43:30] HBARUSD            $0.0953 | RSI 31 | Dip 0.2% | Trend UP
+  [14:43:30] ⚠️ HBARUSD signal but no budget left
+  [14:43:30] NEARUSD            $1.3310 | RSI 75 | Dip 1.0% | Trend UP
+  [14:43:30] XZECZUSD           $227.7900 | RSI 17 | Dip 0.3% | Trend UP HELD
+  [14:43:30] TAOEUR             $240.5613 | RSI 31 | Dip -0.0% | Trend UP HELD
+  [14:43:30] TAOUSD             $274.3947 | RSI 30 | Dip 0.0% | Trend UP HELD
+  [14:43:30] TRUMPUSD           $3.9530 | RSI 85 | Dip 0.7% | Trend DOWN
+  [14:43:39] RENDERUSD          $1.8410 | RSI 86 | Dip 1.0% | Trend UP
+  [14:44:00] FETUSD             $0.1939 | RSI 19 | Dip 0.7% | Trend DOWN
+  [14:44:00] XZECZUSD           $227.9000 | RSI 13 | Dip 0.3% | Trend UP HELD
+  [14:44:00] TRUMPUSD           $3.9570 | RSI 85 | Dip 0.6% | Trend DOWN
+  [14:44:00] TAOUSD             $274.2319 | RSI 30 | Dip 0.1% | Trend UP HELD
+  [14:44:00] TAOEUR             $240.4684 | RSI 31 | Dip 0.0% | Trend UP HELD
+  [14:44:00] HBARUSD            $0.0953 | RSI 35 | Dip 0.2% | Trend UP
+  [14:44:00] ⚠️ HBARUSD signal but no budget left
+  [14:44:00] NEARUSD            $1.3320 | RSI 74 | Dip 0.9% | Trend UP
+  [14:44:00] XCNUSD             $0.0062 | RSI 5 | Dip 1.7% | Trend DOWN HELD
+  [14:44:09] RENDERUSD          $1.8420 | RSI 85 | Dip 0.6% | Trend UP
+  [14:44:31] TAOUSD             $274.2005 | RSI 31 | Dip 0.1% | Trend UP HELD
+  [14:44:31] TAOEUR             $240.3772 | RSI 31 | Dip 0.0% | Trend UP HELD
+  [14:44:31] FETUSD             $0.1940 | RSI 19 | Dip 0.7% | Trend DOWN
+  [14:44:31] TRUMPUSD           $3.9580 | RSI 85 | Dip 0.6% | Trend DOWN
+  [14:44:31] NEARUSD            $1.3320 | RSI 74 | Dip 0.9% | Trend UP
+  [14:44:31] XZECZUSD           $228.0600 | RSI 13 | Dip 0.2% | Trend UP HELD
+  [14:44:31] HBARUSD            $0.0953 | RSI 35 | Dip 0.2% | Trend UP
+  [14:44:31] ⚠️ HBARUSD signal but no budget left
+  [14:44:31] XCNUSD             $0.0063 | RSI 5 | Dip 1.6% | Trend DOWN HELD
+  [14:44:39] RENDERUSD          $1.8460 | RSI 85 | Dip 0.4% | Trend UP
+  [14:45:01] TRUMPUSD           $3.9620 | RSI 86 | Dip 0.5% | Trend UP
+  [14:45:01] FETUSD             $0.1935 | RSI 21 | Dip 0.9% | Trend DOWN
+  [14:45:01] HBARUSD            $0.0953 | RSI 40 | Dip 0.1% | Trend UP
+  [14:45:01] NEARUSD            $1.3320 | RSI 80 | Dip 0.9% | Trend UP
+  [14:45:01] TAOUSD             $274.2890 | RSI 32 | Dip 0.0% | Trend UP HELD
+  [14:45:01] TAOEUR             $240.5820 | RSI 32 | Dip -0.0% | Trend UP HELD
+  [14:45:01] XZECZUSD           $228.1100 | RSI 14 | Dip 0.2% | Trend UP HELD
+  [14:45:01] XCNUSD             $0.0062 | RSI 5 | Dip 1.7% | Trend DOWN HELD
+  [14:45:10] RENDERUSD          $1.8470 | RSI 85 | Dip 0.4% | Trend UP
+  [14:45:31] NEARUSD            $1.3320 | RSI 80 | Dip 0.9% | Trend UP
+  [14:45:31] TAOEUR             $240.1626 | RSI 32 | Dip 0.1% | Trend UP HELD
+  [14:45:31] HBARUSD            $0.0954 | RSI 41 | Dip 0.1% | Trend UP
+  [14:45:31] TRUMPUSD           $3.9570 | RSI 86 | Dip 0.6% | Trend DOWN
+  [14:45:31] TAOUSD             $273.7884 | RSI 32 | Dip 0.2% | Trend UP HELD
+  [14:45:31] FETUSD             $0.1935 | RSI 22 | Dip 0.9% | Trend DOWN
+  [14:45:31] XZECZUSD           $227.9000 | RSI 15 | Dip 0.3% | Trend UP HELD
+  [14:45:31] XCNUSD             $0.0062 | RSI 5 | Dip 1.7% | Trend DOWN HELD
+  [14:45:40] RENDERUSD          $1.8440 | RSI 85 | Dip 0.5% | Trend UP
+  [14:46:02] NEARUSD            $1.3320 | RSI 86 | Dip 0.7% | Trend UP
+  [14:46:02] TAOUSD             $273.3314 | RSI 34 | Dip 0.4% | Trend UP HELD
+  [14:46:02] FETUSD             $0.1934 | RSI 26 | Dip 1.0% | Trend DOWN
+  [14:46:02] TRUMPUSD           $3.9560 | RSI 86 | Dip 0.7% | Trend DOWN
+  [14:46:02] TAOEUR             $239.5957 | RSI 33 | Dip 0.4% | Trend UP HELD
+  [14:46:02] XCNUSD             $0.0063 | RSI 6 | Dip 1.6% | Trend DOWN HELD
+  [14:46:02] HBARUSD            $0.0954 | RSI 35 | Dip 0.1% | Trend UP
+  [14:46:02] ⚠️ HBARUSD signal but no budget left
+  [14:46:02] XZECZUSD           $227.9600 | RSI 11 | Dip 0.3% | Trend UP HELD
+  [14:46:11] RENDERUSD          $1.8400 | RSI 85 | Dip 0.8% | Trend UP
+  [14:46:32] TAOUSD             $272.8611 | RSI 34 | Dip 0.6% | Trend UP HELD
+  [14:46:32] TRUMPUSD           $3.9520 | RSI 86 | Dip 0.8% | Trend DOWN
+  [14:46:32] TAOEUR             $239.2557 | RSI 33 | Dip 0.5% | Trend UP HELD
+  [14:46:32] XZECZUSD           $227.8400 | RSI 11 | Dip 0.3% | Trend UP HELD
+  [14:46:32] XCNUSD             $0.0062 | RSI 6 | Dip 2.0% | Trend DOWN HELD
+  [14:46:32] NEARUSD            $1.3320 | RSI 86 | Dip 0.7% | Trend UP
+  [14:46:32] HBARUSD            $0.0954 | RSI 35 | Dip 0.1% | Trend UP
+  [14:46:32] ⚠️ HBARUSD signal but no budget left
+  [14:46:32] FETUSD             $0.1934 | RSI 26 | Dip 1.0% | Trend DOWN
+  [14:46:41] RENDERUSD          $1.8400 | RSI 83 | Dip 0.8% | Trend UP
+  [14:47:02] TAOUSD             $273.1169 | RSI 31 | Dip 0.5% | Trend UP HELD
+  [14:47:02] XZECZUSD           $227.7400 | RSI 7 | Dip 0.4% | Trend DOWN HELD
+  [14:47:02] TAOEUR             $239.5550 | RSI 31 | Dip 0.4% | Trend UP HELD
+  [14:47:03] XCNUSD             $0.0062 | RSI 5 | Dip 2.4% | Trend DOWN HELD
+  [14:47:03] HBARUSD            $0.0954 | RSI 35 | Dip 0.1% | Trend UP
+  [14:47:03] ⚠️ HBARUSD signal but no budget left
+  [14:47:02] TRUMPUSD           $3.9530 | RSI 86 | Dip 0.7% | Trend DOWN
+  [14:47:03] NEARUSD            $1.3310 | RSI 87 | Dip 0.7% | Trend UP
+  [14:47:03] FETUSD             $0.1932 | RSI 27 | Dip 1.1% | Trend DOWN
+  [14:47:11] RENDERUSD          $1.8350 | RSI 81 | Dip 1.0% | Trend DOWN
+  [14:47:33] XZECZUSD           $227.4600 | RSI 7 | Dip 0.5% | Trend DOWN HELD
+  [14:47:33] FETUSD             $0.1929 | RSI 27 | Dip 1.2% | Trend DOWN
+  [14:47:33] XCNUSD             $0.0062 | RSI 5 | Dip 2.5% | Trend DOWN HELD
+  [14:47:33] TAOUSD             $273.7146 | RSI 32 | Dip 0.3% | Trend UP HELD
+  [14:47:33] NEARUSD            $1.3310 | RSI 86 | Dip 0.7% | Trend UP
+  [14:47:33] HBARUSD            $0.0953 | RSI 35 | Dip 0.2% | Trend UP
+  [14:47:33] ⚠️ HBARUSD signal but no budget left
+  [14:47:33] TAOEUR             $239.8306 | RSI 32 | Dip 0.3% | Trend UP HELD
+  [14:47:33] TRUMPUSD           $3.9540 | RSI 84 | Dip 0.7% | Trend DOWN
+  [14:47:42] RENDERUSD          $1.8340 | RSI 79 | Dip 1.1% | Trend DOWN
+  [14:48:03] FETUSD             $0.1932 | RSI 33 | Dip 1.1% | Trend DOWN
+  [14:48:03] XZECZUSD           $227.3300 | RSI 7 | Dip 0.5% | Trend DOWN HELD
+  [14:48:04] NEARUSD            $1.3310 | RSI 90 | Dip 0.7% | Trend UP
+  [14:48:04] TAOUSD             $273.9415 | RSI 35 | Dip 0.2% | Trend UP HELD
+  [14:48:03] XCNUSD             $0.0062 | RSI 5 | Dip 2.4% | Trend DOWN HELD
+  [14:48:04] TAOEUR             $240.1562 | RSI 31 | Dip 0.1% | Trend UP HELD
+  [14:48:04] HBARUSD            $0.0953 | RSI 79 | Dip 0.1% | Trend UP
+  [14:48:04] TRUMPUSD           $3.9590 | RSI 84 | Dip 0.6% | Trend UP
+  [14:48:12] RENDERUSD          $1.8340 | RSI 89 | Dip 0.6% | Trend DOWN
+  [14:48:34] XZECZUSD           $227.3300 | RSI 7 | Dip 0.5% | Trend DOWN HELD
+  [14:48:34] XCNUSD             $0.0062 | RSI 5 | Dip 2.4% | Trend DOWN HELD
+  [14:48:34] FETUSD             $0.1933 | RSI 35 | Dip 1.0% | Trend DOWN
+  [14:48:34] NEARUSD            $1.3310 | RSI 89 | Dip 0.7% | Trend UP
+  [14:48:34] TAOUSD             $273.3621 | RSI 34 | Dip 0.4% | Trend UP HELD
+  [14:48:34] HBARUSD            $0.0953 | RSI 79 | Dip 0.1% | Trend UP
+  [14:48:34] TRUMPUSD           $3.9580 | RSI 84 | Dip 0.6% | Trend UP
+  [14:48:34] TAOEUR             $239.6910 | RSI 31 | Dip 0.3% | Trend UP HELD
+  [14:48:42] RENDERUSD          $1.8340 | RSI 89 | Dip 0.6% | Trend DOWN
+  [14:49:04] XZECZUSD           $227.7700 | RSI 6 | Dip 0.4% | Trend DOWN HELD
+  [14:49:04] XCNUSD             $0.0062 | RSI 4 | Dip 2.2% | Trend DOWN HELD
+  [14:49:04] HBARUSD            $0.0954 | RSI 75 | Dip 0.1% | Trend UP
+  [14:49:04] TAOUSD             $272.9587 | RSI 26 | Dip 0.5% | Trend UP HELD
+  [14:49:04] NEARUSD            $1.3320 | RSI 90 | Dip 0.2% | Trend UP
+  [14:49:04] FETUSD             $0.1936 | RSI 37 | Dip 0.9% | Trend DOWN
+  [14:49:04] TAOEUR             $239.8010 | RSI 26 | Dip 0.3% | Trend UP HELD
+  [14:49:04] TRUMPUSD           $3.9570 | RSI 82 | Dip 0.6% | Trend UP
+  [14:49:13] RENDERUSD          $1.8320 | RSI 87 | Dip 0.7% | Trend DOWN
+  [14:49:34] XZECZUSD           $227.5200 | RSI 7 | Dip 0.5% | Trend DOWN HELD
+  [14:49:34] HBARUSD            $0.0953 | RSI 73 | Dip 0.1% | Trend UP
+  [14:49:35] FETUSD             $0.1934 | RSI 37 | Dip 1.0% | Trend DOWN
+  [14:49:34] XCNUSD             $0.0062 | RSI 6 | Dip 2.2% | Trend DOWN HELD
+  [14:49:34] NEARUSD            $1.3330 | RSI 90 | Dip 0.1% | Trend UP
+  [14:49:34] TAOUSD             $273.1878 | RSI 26 | Dip 0.4% | Trend UP HELD
+  [14:49:35] TAOEUR             $239.5759 | RSI 26 | Dip 0.4% | Trend UP HELD
+  [14:49:35] TRUMPUSD           $3.9550 | RSI 82 | Dip 0.7% | Trend UP
+  [14:49:43] RENDERUSD          $1.8320 | RSI 87 | Dip 0.7% | Trend DOWN
+  [14:50:05] FETUSD             $0.1936 | RSI 40 | Dip 0.9% | Trend DOWN
+  [14:50:05] TAOUSD             $273.0391 | RSI 20 | Dip 0.5% | Trend UP HELD
+  [14:50:05] XCNUSD             $0.0062 | RSI 5 | Dip 1.7% | Trend DOWN HELD
+  [14:50:05] NEARUSD            $1.3330 | RSI 91 | Dip 0.1% | Trend UP
+  [14:50:05] XZECZUSD           $227.2900 | RSI 6 | Dip 0.6% | Trend DOWN HELD
+  [14:50:05] TRUMPUSD           $3.9560 | RSI 87 | Dip 0.7% | Trend UP
+  [14:50:05] HBARUSD            $0.0953 | RSI 75 | Dip 0.1% | Trend UP
+  [14:50:05] TAOEUR             $239.4659 | RSI 23 | Dip 0.4% | Trend UP HELD
+  [14:50:14] RENDERUSD          $1.8320 | RSI 88 | Dip 0.7% | Trend DOWN
+  [14:50:35] FETUSD             $0.1937 | RSI 40 | Dip 0.8% | Trend UP
+  [14:50:35] ⚠️ FETUSD signal but no budget left
+  [14:50:35] TRUMPUSD           $3.9570 | RSI 87 | Dip 0.6% | Trend UP
+  [14:50:35] XCNUSD             $0.0062 | RSI 7 | Dip 2.0% | Trend DOWN HELD
+  [14:50:35] TAOUSD             $273.2372 | RSI 20 | Dip 0.4% | Trend UP HELD
+  [14:50:35] HBARUSD            $0.0953 | RSI 75 | Dip 0.1% | Trend UP
+  [14:50:35] NEARUSD            $1.3330 | RSI 91 | Dip 0.1% | Trend UP
+  [14:50:35] TAOEUR             $239.5295 | RSI 23 | Dip 0.4% | Trend UP HELD
+  [14:50:35] XZECZUSD           $227.3100 | RSI 6 | Dip 0.6% | Trend DOWN HELD
+  [14:50:44] RENDERUSD          $1.8340 | RSI 88 | Dip 0.6% | Trend DOWN
+  [14:51:05] FETUSD             $0.1937 | RSI 35 | Dip 0.8% | Trend UP
+  [14:51:05] ⚠️ FETUSD signal but no budget left
+  [14:51:05] XCNUSD             $0.0062 | RSI 6 | Dip 1.9% | Trend DOWN HELD
+  [14:51:05] TRUMPUSD           $3.9670 | RSI 95 | Dip 0.3% | Trend UP
+  [14:51:06] HBARUSD            $0.0953 | RSI 69 | Dip 0.1% | Trend UP
+  [14:51:06] TAOUSD             $273.7219 | RSI 24 | Dip 0.2% | Trend UP HELD
+  [14:51:06] NEARUSD            $1.3330 | RSI 89 | Dip 0.1% | Trend UP
+  [14:51:06] XZECZUSD           $227.4300 | RSI 3 | Dip 0.5% | Trend DOWN HELD
+  [14:51:06] TAOEUR             $239.9117 | RSI 23 | Dip 0.2% | Trend UP HELD
+  [14:51:15] RENDERUSD          $1.8360 | RSI 87 | Dip 0.5% | Trend UP
+  [14:51:36] FETUSD             $0.1934 | RSI 36 | Dip 1.0% | Trend DOWN
+  [14:51:36] TAOUSD             $275.3725 | RSI 27 | Dip -0.1% | Trend UP HELD
+  [14:51:36] TRUMPUSD           $3.9670 | RSI 95 | Dip 0.3% | Trend UP
+  [14:51:36] HBARUSD            $0.0953 | RSI 69 | Dip 0.1% | Trend UP
+  [14:51:36] XCNUSD             $0.0062 | RSI 6 | Dip 2.0% | Trend DOWN HELD
+  [14:51:36] TAOEUR             $241.6855 | RSI 26 | Dip -0.2% | Trend UP HELD
+  [14:51:36] NEARUSD            $1.3330 | RSI 89 | Dip 0.1% | Trend UP
+  [14:51:36] XZECZUSD           $227.5700 | RSI 3 | Dip 0.4% | Trend DOWN HELD
+  [14:51:45] RENDERUSD          $1.8380 | RSI 87 | Dip 0.4% | Trend UP
+  [14:52:06] FETUSD             $0.1936 | RSI 40 | Dip 0.9% | Trend UP
+  [14:52:06] HBARUSD            $0.0953 | RSI 67 | Dip 0.1% | Trend UP
+  [14:52:06] TAOUSD             $274.6392 | RSI 27 | Dip 0.2% | Trend UP HELD
+  [14:52:06] XZECZUSD           $227.6300 | RSI 4 | Dip 0.4% | Trend DOWN HELD
+  [14:52:06] XCNUSD             $0.0062 | RSI 6 | Dip 2.0% | Trend DOWN HELD
+  [14:52:06] NEARUSD            $1.3330 | RSI 97 | Dip 0.1% | Trend UP
+  [14:52:06] TRUMPUSD           $3.9680 | RSI 95 | Dip 0.3% | Trend UP
+  [14:52:06] TAOEUR             $240.7599 | RSI 28 | Dip 0.3% | Trend UP HELD
+  [14:52:16] RENDERUSD          $1.8370 | RSI 87 | Dip 0.4% | Trend UP
+  [14:52:37] XZECZUSD           $227.6200 | RSI 4 | Dip 0.4% | Trend DOWN HELD
+  [14:52:37] FETUSD             $0.1937 | RSI 40 | Dip 0.8% | Trend UP
+  [14:52:37] TAOEUR             $240.7250 | RSI 28 | Dip 0.3% | Trend UP HELD
+  [14:52:37] NEARUSD            $1.3340 | RSI 97 | Dip 0.0% | Trend UP
+  [14:52:37] HBARUSD            $0.0954 | RSI 66 | Dip 0.1% | Trend UP
+  [14:52:37] TAOUSD             $274.3591 | RSI 27 | Dip 0.3% | Trend UP HELD
+  [14:52:37] XCNUSD             $0.0062 | RSI 6 | Dip 2.0% | Trend DOWN HELD
+  [14:52:37] TRUMPUSD           $3.9690 | RSI 95 | Dip 0.3% | Trend UP
+  [14:52:46] RENDERUSD          $1.8390 | RSI 87 | Dip 0.3% | Trend UP
+  [14:53:07] XZECZUSD           $227.6700 | RSI 4 | Dip 0.4% | Trend DOWN HELD
+  [14:53:07] TAOEUR             $240.6813 | RSI 26 | Dip 0.4% | Trend UP HELD
+  [14:53:07] TRUMPUSD           $3.9730 | RSI 95 | Dip 0.1% | Trend UP
+  [14:53:07] NEARUSD            $1.3330 | RSI 97 | Dip 0.1% | Trend UP
+  [14:53:07] XCNUSD             $0.0062 | RSI 6 | Dip 1.9% | Trend DOWN HELD
+  [14:53:07] FETUSD             $0.1936 | RSI 38 | Dip 0.9% | Trend UP
+  [14:53:07] ⚠️ FETUSD signal but no budget left
+  [14:53:07] TAOUSD             $274.5017 | RSI 22 | Dip 0.3% | Trend UP HELD
+  [14:53:07] HBARUSD            $0.0954 | RSI 76 | Dip 0.1% | Trend UP
+  [14:53:16] RENDERUSD          $1.8390 | RSI 88 | Dip 0.3% | Trend UP
+  [14:53:38] XCNUSD             $0.0062 | RSI 6 | Dip 1.7% | Trend UP HELD
+  [14:53:38] TAOEUR             $240.1987 | RSI 26 | Dip 0.6% | Trend UP HELD
+  [14:53:37] XZECZUSD           $227.8700 | RSI 6 | Dip 0.3% | Trend UP HELD
+  [14:53:38] FETUSD             $0.1934 | RSI 38 | Dip 1.0% | Trend DOWN
+  [14:53:38] HBARUSD            $0.0954 | RSI 76 | Dip 0.1% | Trend UP
+  [14:53:38] NEARUSD            $1.3330 | RSI 97 | Dip 0.1% | Trend UP
+  [14:53:38] TAOUSD             $273.9783 | RSI 22 | Dip 0.5% | Trend UP HELD
+  [14:53:38] TRUMPUSD           $3.9740 | RSI 95 | Dip 0.1% | Trend UP
+  [14:53:47] RENDERUSD          $1.8380 | RSI 88 | Dip 0.3% | Trend UP
+  [14:54:08] XZECZUSD           $227.6700 | RSI 5 | Dip 0.4% | Trend DOWN HELD
+  [14:54:08] XCNUSD             $0.0063 | RSI 13 | Dip 0.6% | Trend UP HELD
+  [14:54:08] FETUSD             $0.1931 | RSI 34 | Dip 1.1% | Trend DOWN
+  [14:54:08] HBARUSD            $0.0954 | RSI 73 | Dip 0.1% | Trend UP
+  [14:54:08] TAOUSD             $274.1161 | RSI 22 | Dip 0.4% | Trend UP HELD
+  [14:54:08] NEARUSD            $1.3330 | RSI 97 | Dip 0.1% | Trend UP
+  [14:54:08] TAOEUR             $240.2936 | RSI 24 | Dip 0.5% | Trend UP HELD
+  [14:54:08] TRUMPUSD           $3.9740 | RSI 95 | Dip 0.1% | Trend UP
+  [14:54:17] RENDERUSD          $1.8380 | RSI 87 | Dip 0.3% | Trend UP
+  [14:54:38] HBARUSD            $0.0954 | RSI 73 | Dip 0.1% | Trend UP
+  [14:54:38] NEARUSD            $1.3340 | RSI 97 | Dip 0.0% | Trend UP
+  [14:54:39] TRUMPUSD           $3.9750 | RSI 95 | Dip 0.0% | Trend UP
+  [14:54:38] TAOEUR             $240.5687 | RSI 24 | Dip 0.4% | Trend UP HELD
+  [14:54:38] XCNUSD             $0.0063 | RSI 13 | Dip 0.8% | Trend UP HELD
+  [14:54:38] XZECZUSD           $227.6900 | RSI 5 | Dip 0.4% | Trend DOWN HELD
+  [14:54:38] FETUSD             $0.1931 | RSI 34 | Dip 1.1% | Trend DOWN
+  [14:54:38] TAOUSD             $274.2273 | RSI 22 | Dip 0.4% | Trend UP HELD
+  [14:54:48] RENDERUSD          $1.8370 | RSI 87 | Dip 0.4% | Trend UP
+  [14:55:09] HBARUSD            $0.0953 | RSI 64 | Dip 0.1% | Trend UP
+  [14:55:09] XZECZUSD           $227.5300 | RSI 5 | Dip 0.5% | Trend DOWN HELD
+  [14:55:09] XCNUSD             $0.0063 | RSI 17 | Dip 0.0% | Trend UP HELD
+  [14:55:09] NEARUSD            $1.3350 | RSI 97 | Dip -0.1% | Trend UP
+  [14:55:09] TAOUSD             $273.5800 | RSI 17 | Dip 0.6% | Trend UP HELD
+  [14:55:09] TRUMPUSD           $3.9730 | RSI 95 | Dip 0.1% | Trend UP
+  [14:55:09] TAOEUR             $239.9049 | RSI 20 | Dip 0.7% | Trend UP HELD
+  [14:55:09] FETUSD             $0.1931 | RSI 24 | Dip 1.1% | Trend DOWN
+  [14:55:18] RENDERUSD          $1.8390 | RSI 87 | Dip 0.3% | Trend UP
+  [14:55:39] XZECZUSD           $227.6500 | RSI 5 | Dip 0.4% | Trend DOWN HELD
+  [14:55:39] HBARUSD            $0.0953 | RSI 65 | Dip 0.1% | Trend UP
+  [14:55:39] TAOEUR             $239.8570 | RSI 20 | Dip 0.7% | Trend UP HELD
+  [14:55:39] XCNUSD             $0.0063 | RSI 15 | Dip 0.3% | Trend UP HELD
+  [14:55:39] FETUSD             $0.1930 | RSI 24 | Dip 1.2% | Trend DOWN
+  [14:55:39] NEARUSD            $1.3350 | RSI 97 | Dip -0.1% | Trend UP
+  [14:55:39] TRUMPUSD           $3.9690 | RSI 95 | Dip 0.2% | Trend UP
+  [14:55:39] TAOUSD             $273.4791 | RSI 17 | Dip 0.6% | Trend UP HELD
+  [14:55:49] RENDERUSD          $1.8410 | RSI 87 | Dip 0.2% | Trend UP
+  [14:56:10] TAOEUR             $240.3382 | RSI 19 | Dip 0.5% | Trend UP HELD
+  [14:56:09] XZECZUSD           $227.6500 | RSI 5 | Dip 0.4% | Trend DOWN HELD
+  [14:56:10] XCNUSD             $0.0063 | RSI 13 | Dip 0.8% | Trend UP HELD
+  [14:56:10] NEARUSD            $1.3360 | RSI 97 | Dip -0.1% | Trend UP
+  [14:56:10] TRUMPUSD           $3.9700 | RSI 94 | Dip 0.2% | Trend UP
+  [14:56:10] FETUSD             $0.1933 | RSI 27 | Dip 1.0% | Trend DOWN
+  [14:56:09] HBARUSD            $0.0954 | RSI 67 | Dip 0.1% | Trend UP
+  [14:56:10] TAOUSD             $274.0866 | RSI 14 | Dip 0.4% | Trend UP HELD
+  [14:56:19] RENDERUSD          $1.8430 | RSI 87 | Dip 0.1% | Trend UP
+  [14:56:40] XZECZUSD           $227.6400 | RSI 7 | Dip 0.4% | Trend DOWN HELD
+  [14:56:40] TAOUSD             $274.3170 | RSI 18 | Dip 0.3% | Trend UP HELD
+  [14:56:40] HBARUSD            $0.0954 | RSI 67 | Dip 0.0% | Trend UP
+  [14:56:40] TAOEUR             $240.5815 | RSI 22 | Dip 0.4% | Trend UP HELD
+  [14:56:40] FETUSD             $0.1936 | RSI 27 | Dip 0.9% | Trend UP
+  [14:56:40] ⚠️ FETUSD signal but no budget left
+  [14:56:40] TRUMPUSD           $3.9710 | RSI 94 | Dip 0.1% | Trend UP
+  [14:56:40] XCNUSD             $0.0063 | RSI 13 | Dip 0.8% | Trend UP HELD
+  [14:56:40] NEARUSD            $1.3370 | RSI 97 | Dip -0.2% | Trend UP
+  [14:56:49] RENDERUSD          $1.8420 | RSI 87 | Dip 0.1% | Trend UP
+  [14:57:10] XZECZUSD           $227.7400 | RSI 6 | Dip 0.4% | Trend DOWN HELD
+  [14:57:10] TRUMPUSD           $3.9710 | RSI 94 | Dip 0.1% | Trend UP
+  [14:57:10] TAOUSD             $274.4822 | RSI 17 | Dip 0.3% | Trend UP HELD
+  [14:57:10] XCNUSD             $0.0063 | RSI 13 | Dip 0.8% | Trend UP HELD
+  [14:57:10] NEARUSD            $1.3370 | RSI 97 | Dip -0.2% | Trend UP
+  [14:57:10] FETUSD             $0.1936 | RSI 29 | Dip 0.9% | Trend UP
+  [14:57:10] ⚠️ FETUSD signal but no budget left
+  [14:57:10] TAOEUR             $240.7364 | RSI 22 | Dip 0.3% | Trend UP HELD
+  [14:57:10] HBARUSD            $0.0954 | RSI 55 | Dip 0.0% | Trend UP
+
+[14:57:18] 🔍 Scan #3 — finding top 10 volatile pairs...
+
+  🔍 Top 10 pairs (volatility + performance score):
+     XCNUSD               score=4.92 | $2,811,989 24h volume
+     TAOUSD               score=3.00 | $13,728,433 24h volume
+     TAOEUR               score=2.68 | $2,443,332 24h volume
+     FETUSD               score=2.24 | $1,429,930 24h volume
+     XZECZUSD             score=1.63 | $4,690,675 24h volume
+     RENDERUSD            score=1.39 | $1,553,262 24h volume
+     NEARUSD              score=1.29 | $1,747,889 24h volume
+     TRUMPUSD             score=0.99 | $2,490,537 24h volume
+     HBARUSD              score=0.98 | $4,321,432 24h volume
+  ✅ Same top 10 pairs — no rotation needed
+
+  📊 Positions: 0 | Deployed: $0.00 | USD balance: $2.37
+  [14:57:20] RENDERUSD          $1.8420 | RSI 86 | Dip 0.1% | Trend UP
+  [14:57:41] XZECZUSD           $227.7500 | RSI 7 | Dip 0.4% | Trend DOWN HELD
+  [14:57:41] FETUSD             $0.1940 | RSI 35 | Dip 0.7% | Trend UP
+  [14:57:41] ⚠️ FETUSD signal but no budget left
+  [14:57:41] NEARUSD            $1.3360 | RSI 97 | Dip -0.1% | Trend UP
+  [14:57:41] HBARUSD            $0.0954 | RSI 55 | Dip 0.0% | Trend UP
+  [14:57:41] TAOEUR             $241.0243 | RSI 23 | Dip 0.2% | Trend UP HELD
+  [14:57:41] TRUMPUSD           $3.9720 | RSI 94 | Dip 0.1% | Trend UP
+  [14:57:41] XCNUSD             $0.0063 | RSI 13 | Dip 0.8% | Trend UP HELD
+  [14:57:41] TAOUSD             $274.5642 | RSI 21 | Dip 0.2% | Trend UP HELD
+  [14:57:50] RENDERUSD          $1.8430 | RSI 86 | Dip 0.1% | Trend UP
+  [14:58:11] XZECZUSD           $227.9600 | RSI 4 | Dip 0.3% | Trend UP HELD
+  [14:58:11] HBARUSD            $0.0954 | RSI 56 | Dip -0.0% | Trend UP
+  [14:58:11] FETUSD             $0.1942 | RSI 38 | Dip 0.6% | Trend UP
+  [14:58:11] ⚠️ FETUSD signal but no budget left
+  [14:58:11] TAOEUR             $240.4829 | RSI 24 | Dip 0.4% | Trend UP HELD
+  [14:58:12] XCNUSD             $0.0063 | RSI 16 | Dip 0.3% | Trend UP HELD
+  [14:58:12] TAOUSD             $274.1339 | RSI 19 | Dip 0.4% | Trend UP HELD
+  [14:58:11] TRUMPUSD           $3.9730 | RSI 94 | Dip 0.1% | Trend UP
+  [14:58:11] NEARUSD            $1.3370 | RSI 97 | Dip -0.3% | Trend UP
+  [14:58:20] RENDERUSD          $1.8430 | RSI 87 | Dip 0.1% | Trend UP
+  [14:58:42] HBARUSD            $0.0954 | RSI 56 | Dip -0.0% | Trend UP
+  [14:58:42] XCNUSD             $0.0063 | RSI 16 | Dip 0.3% | Trend UP HELD
+  [14:58:42] XZECZUSD           $228.2500 | RSI 7 | Dip 0.1% | Trend UP HELD
+  [14:58:42] TRUMPUSD           $3.9720 | RSI 94 | Dip 0.1% | Trend UP
+  [14:58:42] TAOEUR             $240.7974 | RSI 24 | Dip 0.3% | Trend UP HELD
+  [14:58:42] TAOUSD             $274.4720 | RSI 20 | Dip 0.3% | Trend UP HELD
+  [14:58:42] FETUSD             $0.1940 | RSI 38 | Dip 0.7% | Trend UP
+  [14:58:42] ⚠️ FETUSD signal but no budget left
+  [14:58:42] NEARUSD            $1.3370 | RSI 97 | Dip -0.3% | Trend UP
+  [14:58:51] RENDERUSD          $1.8440 | RSI 87 | Dip 0.0% | Trend UP
+  [14:59:12] HBARUSD            $0.0954 | RSI 67 | Dip 0.0% | Trend UP
+  [14:59:12] XCNUSD             $0.0063 | RSI 17 | Dip 0.5% | Trend UP HELD
+  [14:59:12] NEARUSD            $1.3370 | RSI 97 | Dip -0.3% | Trend UP
+  [14:59:12] TRUMPUSD           $3.9730 | RSI 94 | Dip 0.1% | Trend UP
+  [14:59:12] TAOEUR             $240.7921 | RSI 26 | Dip 0.3% | Trend UP HELD
+  [14:59:12] TAOUSD             $274.6313 | RSI 21 | Dip 0.2% | Trend UP HELD
+  [14:59:12] FETUSD             $0.1941 | RSI 38 | Dip 0.6% | Trend UP
+  [14:59:12] ⚠️ FETUSD signal but no budget left
+  [14:59:12] XZECZUSD           $228.1700 | RSI 9 | Dip 0.2% | Trend UP HELD
+  [14:59:21] RENDERUSD          $1.8460 | RSI 94 | Dip -0.1% | Trend UP
+  [14:59:43] TRUMPUSD           $3.9730 | RSI 93 | Dip 0.1% | Trend UP
+  [14:59:43] NEARUSD            $1.3370 | RSI 97 | Dip -0.3% | Trend UP
+  [14:59:43] TAOUSD             $274.6320 | RSI 22 | Dip 0.2% | Trend UP HELD
+  [14:59:43] HBARUSD            $0.0954 | RSI 66 | Dip -0.0% | Trend UP
+  [14:59:43] XZECZUSD           $228.3100 | RSI 10 | Dip 0.1% | Trend UP HELD
+  [14:59:43] TAOEUR             $241.1488 | RSI 27 | Dip 0.2% | Trend UP HELD
+  [14:59:43] XCNUSD             $0.0063 | RSI 17 | Dip 0.6% | Trend UP HELD
+  [14:59:43] FETUSD             $0.1946 | RSI 38 | Dip 0.4% | Trend UP
+  [14:59:43] ⚠️ FETUSD signal but no budget left
+  [14:59:52] RENDERUSD          $1.8450 | RSI 94 | Dip -0.1% | Trend UP
+  [15:00:13] TRUMPUSD           $3.9790 | RSI 99 | Dip -0.1% | Trend UP
+  [15:00:13] HBARUSD            $0.0955 | RSI 85 | Dip -0.0% | Trend UP
+  [15:00:13] XZECZUSD           $228.4400 | RSI 11 | Dip 0.1% | Trend UP HELD
+  [15:00:13] XCNUSD             $0.0063 | RSI 18 | Dip 0.6% | Trend UP HELD
+  [15:00:13] FETUSD             $0.1943 | RSI 47 | Dip 0.5% | Trend UP
+  [15:00:13] NEARUSD            $1.3360 | RSI 100 | Dip -0.2% | Trend UP
+  [15:00:13] TAOEUR             $240.7965 | RSI 23 | Dip 0.3% | Trend UP HELD
+  [15:00:13] TAOUSD             $274.7336 | RSI 21 | Dip 0.2% | Trend UP HELD
+  [15:00:22] RENDERUSD          $1.8440 | RSI 98 | Dip 0.0% | Trend UP
+  [15:00:43] XZECZUSD           $228.4500 | RSI 11 | Dip 0.1% | Trend UP HELD
+  [15:00:43] TRUMPUSD           $3.9800 | RSI 99 | Dip 0.2% | Trend UP
+  [15:00:43] FETUSD             $0.1943 | RSI 47 | Dip 0.5% | Trend UP
+  [15:00:43] HBARUSD            $0.0954 | RSI 84 | Dip 0.0% | Trend UP
+  [15:00:43] NEARUSD            $1.3370 | RSI 100 | Dip -0.3% | Trend UP
+  [15:00:43] TAOUSD             $275.7244 | RSI 23 | Dip 0.0% | Trend UP HELD
+  [15:00:43] XCNUSD             $0.0063 | RSI 18 | Dip 0.5% | Trend UP HELD
+  [15:00:43] TAOEUR             $241.8557 | RSI 24 | Dip -0.1% | Trend UP HELD
+  [15:00:53] RENDERUSD          $1.8430 | RSI 98 | Dip 0.1% | Trend UP
+  [15:01:14] FETUSD             $0.1944 | RSI 34 | Dip 0.3% | Trend UP
+  [15:01:14] ⚠️ FETUSD signal but no budget left
+  [15:01:14] XZECZUSD           $228.2800 | RSI 12 | Dip 0.2% | Trend UP HELD
+  [15:01:14] HBARUSD            $0.0954 | RSI 80 | Dip 0.0% | Trend UP
+  [15:01:14] TRUMPUSD           $3.9770 | RSI 99 | Dip 0.3% | Trend UP
+  [15:01:14] XCNUSD             $0.0063 | RSI 18 | Dip 0.8% | Trend UP HELD
+  [15:01:14] NEARUSD            $1.3370 | RSI 100 | Dip -0.3% | Trend UP
+  [15:01:14] TAOUSD             $275.4794 | RSI 24 | Dip 0.1% | Trend UP HELD
+  [15:01:14] TAOEUR             $241.4994 | RSI 24 | Dip 0.0% | Trend UP HELD
+  [15:01:23] RENDERUSD          $1.8400 | RSI 94 | Dip 0.2% | Trend UP
+  [15:01:44] HBARUSD            $0.0954 | RSI 80 | Dip 0.0% | Trend UP
+  [15:01:44] TAOUSD             $276.1700 | RSI 25 | Dip 0.0% | Trend UP HELD
+  [15:01:44] NEARUSD            $1.3360 | RSI 100 | Dip -0.2% | Trend UP
+  [15:01:44] TRUMPUSD           $3.9740 | RSI 99 | Dip 0.3% | Trend UP
+  [15:01:44] TAOEUR             $242.2508 | RSI 26 | Dip -0.1% | Trend UP HELD
+  [15:01:44] XZECZUSD           $228.0900 | RSI 12 | Dip 0.3% | Trend UP HELD
+  [15:01:44] XCNUSD             $0.0063 | RSI 18 | Dip 0.9% | Trend UP HELD
+  [15:01:44] FETUSD             $0.1943 | RSI 34 | Dip 0.4% | Trend UP
+  [15:01:44] ⚠️ FETUSD signal but no budget left
+  [15:01:53] RENDERUSD          $1.8390 | RSI 94 | Dip 0.3% | Trend UP
+  [15:02:14] TAOUSD             $276.9515 | RSI 28 | Dip 0.0% | Trend UP HELD
+  [15:02:15] XCNUSD             $0.0063 | RSI 16 | Dip 1.1% | Trend UP HELD
+  [15:02:15] TRUMPUSD           $3.9740 | RSI 100 | Dip 0.3% | Trend UP
+  [15:02:14] HBARUSD            $0.0955 | RSI 93 | Dip -0.0% | Trend UP
+  [15:02:15] TAOEUR             $242.7141 | RSI 30 | Dip -0.2% | Trend UP HELD
+  [15:02:15] XZECZUSD           $228.4200 | RSI 15 | Dip 0.1% | Trend UP HELD
+  [15:02:15] FETUSD             $0.1947 | RSI 39 | Dip -0.2% | Trend UP
+  [15:02:15] ⚠️ FETUSD signal but no budget left
+  [15:02:14] NEARUSD            $1.3360 | RSI 100 | Dip -0.2% | Trend UP
+  [15:02:24] RENDERUSD          $1.8440 | RSI 96 | Dip 0.0% | Trend UP
+  [15:02:45] TAOUSD             $277.0185 | RSI 29 | Dip 0.1% | Trend UP HELD
+  [15:02:45] TAOEUR             $242.9216 | RSI 31 | Dip 0.0% | Trend UP HELD
+  [15:02:45] FETUSD             $0.1943 | RSI 39 | Dip 0.1% | Trend UP
+  [15:02:45] ⚠️ FETUSD signal but no budget left
+  [15:02:45] HBARUSD            $0.0955 | RSI 93 | Dip -0.0% | Trend UP
+  [15:02:45] XCNUSD             $0.0063 | RSI 16 | Dip 1.3% | Trend UP HELD
+  [15:02:45] NEARUSD            $1.3370 | RSI 100 | Dip -0.1% | Trend UP
+  [15:02:45] TRUMPUSD           $3.9750 | RSI 100 | Dip 0.3% | Trend UP
+  [15:02:45] XZECZUSD           $228.4700 | RSI 15 | Dip 0.1% | Trend UP HELD
+  [15:02:54] RENDERUSD          $1.8450 | RSI 96 | Dip -0.1% | Trend UP
+  [15:03:15] TAOEUR             $242.9163 | RSI 29 | Dip 0.0% | Trend UP HELD
+  [15:03:16] XCNUSD             $0.0063 | RSI 14 | Dip 0.9% | Trend UP HELD
+  [15:03:16] HBARUSD            $0.0955 | RSI 92 | Dip 0.0% | Trend UP
+  [15:03:16] TRUMPUSD           $3.9750 | RSI 100 | Dip 0.3% | Trend UP
+  [15:03:15] FETUSD             $0.1943 | RSI 37 | Dip 0.1% | Trend UP
+  [15:03:15] ⚠️ FETUSD signal but no budget left
+  [15:03:16] NEARUSD            $1.3370 | RSI 100 | Dip -0.1% | Trend UP
+  [15:03:15] TAOUSD             $276.9259 | RSI 26 | Dip 0.1% | Trend UP HELD
+  [15:03:16] XZECZUSD           $228.5000 | RSI 15 | Dip 0.1% | Trend UP HELD
+  [15:03:25] RENDERUSD          $1.8460 | RSI 96 | Dip -0.1% | Trend UP
+  [15:03:46] TAOEUR             $242.8384 | RSI 29 | Dip 0.0% | Trend UP HELD
+  [15:03:46] NEARUSD            $1.3370 | RSI 100 | Dip -0.1% | Trend UP
+  [15:03:46] HBARUSD            $0.0955 | RSI 86 | Dip 0.1% | Trend UP
+  [15:03:46] XZECZUSD           $228.1800 | RSI 15 | Dip 0.3% | Trend UP HELD
+  [15:03:46] TAOUSD             $276.8679 | RSI 26 | Dip 0.2% | Trend UP HELD
+  [15:03:46] FETUSD             $0.1937 | RSI 37 | Dip 0.4% | Trend UP
+  [15:03:46] ⚠️ FETUSD signal but no budget left
+  [15:03:46] XCNUSD             $0.0063 | RSI 15 | Dip 0.9% | Trend UP HELD
+  [15:03:46] TRUMPUSD           $3.9750 | RSI 100 | Dip 0.3% | Trend UP
+  [15:03:55] RENDERUSD          $1.8470 | RSI 96 | Dip -0.2% | Trend UP
+  [15:04:16] TAOEUR             $242.5446 | RSI 24 | Dip 0.2% | Trend UP HELD
+  [15:04:16] TRUMPUSD           $3.9770 | RSI 100 | Dip 0.3% | Trend UP
+  [15:04:16] NEARUSD            $1.3360 | RSI 100 | Dip -0.1% | Trend UP
+  [15:04:16] XZECZUSD           $228.1100 | RSI 15 | Dip 0.3% | Trend UP HELD
+  [15:04:16] XCNUSD             $0.0063 | RSI 16 | Dip 1.1% | Trend UP HELD
+  [15:04:16] FETUSD             $0.1938 | RSI 35 | Dip 0.3% | Trend UP
+  [15:04:16] ⚠️ FETUSD signal but no budget left
+  [15:04:16] HBARUSD            $0.0954 | RSI 84 | Dip 0.1% | Trend UP
+  [15:04:16] TAOUSD             $276.1214 | RSI 22 | Dip 0.4% | Trend UP HELD
+  [15:04:25] RENDERUSD          $1.8440 | RSI 96 | Dip 0.0% | Trend UP
+  [15:04:47] TAOEUR             $241.8490 | RSI 24 | Dip 0.5% | Trend UP HELD
+  [15:04:47] TAOUSD             $275.5087 | RSI 22 | Dip 0.6% | Trend UP HELD
+  [15:04:47] HBARUSD            $0.0954 | RSI 82 | Dip 0.1% | Trend UP
+  [15:04:47] NEARUSD            $1.3360 | RSI 100 | Dip -0.1% | Trend UP
+  [15:04:47] XZECZUSD           $228.0100 | RSI 15 | Dip 0.3% | Trend UP HELD
+  [15:04:47] XCNUSD             $0.0063 | RSI 15 | Dip 1.4% | Trend UP HELD
+  [15:04:47] FETUSD             $0.1936 | RSI 35 | Dip 0.4% | Trend DOWN
+  [15:04:47] TRUMPUSD           $3.9770 | RSI 100 | Dip 0.3% | Trend UP
+  [15:04:56] RENDERUSD          $1.8430 | RSI 95 | Dip 0.1% | Trend UP
+  [15:05:17] HBARUSD            $0.0954 | RSI 80 | Dip 0.1% | Trend UP
+  [15:05:17] XCNUSD             $0.0062 | RSI 14 | Dip 1.7% | Trend DOWN HELD
+  [15:05:17] FETUSD             $0.1938 | RSI 40 | Dip 0.3% | Trend UP
+  [15:05:17] XZECZUSD           $227.8000 | RSI 14 | Dip 0.4% | Trend DOWN HELD
+  [15:05:17] TAOUSD             $275.4548 | RSI 24 | Dip 0.7% | Trend UP HELD
+  [15:05:17] TAOEUR             $241.6416 | RSI 24 | Dip 0.5% | Trend UP HELD
+  [15:05:17] TRUMPUSD           $3.9730 | RSI 100 | Dip 0.4% | Trend UP
+  [15:05:17] NEARUSD            $1.3360 | RSI 100 | Dip -0.1% | Trend UP
+  [15:05:26] RENDERUSD          $1.8350 | RSI 95 | Dip 0.5% | Trend DOWN
+  [15:05:47] XCNUSD             $0.0063 | RSI 14 | Dip 1.3% | Trend UP HELD
+  [15:05:47] FETUSD             $0.1938 | RSI 42 | Dip 0.3% | Trend UP
+  [15:05:48] NEARUSD            $1.3360 | RSI 100 | Dip -0.1% | Trend UP
+  [15:05:47] TAOUSD             $277.4993 | RSI 30 | Dip -0.1% | Trend UP HELD
+  [15:05:47] HBARUSD            $0.0954 | RSI 80 | Dip 0.1% | Trend UP
+  [15:05:47] TAOEUR             $243.0644 | RSI 24 | Dip -0.0% | Trend UP HELD
+  [15:05:47] XZECZUSD           $227.8500 | RSI 14 | Dip 0.4% | Trend DOWN HELD
+  [15:05:47] TRUMPUSD           $3.9720 | RSI 100 | Dip 0.4% | Trend DOWN
+  [15:05:57] RENDERUSD          $1.8370 | RSI 95 | Dip 0.4% | Trend DOWN
+  [15:06:18] NEARUSD            $1.3350 | RSI 100 | Dip 0.0% | Trend UP
+  [15:06:18] XCNUSD             $0.0063 | RSI 9 | Dip 1.4% | Trend DOWN HELD

@@ -16,7 +16,7 @@ import signal
 import sys
 import math
 from datetime import datetime, timedelta
-from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order
+from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, place_bracket_order, get_open_orders, cancel_order
 from kraken_connection import calculate_order_size
 from learning_engine import LearningEngine
 
@@ -499,49 +499,31 @@ def calculate_position_size(entry_price: float, stop_loss_price: float, account_
     return shares
 
 def place_limit_orders(entry_price: float, position_shares: float, stop_loss_price: float, take_profit_price: float):
-    """Place stop-loss and take-profit limit orders."""
+    """Place OTO bracket: limit TP with conditional close SL (single order, reserves coins once)."""
     global stop_loss_order_id, take_profit_order_id
-    
+
     try:
         # Cancel any existing orders first
         cancel_all_limit_orders()
-        
-        # Place stop-loss order (sell)
-        if stop_loss_price > 0 and position_shares > 0:
-            print(f"  🛡️ Placing stop-loss order at ${stop_loss_price:.2f}")
-            stop_result, stop_info = place_order(
+
+        if take_profit_price > 0 and stop_loss_price > 0 and position_shares > 0:
+            print(f"  🎯 Placing OTO bracket: TP @ ${take_profit_price:.2f} | SL @ ${stop_loss_price:.2f}")
+            ok, info = place_bracket_order(
                 pair=PAIR,
                 side="sell",
-                order_type="stop-loss",
-                volume=position_shares,
-                price=stop_loss_price,
-                validate=False
+                volume=str(round(position_shares, 8)),
+                price=str(take_profit_price),
+                price2=str(stop_loss_price),
             )
-            
-            if stop_result:
-                stop_loss_order_id = stop_info.get('txid', [None])[0]
-                print(f"  ✅ Stop-loss order placed: {stop_loss_order_id}")
+
+            if ok:
+                txids = info.get('txid', [])
+                take_profit_order_id = txids[0] if txids else None
+                stop_loss_order_id = take_profit_order_id  # SL is conditional close on same order
+                print(f"  ✅ OTO bracket placed: {take_profit_order_id}")
             else:
-                print(f"  ❌ Stop-loss order failed: {stop_info}")
-        
-        # Place take-profit order (sell limit)
-        if take_profit_price > 0 and position_shares > 0:
-            print(f"  🎯 Placing take-profit order at ${take_profit_price:.2f}")
-            profit_result, profit_info = place_order(
-                pair=PAIR,
-                side="sell",
-                order_type="limit",
-                volume=position_shares,
-                price=take_profit_price,
-                validate=False
-            )
-            
-            if profit_result:
-                take_profit_order_id = profit_info.get('txid', [None])[0]
-                print(f"  ✅ Take-profit order placed: {take_profit_order_id}")
-            else:
-                print(f"  ❌ Take-profit order failed: {profit_info}")
-        
+                print(f"  ❌ OTO bracket failed: {info}")
+
         return True
         
     except Exception as e:

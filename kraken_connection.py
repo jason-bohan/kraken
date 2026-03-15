@@ -290,13 +290,14 @@ def calculate_order_size(pair: str, price: float, available_usd: float = None, a
     min_cost = min_info['costmin']
     
     if available_usd is not None:  # Buying
-        # Use the larger of minimum cost or cost from minimum volume
+        # Ensure volume is at least ordermin so the position can be sold later
         cost_from_min_volume = min_volume * price
         required_cost = max(min_cost, cost_from_min_volume)
-        
+
         if available_usd >= required_cost:
-            volume = required_cost / price
-            return {'volume': volume, 'cost': required_cost, 'can_afford': True}
+            volume = max(min_volume, required_cost / price)
+            actual_cost = volume * price
+            return {'volume': volume, 'cost': actual_cost, 'can_afford': True}
         else:
             return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'Insufficient USD'}
     
@@ -351,7 +352,8 @@ def get_trade_history(count: int = 50) -> dict:
                     "cost": float(trade_data.get("cost", 0)),
                     "fee": float(trade_data.get("fee", 0)),
                     "vol": float(trade_data.get("vol", 0)),
-                    "margin": float(trade_data.get("margin", 0))
+                    "margin": float(trade_data.get("margin", 0)),
+                    "ordertxid": trade_data.get("ordertxid", ""),
                 })
             
             # Sort by time (newest first)
@@ -586,6 +588,25 @@ def get_open_orders() -> dict:
         return body.get("result", {}).get("open", {})
     except Exception as e:
         print(f"  ⚠️ OpenOrders exception: {e}")
+    return {}
+
+
+def query_orders(txids: list[str]) -> dict:
+    """Look up orders by transaction ID. Returns {txid: order_info} with userref."""
+    if not txids:
+        return {}
+    path = "/0/private/QueryOrders"
+    data = {"txid": ",".join(txids)}
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        body = res.json()
+        if body.get("error"):
+            print(f"  ⚠️ QueryOrders error: {body['error']}")
+            return {}
+        return body.get("result", {})
+    except Exception as e:
+        print(f"  ⚠️ QueryOrders exception: {e}")
     return {}
 
 
