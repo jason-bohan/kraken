@@ -40,8 +40,8 @@ from position_guardian import place_exit_orders, check_exit_orders, cancel_remai
 PAIR           = "DOTUSD"      # DOT trading pair on Kraken
 ASSET          = "DOT"         # base asset name in balance
 QUOTE          = "ZUSD"        # Kraken USD (not USDT)
-PROFIT_PCT     = 0.12          # 12% profit target — 1.5:1 R/R vs 8% stop
-STOP_PCT       = 0.08          # 8% stop loss — tight enough to limit losses (was 25%)
+PROFIT_PCT     = 0.10          # 10% profit target — backtested optimal
+STOP_PCT       = 0.08          # 8% stop loss — backtested optimal
 RSI_PERIOD     = 14            # RSI lookback periods
 RSI_OVERSOLD   = 38            # enter when RSI below this
 RSI_OVERBOUGHT = 68            # sell/block entry when RSI above this

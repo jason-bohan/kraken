@@ -47,8 +47,8 @@ BASE_URL = "https://api.kraken.com"
 TOP_N            = 10           # number of pairs to trade at once
 RESCAN_SECS      = 900          # rescan for new top pairs every 15 min
 CHECK_SECS       = 30           # how often each pair thread checks price
-PROFIT_PCT       = 0.08         # 8% profit target — 2:1 reward/risk vs 4% stop
-STOP_PCT         = 0.04         # 4% stop loss — cut losses fast
+PROFIT_PCT       = 0.10         # 10% profit target — backtested optimal
+STOP_PCT         = 0.08         # 8% stop loss — wider SL avoids noise stopouts
 RSI_OVERSOLD     = 40           # entry RSI threshold (buy when RSI is below this)
 RSI_OVERBOUGHT   = 70           # never enter when RSI is above this (too pumped)
 DIP_MIN          = 0.02         # enter on 2%+ dip
@@ -469,8 +469,8 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 dip_signal = DIP_MIN <= dip <= DIP_MAX
                 not_overbought = rsi < RSI_OVERBOUGHT  # block entry if RSI is too pumped
 
-                # Trend filter: only buy if price is above 20-period MA (uptrend)
-                uptrend = price >= ma20 if ma20 else True
+                # Trend filter disabled — backtesting showed it filters profitable entries
+                uptrend = True
 
                 # Holdings check: don't buy if we already hold this asset
                 balances_snapshot = get_balance() if not dry_run else {}

@@ -33,8 +33,8 @@ def get_stock_config(symbol: str) -> dict:
             "rsi_overbought": 70,
             "dip_min": 0.02,
             "dip_max": 0.06,
-            "profit_target": 0.04,
-            "stop_loss": 0.02,
+            "profit_target": 0.10,
+            "stop_loss": 0.08,
             "min_trade": 50.0,
             "volatility_threshold": 0.03
         },
@@ -43,8 +43,8 @@ def get_stock_config(symbol: str) -> dict:
             "rsi_overbought": 75,
             "dip_min": 0.03,
             "dip_max": 0.08,
-            "profit_target": 0.06,
-            "stop_loss": 0.03,
+            "profit_target": 0.10,
+            "stop_loss": 0.08,
             "min_trade": 30.0,
             "volatility_threshold": 0.04
         },
@@ -53,8 +53,8 @@ def get_stock_config(symbol: str) -> dict:
             "rsi_overbought": 80,
             "dip_min": 0.05,
             "dip_max": 0.12,
-            "profit_target": 0.08,
-            "stop_loss": 0.04,
+            "profit_target": 0.10,
+            "stop_loss": 0.08,
             "min_trade": 20.0,
             "volatility_threshold": 0.06
         },
@@ -63,8 +63,8 @@ def get_stock_config(symbol: str) -> dict:
             "rsi_overbought": 70,
             "dip_min": 0.04,
             "dip_max": 0.10,
-            "profit_target": 0.06,
-            "stop_loss": 0.03,
+            "profit_target": 0.10,
+            "stop_loss": 0.08,
             "min_trade": 20.0,
             "volatility_threshold": 0.05
         },
@@ -73,8 +73,8 @@ def get_stock_config(symbol: str) -> dict:
             "rsi_overbought": 75,
             "dip_min": 0.04,
             "dip_max": 0.09,
-            "profit_target": 0.07,
-            "stop_loss": 0.035,
+            "profit_target": 0.10,
+            "stop_loss": 0.08,
             "min_trade": 20.0,
             "volatility_threshold": 0.05
         }
@@ -111,8 +111,8 @@ def get_stock_config(symbol: str) -> dict:
         "rsi_overbought": 70,
         "dip_min": 0.03,
         "dip_max": 0.08,
-        "profit_target": 0.06,
-        "stop_loss": 0.03,
+        "profit_target": 0.10,
+        "stop_loss": 0.08,
         "min_trade": 50.0,
         "volatility_threshold": 0.05
     }
