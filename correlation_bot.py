@@ -42,6 +42,8 @@ CHECK_SECS = 30
 PROFIT_PCT = 0.08  # 8% — 2:1 reward/risk
 STOP_PCT = 0.04    # 4% — tight stop
 RESERVE_USD = 5.0  # Keep this much USD in reserve
+MAX_TRADE_USD = 20.0  # Cap per-trade spend
+USERREF = 11  # Tag orders for portfolio analyzer
 DRY_BALANCE = 50.0
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -202,7 +204,10 @@ def get_trade_size(pair: str, price: float, dry_run=False) -> tuple:
     
     if available < 1.0:
         return 0, 0
-    
+
+    # Cap per-trade spend
+    available = min(available, MAX_TRADE_USD)
+
     # Use dynamic order sizing
     order_info = calculate_order_size(pair, price, available)
     
@@ -220,7 +225,7 @@ def place_trade(pair: str, side: str, volume: float, cost: float, dry_run=False)
     
     print(f"  🚀 {'BUY' if side == 'buy' else 'SELL'} {volume} {pair} (~${cost:.2f})")
     
-    ok, result = place_order(pair, side, "market", volume=volume, cost=cost)
+    ok, result = place_order(pair, side, "market", volume=volume, cost=cost, userref=USERREF)
     if ok:
         tg(f"📊 *Correlation trade* {side.upper()} {volume} {pair} (~${cost:.2f})")
     else:

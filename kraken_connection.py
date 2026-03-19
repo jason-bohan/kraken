@@ -311,15 +311,17 @@ def calculate_order_size(pair: str, price: float, available_usd: float = None, a
     return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'Invalid parameters'}
 
 
-def get_trade_history(count: int = 50) -> dict:
+def get_trade_history(count: int = 50, ofs: int = 0) -> dict:
     """Get recent trade history from Kraken."""
     path = "/0/private/TradesHistory"
     nonce = str(int(time.time() * 1000))
-    
+
     data = {
         "nonce": nonce,
-        "count": str(count)
+        "count": str(count),
     }
+    if ofs:
+        data["ofs"] = str(ofs)
     
     try:
         signature = get_kraken_signature(path, data, os.getenv("KRAKEN_API_SECRET", ""))
@@ -625,6 +627,47 @@ def get_closed_orders(trades: bool = True) -> dict:
     except Exception as e:
         print(f"  ⚠️ ClosedOrders exception: {e}")
     return {}
+
+
+def get_ledger(asset: str = None, ltype: str = None, ofs: int = 0) -> list:
+    """
+    Get ledger entries (deposits, withdrawals, trades, fees, etc.).
+    ltype: 'deposit', 'withdrawal', 'trade', 'margin', 'rollover', 'transfer', 'all'
+    Returns list of ledger entry dicts sorted by time.
+    """
+    path = "/0/private/Ledgers"
+    data = {}
+    if asset:
+        data["asset"] = asset
+    if ltype:
+        data["type"] = ltype
+    if ofs:
+        data["ofs"] = str(ofs)
+
+    try:
+        headers = get_kraken_headers(path, data)
+        res = requests.post(BASE_URL + path, headers=headers, data=data, timeout=10)
+        body = res.json()
+        if body.get("error"):
+            print(f"  ⚠️ Ledger error: {body['error']}")
+            return []
+        result = body.get("result", {})
+        ledger = result.get("ledger", {})
+        entries = []
+        for lid, info in ledger.items():
+            entries.append({
+                "id": lid,
+                "type": info.get("type", ""),
+                "asset": info.get("asset", ""),
+                "amount": float(info.get("amount", 0)),
+                "fee": float(info.get("fee", 0)),
+                "time": float(info.get("time", 0)),
+                "balance": float(info.get("balance", 0)),
+            })
+        return sorted(entries, key=lambda x: x["time"])
+    except Exception as e:
+        print(f"  ⚠️ Ledger exception: {e}")
+        return []
 
 
 # ─────────────────────────────────────────────

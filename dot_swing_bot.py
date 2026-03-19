@@ -48,6 +48,7 @@ RSI_OVERBOUGHT = 68            # sell/block entry when RSI above this
 DIP_MIN        = 0.05          # buy on 5%+ dip (was 15% — too rare to trigger)
 DIP_MAX        = 0.20          # skip if drop exceeds 20% (possible breakdown)
 MIN_TRADE_USD  = 10.0          # minimum USD value per trade (Kraken minimum ~$10)
+MAX_TRADE_USD  = 15.0          # cap per-trade spend
 MIN_TRADE_DOT  = 1.0           # minimum DOT to sell per trade
 RESERVE_USD    = 2.0           # keep this much USD in reserve
 RESERVE_DOT    = 1.0           # keep this much DOT in reserve (don't sell everything)
@@ -138,10 +139,11 @@ def get_buy_size(price: float, dry_run: bool) -> float:
     
     balances = get_balance()
     available_usd = float(balances.get(QUOTE, balances.get("ZUSD", 0))) - RESERVE_USD
-    
+    available_usd = min(available_usd, MAX_TRADE_USD)
+
     if available_usd <= 0:
         return 0.0
-    
+
     order_info = calculate_order_size(PAIR, price, available_usd=available_usd)
     if not order_info['can_afford']:
         print(f"  ⚠️ {order_info.get('error', 'Cannot afford order')}")

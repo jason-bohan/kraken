@@ -499,33 +499,33 @@ def calculate_position_size(entry_price: float, stop_loss_price: float, account_
     return shares
 
 def place_limit_orders(entry_price: float, position_shares: float, stop_loss_price: float, take_profit_price: float):
-    """Place OTO bracket: limit TP with conditional close SL (single order, reserves coins once)."""
+    """Place standalone stop-loss for downside protection. Bot loop handles TP via market sell."""
     global stop_loss_order_id, take_profit_order_id
 
     try:
         # Cancel any existing orders first
         cancel_all_limit_orders()
 
-        if take_profit_price > 0 and stop_loss_price > 0 and position_shares > 0:
-            print(f"  🎯 Placing OTO bracket: TP @ ${take_profit_price:.2f} | SL @ ${stop_loss_price:.2f}")
-            ok, info = place_bracket_order(
+        if stop_loss_price > 0 and position_shares > 0:
+            print(f"  🛡️ Placing SL protection @ ${stop_loss_price:.2f} | TP target @ ${take_profit_price:.2f} (bot loop)")
+            ok, info = place_order(
                 pair=PAIR,
                 side="sell",
-                volume=str(round(position_shares, 8)),
-                price=str(take_profit_price),
-                price2=str(stop_loss_price),
+                order_type="stop-loss",
+                volume=round(position_shares, 8),
+                price=stop_loss_price,
             )
 
             if ok:
                 txids = info.get('txid', [])
-                take_profit_order_id = txids[0] if txids else None
-                stop_loss_order_id = take_profit_order_id  # SL is conditional close on same order
-                print(f"  ✅ OTO bracket placed: {take_profit_order_id}")
+                stop_loss_order_id = txids[0] if txids else None
+                take_profit_order_id = None  # TP handled by bot loop, not a standing order
+                print(f"  ✅ SL protection placed: {stop_loss_order_id}")
             else:
-                print(f"  ❌ OTO bracket failed: {info}")
+                print(f"  ❌ SL order failed: {info}")
 
         return True
-        
+
     except Exception as e:
         print(f"  ❌ Error placing limit orders: {e}")
         return False
@@ -558,56 +558,41 @@ def cancel_all_limit_orders():
     trailing_stop_order_id = None
 
 def check_order_status():
-    """Check if any limit orders have been filled."""
+    """Check if the standalone stop-loss or trailing stop has been filled."""
     global stop_loss_order_id, take_profit_order_id, trailing_stop_order_id, in_position
-    
+
     try:
-        # Get open orders
+        # Nothing to check if no orders placed
+        if not stop_loss_order_id and not trailing_stop_order_id:
+            return False
+
+        # get_open_orders() returns {txid: order_data, ...}
         open_orders = get_open_orders()
-        
-        # Check if our orders are still open
-        orders_still_open = {
-            "stop_loss": False,
-            "take_profit": False,
-            "trailing_stop": False
-        }
-        
-        for order in open_orders.get('open', {}):
-            order_id = order.get('txid', '')
-            
-            if order_id == stop_loss_order_id:
-                orders_still_open["stop_loss"] = True
-            elif order_id == take_profit_order_id:
-                orders_still_open["take_profit"] = True
-            elif order_id == trailing_stop_order_id:
-                orders_still_open["trailing_stop"] = True
-        
-        # If any order was filled (no longer open), close position
-        if (stop_loss_order_id and not orders_still_open["stop_loss"]) or \
-           (take_profit_order_id and not orders_still_open["take_profit"]) or \
-           (trailing_stop_order_id and not orders_still_open["trailing_stop"]):
-            
-            # Determine which order was filled
-            exit_reason = "stop_loss" if stop_loss_order_id and not orders_still_open["stop_loss"] else \
-                         "take_profit" if take_profit_order_id and not orders_still_open["take_profit"] else \
-                         "trailing_stop"
-            
-            print(f"  🎯 {exit_reason.replace('_', ' ').title()} order filled!")
-            
-            # Cancel any remaining orders
-            cancel_all_limit_orders()
-            
-            # Get current price for P&L calculation
+        open_txids = set(open_orders.keys())
+
+        sl_open = stop_loss_order_id in open_txids if stop_loss_order_id else False
+        ts_open = trailing_stop_order_id in open_txids if trailing_stop_order_id else False
+
+        sl_fired = (stop_loss_order_id and not sl_open)
+        ts_fired = (trailing_stop_order_id and not ts_open)
+
+        if sl_fired or ts_fired:
             ticker = get_ticker(PAIR)
             current_price = float(ticker.get("c", [0])[0]) if ticker else entry_price
-            
-            # Reconcile state — position already closed by exchange order, no new order needed
+
+            exit_reason = "trailing_stop" if ts_fired else "stop_loss"
+            print(f"  🎯 {exit_reason.replace('_', ' ').title()} order filled!")
+
+            # Cancel any remaining orders
+            cancel_all_limit_orders()
+
+            # Reconcile state — position already closed by exchange, no new order needed
             execute_sell(current_price, exit_reason, dry_run=False, skip_order=True)
-            
+
             return True
-        
+
         return False
-        
+
     except Exception as e:
         print(f"  ⚠️ Error checking order status: {e}")
         return False
@@ -1091,26 +1076,31 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
             
             # Check exit conditions if in position
             if in_position:
-                # Check if any limit orders have been filled
+                # Check if SL fired on Kraken
                 if check_order_status():
                     time.sleep(60)  # Wait after exit
                     continue
-                
+
+                # Check TP/SL/trailing in bot loop (TP has no standing order)
+                exit_signal = check_exit_conditions(current_price)
+                if exit_signal != "hold":
+                    print(f"  🎯 Exit signal: {exit_signal} @ ${current_price:.2f}")
+                    cancel_all_limit_orders()  # Cancel SL before market sell
+                    execute_sell(current_price, exit_signal, dry_run)
+                    time.sleep(60)
+                    continue
+
                 # Update trailing stop order if price increased
                 update_trailing_stop_order(current_price)
-                
+
                 print(f"  📊 Position: {position_size:.2f} shares @ ${entry_price:.2f}")
                 print(f"  🛡️ Stop: ${stop_loss:.2f} | 🎯 Target: ${take_profit:.2f}")
                 if trailing_stop > 0:
                     print(f"  📈 Trailing: ${trailing_stop:.2f}")
-                
+
                 # Show active orders
-                if stop_loss_order_id or take_profit_order_id:
-                    print(f"  📋 Active Orders:")
-                    if stop_loss_order_id:
-                        print(f"     🛡️ Stop-loss: {stop_loss_order_id}")
-                    if take_profit_order_id:
-                        print(f"     🎯 Take-profit: {take_profit_order_id}")
+                if stop_loss_order_id:
+                    print(f"  📋 Active: 🛡️ SL {stop_loss_order_id}")
             else:
                 # Manual entry prompt
                 if manual_entry:

@@ -1,34 +1,39 @@
 #!/usr/bin/env python3
 """
-Position Guardian — server-side exit protection using Kraken's OTO bracket orders.
+Position Guardian — server-side exit protection using standalone stop-loss orders.
 
-Places a limit take-profit as the primary order with a stop-loss attached as a
-conditional close. Kraken manages both server-side — they fire even if the bot
-crashes. Kraken shows these as OTO (One-Triggers-Other) in the UI.
+Places a standalone stop-loss sell order on Kraken for downside protection.
+Bots handle take-profit in their monitoring loops (market sell when TP reached,
+cancel the SL first). The SL fires automatically on Kraken even if the bot crashes.
 
-Behavior:
-  TP fills         → conditional SL is void (position already closed)
-  TP cancelled     → SL activates as a live order
-  Price hits SL    → Kraken fires the SL and cancels the TP
+Previous approach (OTO brackets) was broken: the conditional SL only activates
+AFTER the primary TP limit order fills — it does NOT fire concurrently. So when
+price dropped below SL while TP was unfilled, the SL never triggered.
 
-Only the TP order reserves coins — no 'Insufficient funds' errors.
+New approach:
+  - place_exit_orders() places a standalone stop-loss sell order
+  - Bot loop handles TP: detects price >= TP → cancel SL → market sell
+  - If bot crashes: SL sits on Kraken, fires when price hits trigger
 
 Usage in any bot:
 
     from position_guardian import place_exit_orders, scan_and_protect, check_exit_orders
 
-    # After a successful buy — place bracket TP+SL on Kraken:
+    # After a successful buy — place SL on Kraken:
     exit_orders = place_exit_orders(pair, volume, entry_price, PROFIT_PCT, STOP_PCT)
-    # exit_orders = {"tp": "TXID-TP", "sl": None}
-    # Note: sl txid is None because the SL is a conditional close, not a separate order.
-    # Kraken manages the SL internally — it fires if TP is cancelled or price hits trigger.
+    # exit_orders = {"tp": None, "sl": "TXID-SL"}
 
-    # In the monitor loop — check if Kraken already closed the position:
+    # In the monitor loop — check if SL fired:
     if exit_orders:
         closed = check_exit_orders(exit_orders)
         if closed:
             position = None
             exit_orders = None
+
+    # When bot detects TP in its loop:
+    if pnl_pct >= PROFIT_PCT:
+        cancel_remaining_exit(exit_orders)  # cancel the SL
+        place_order(pair, "sell", "market", volume=volume)  # market sell
 
     # On bot startup — protect unprotected holdings automatically:
     scan_and_protect(
@@ -69,61 +74,43 @@ def place_exit_orders(
     stop_pct: float,
 ) -> dict:
     """
-    Place a Kraken OTO bracket: limit TP with conditional close SL.
+    Place a standalone stop-loss sell order on Kraken for downside protection.
 
-    A single order reserves the coins once — avoids 'Insufficient funds' from
-    two separate sell orders. Kraken manages the SL as a conditional close
-    attached to the primary TP limit order.
+    Bots handle take-profit in their monitoring loops. The SL fires automatically
+    on Kraken even if the bot crashes.
 
-    Returns dict: {"tp": txid_or_None, "sl": txid_or_None}
-    The SL txid may mirror the TP txid since Kraken tracks the conditional
-    close internally rather than as a separate order.
+    Returns dict: {"tp": None, "sl": txid_or_None, "tp_price": float, "sl_price": float}
+    tp_price is stored so bots know the TP level for their loop checks.
     """
-    tp_price_str = _fmt_price(entry_price * (1 + profit_pct), pair)
-    sl_price_str = _fmt_price(entry_price * (1 - stop_pct),  pair)
+    tp_price = entry_price * (1 + profit_pct)
+    sl_price = entry_price * (1 - stop_pct)
+    sl_price_str = _fmt_price(sl_price, pair)
     vol_str      = str(round(volume, 8))
 
-    ok, r = place_bracket_order(
-        pair=pair,
-        side="sell",
-        volume=vol_str,
-        price=tp_price_str,   # take-profit limit (primary order)
-        price2=sl_price_str,  # stop-loss trigger (conditional close)
-    )
+    ok, r = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
 
     if ok:
         txids = r.get("txid", [])
-        result = {
-            "tp": txids[0] if len(txids) > 0 else None,
-            "sl": txids[1] if len(txids) > 1 else txids[0] if txids else None,
-        }
-        print(f"  Bracket exit set: {pair} sell {vol_str} | TP @ {tp_price_str} (+{profit_pct*100:.1f}%) | SL @ {sl_price_str} (-{stop_pct*100:.1f}%)  {txids}")
-        return result
+        sl_id = txids[0] if txids else None
+        print(f"  SL protection set: {pair} sell {vol_str} | SL @ {sl_price_str} (-{stop_pct*100:.1f}%) | TP target @ {_fmt_price(tp_price, pair)} (+{profit_pct*100:.1f}%)  [{sl_id}]")
+        return {"tp": None, "sl": sl_id, "tp_price": tp_price, "sl_price": sl_price}
     else:
         error = r.get("error", r) if isinstance(r, dict) else r
-        print(f"  WARNING: bracket exit failed for {pair}: {error}")
-        # Fallback: place standalone SL to at least protect the position
-        ok_sl, r_sl = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
-        if ok_sl:
-            txids = r_sl.get("txid", [])
-            sl_id = txids[0] if txids else None
-            print(f"  Fallback SL set: {pair} sell {vol_str} @ {sl_price_str} (-{stop_pct*100:.1f}%)  [{sl_id}]")
-            return {"tp": None, "sl": sl_id}
-        print(f"  WARNING: fallback SL also failed for {pair}: {r_sl.get('error', r_sl)}")
-        return {"tp": None, "sl": None}
+        print(f"  WARNING: SL protection failed for {pair}: {error}")
+        return {"tp": None, "sl": None, "tp_price": tp_price, "sl_price": sl_price}
 
 
 def check_exit_orders(exit_orders: dict) -> bool:
     """
-    Check if the bracket exit has closed the position.
+    Check if the stop-loss has fired (position was closed by Kraken).
 
-    With Kraken's OTO model the conditional close (SL) is managed internally,
-    so normally only the TP txid appears in open orders. If the TP disappears,
-    either it filled (SL is void) or Kraken fired the SL (TP was cancelled).
-
-    Returns True if position was closed, False if TP is still open.
+    Returns True if SL filled (no longer in open orders), False if still open.
     """
-    if not exit_orders or (not exit_orders.get("tp") and not exit_orders.get("sl")):
+    if not exit_orders:
+        return False
+
+    sl_txid = exit_orders.get("sl")
+    if not sl_txid:
         return False
 
     try:
@@ -132,27 +119,8 @@ def check_exit_orders(exit_orders: dict) -> bool:
         print(f"  WARNING: could not check open orders: {e}")
         return False
 
-    tp_txid = exit_orders.get("tp")
-    sl_txid = exit_orders.get("sl")
-
-    tp_open = tp_txid in open_orders if tp_txid else False
-    sl_open = sl_txid in open_orders if sl_txid else False
-
-    # Take-profit filled — cancel the stop-loss
-    if tp_txid and not tp_open and sl_txid and sl_open:
-        print(f"  Take-profit filled [{tp_txid}] — cancelling stop-loss [{sl_txid}]")
-        cancel_order(sl_txid)
-        return True
-
-    # Stop-loss filled — cancel the take-profit
-    if sl_txid and not sl_open and tp_txid and tp_open:
-        print(f"  Stop-loss fired [{sl_txid}] — cancelling take-profit [{tp_txid}]")
-        cancel_order(tp_txid)
-        return True
-
-    # Both gone (edge case: both filled or both cancelled)
-    if tp_txid and not tp_open and sl_txid and not sl_open:
-        print(f"  Both exit orders gone for position — marking closed")
+    if sl_txid not in open_orders:
+        print(f"  Stop-loss fired [{sl_txid}] — position closed by Kraken")
         return True
 
     return False
@@ -175,7 +143,7 @@ def scan_and_protect(
 ) -> None:
     """
     On bot startup: find held coins with no open sell orders and
-    place protective OTO bracket orders (TP + conditional SL) automatically.
+    place standalone stop-loss orders for downside protection.
 
     pairs_config format:
         {
@@ -193,7 +161,7 @@ def scan_and_protect(
         print(f"  WARNING: scan_and_protect failed: {e}")
         return
 
-    # Pairs that already have an open sell order
+    # Pairs that already have an open sell order (SL or limit)
     protected_pairs = set()
     for order in open_orders.values():
         desc = order.get("descr", {})
@@ -223,5 +191,5 @@ def scan_and_protect(
             print(f"  {pair}: already has open sell order — skipping")
             continue
 
-        print(f"  {pair}: found {held:.6g} {asset} (~${price*held:.2f}) with no exit orders — protecting")
+        print(f"  {pair}: found {held:.6g} {asset} (~${price*held:.2f}) with no SL — protecting")
         place_exit_orders(pair, held, price, profit_pct, stop_pct)

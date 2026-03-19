@@ -129,6 +129,40 @@ def run(dry: bool):
 
     print(f"Already protected pairs: {protected_pairs}\n")
 
+    # Check for stale OTOs: price already below SL trigger
+    print("Checking for stale stop-losses...")
+    for txid, order in open_orders.items():
+        descr = order.get("descr", {})
+        if descr.get("type") != "sell":
+            continue
+        close_str = descr.get("close", "")
+        if "stop loss" not in close_str:
+            continue
+        pair = descr.get("pair", "")
+        try:
+            sl_price = float(close_str.split("stop loss")[-1].strip())
+        except (ValueError, IndexError):
+            continue
+        ticker = get_ticker(pair)
+        if not ticker:
+            continue
+        price = float(ticker.get("c", [0])[0])
+        if price < sl_price:
+            vol = float(order.get("vol", 0))
+            print(f"  STALE: {pair} price {fmt(price)} < SL {fmt(sl_price)}")
+            if not dry:
+                from kraken_connection import cancel_order
+                cancel_order(txid)
+                ok, result = place_order(pair, "sell", "market", volume=vol)
+                if ok:
+                    print(f"    Cancelled OTO and market sold {vol} {pair}")
+                    protected_pairs.discard(pair)
+                else:
+                    print(f"    Failed to sell: {result}")
+            else:
+                print(f"    [DRY] Would cancel OTO and market sell {vol} {pair}")
+    print()
+
     placed = 0
     skipped = 0
     failed = 0

@@ -39,15 +39,23 @@ CHART_HEIGHT = 15
 # ─────────────────────────────────────────────
 
 def get_kraken_trade_history(period_days=None, count=100):
-    """Get trade history from Kraken API."""
+    """Get trade history from Kraken API with full pagination."""
     try:
-        # Get trades from Kraken API
-        trades = get_trade_history(count)
-        
+        # Paginate through all trades (Kraken returns max 50 per call)
+        all_trades = []
+        for ofs in range(0, 2000, 50):
+            batch = get_trade_history(count=50, ofs=ofs)
+            if not batch:
+                break
+            all_trades.extend(batch)
+            if len(batch) < 50:
+                break
+        trades = all_trades
+
         if not trades:
             print("  📝 No trades found in Kraken API")
             return []
-        
+
         # Filter by period if specified
         if period_days:
             cutoff_timestamp = int((datetime.now() - timedelta(days=period_days)).timestamp())
@@ -106,6 +114,8 @@ BOT_USERREFS = {
     7: "btc_momentum_bot",
     8: "dynamic_hft_bot",
     9: "universal_bull_bot",
+    11: "correlation_bot",
+    12: "momentum_scanner_bot",
 }
 
 # Cache: ordertxid -> userref (populated once per run)
@@ -122,13 +132,16 @@ def _populate_userref_cache(trades: list) -> None:
         return
 
     # Kraken QueryOrders accepts up to 20 txids per call
+    import time as _time
     for i in range(0, len(ordertxids), 20):
         batch = ordertxids[i:i+20]
         orders = query_orders(batch)
         for txid, info in orders.items():
-            ref = int(info.get("userref", 0))
+            ref = int(info.get("userref") or 0)
             if ref:
                 _order_userref_cache[txid] = ref
+        if i + 20 < len(ordertxids):
+            _time.sleep(2)  # avoid rate limits
 
 
 def identify_trade_source(trade):
@@ -833,125 +846,244 @@ def export_to_csv(trades, filename="portfolio_export.csv"):
 # 📊 MAIN ANALYSIS FUNCTION
 # ─────────────────────────────────────────────
 
+def get_total_deposits() -> tuple[float, list]:
+    """Get total USD + USDC deposited from Kraken ledger. Returns (net_deposited, entries)."""
+    from kraken_connection import get_ledger
+    import time as _time
+
+    all_deposits = []
+    for ofs in range(0, 500, 50):
+        batch = get_ledger(ltype='deposit', ofs=ofs)
+        if not batch:
+            break
+        all_deposits.extend(batch)
+        if len(batch) < 50:
+            break
+        _time.sleep(1)
+
+    all_withdrawals = []
+    _time.sleep(1)
+    for ofs in range(0, 500, 50):
+        batch = get_ledger(ltype='withdrawal', ofs=ofs)
+        if not batch:
+            break
+        all_withdrawals.extend(batch)
+        if len(batch) < 50:
+            break
+        _time.sleep(1)
+
+    usd_assets = {'ZUSD', 'USD', 'USDC'}
+    total_in = sum(d['amount'] - d['fee'] for d in all_deposits if d['asset'] in usd_assets)
+    total_out = sum(abs(w['amount']) + w['fee'] for w in all_withdrawals if w['asset'] in usd_assets)
+
+    return total_in - total_out, all_deposits
+
+
+def get_live_portfolio() -> tuple[float, float, list]:
+    """
+    Get real portfolio from actual Kraken balances + live prices.
+    Returns (cash_usd, total_value, holdings_list).
+    holdings_list: [{"asset", "volume", "price", "value", "pair"}, ...]
+    """
+    SKIP = {'ZUSD', 'USD', 'KFEE', 'NFTS'}
+    PAIR_MAP = {
+        'DOT': 'DOTUSD', 'HYPE': 'HYPEUSD', 'XDG': 'XDGUSD', 'PEPE': 'PEPEUSD',
+        'RIVER': 'RIVERUSD', 'XETH': 'ETHUSD', 'SOL': 'SOLUSD', 'XXBT': 'XBTUSD',
+        'ADA': 'ADAUSD', 'AVAX': 'AVAXUSD', 'LINK': 'LINKUSD', 'SUI': 'SUIUSD',
+        'TAO': 'TAOUSD', 'NEAR': 'NEARUSD', 'ICP': 'ICPUSD', 'RENDER': 'RENDERUSD',
+        'HBAR': 'HBARUSD', 'TRUMP': 'TRUMPUSD', 'ZRO': 'ZROUSD', 'XPL': 'XPLUSD',
+        'FARTCOIN': 'FARTCOINUSD', 'KAS': 'KASUSD', 'FET': 'FETUSD',
+        'PENGU': 'PENGUUSD', 'WAR': 'WARUSD', 'PUMP': 'PUMPUSD',
+        'PLUME': 'PLUMEUSD', 'NIGHT': 'NIGHTUSD', 'XCN': 'XCNUSD',
+        'ASTER': 'ASTERUSD', 'ICNT': 'ICNTUSD', 'IDOS': 'IDOSUSD',
+        'ALCX': 'ALCXUSD', 'SENT': 'SENTUSD', 'WIF': 'WIFUSD',
+        'BABY': 'BABYUSD', 'USELESS': 'USELESSUSD', 'XZEC': 'ZECUSD',
+        'DOGE': 'XDGUSD', 'ETH': 'ETHUSD', 'BTC': 'XBTUSD',
+    }
+    NAMES = {
+        'XXBT': 'BTC', 'XETH': 'ETH', 'XDG': 'DOGE', 'XXDG': 'DOGE',
+        'XZEC': 'ZEC', 'XZECZ': 'ZEC',
+    }
+
+    balances = get_balance()
+    cash = float(balances.get('ZUSD', 0)) + float(balances.get('USDC', 0))
+
+    holdings = []
+    for asset, bal_str in balances.items():
+        vol = float(bal_str)
+        if vol <= 0 or asset in SKIP:
+            continue
+        pair = PAIR_MAP.get(asset)
+        if not pair:
+            continue
+        ticker = get_ticker(pair)
+        if not ticker:
+            continue
+        price = float(ticker.get('c', [0])[0])
+        value = vol * price
+        name = NAMES.get(asset, asset)
+        holdings.append({
+            'asset': name, 'volume': vol, 'price': price,
+            'value': value, 'pair': pair,
+        })
+
+    holdings.sort(key=lambda x: -x['value'])
+    total = cash + sum(h['value'] for h in holdings)
+    return cash, total, holdings
+
+
 def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
-    """Main portfolio analysis function using Kraken API."""
-    print("📊 Portfolio P&L Analyzer — Kraken API Trading History")
+    """Main portfolio analysis — grounded in actual balances and deposits."""
+    print("📊 Portfolio Analyzer — Kraken")
     print("=" * 60)
-    
-    # Get trade history from Kraken API
-    print("  🔄 Fetching trade history from Kraken API...")
 
-    trades = get_kraken_trade_history(period_days, count=200)
+    # ── 1. REAL PORTFOLIO VALUE ──────────────────
+    print("  Fetching live balances...")
+    cash, total_value, holdings = get_live_portfolio()
+    holdings_value = total_value - cash
 
+    print(f"\n  💰 PORTFOLIO VALUE: ${total_value:.2f}")
+    print(f"  Cash: ${cash:.2f} | Holdings: ${holdings_value:.2f}")
+    print(f"  " + "-"*50)
+
+    for h in holdings:
+        if h['value'] >= 0.50:
+            print(f"  {h['asset']:12} {h['volume']:>14.6f} @ ${h['price']:<12.4f} = ${h['value']:.2f}")
+    dust_value = sum(h['value'] for h in holdings if h['value'] < 0.50)
+    dust_count = sum(1 for h in holdings if h['value'] < 0.50)
+    if dust_count:
+        print(f"  {'(dust)':12} {dust_count} positions {'':>19} = ${dust_value:.2f}")
+
+    # ── 2. DEPOSITS → REAL P&L ──────────────────
+    print(f"\n  Fetching deposit history...")
+    net_deposited, deposit_entries = get_total_deposits()
+    real_pnl = total_value - net_deposited
+    real_pnl_pct = (real_pnl / net_deposited * 100) if net_deposited > 0 else 0
+
+    print(f"\n  💵 REAL P&L (verified against deposits)")
+    print(f"  " + "="*50)
+    print(f"  Total deposited:  ${net_deposited:.2f}")
+    print(f"  Current value:    ${total_value:.2f}")
+    if real_pnl >= 0:
+        print(f"  Real P&L:         ${real_pnl:+.2f} ({real_pnl_pct:+.1f}%) 🟢")
+    else:
+        print(f"  Real P&L:         ${real_pnl:+.2f} ({real_pnl_pct:+.1f}%) 🔴")
+
+    print(f"\n  Deposits:")
+    for d in deposit_entries:
+        dt = datetime.fromtimestamp(d['time']).strftime('%Y-%m-%d')
+        net = d['amount'] - d['fee']
+        print(f"    {dt} | {d['asset']:6} | ${net:.2f} (fee ${d['fee']:.2f})")
+
+    # ── 3. TRADE HISTORY ANALYSIS ────────────────
+    print(f"\n  Fetching trade history...")
+    trades = get_kraken_trade_history(period_days)
     if not trades:
-        print("  📝 No trading history found in Kraken API")
-        print("  💡 Make sure you have API permissions and recent trading activity")
+        print("  No trades found")
         return
-    
-    print(f"  📊 Found {len(trades)} raw trades")
+
+    print(f"  {len(trades)} raw trades found")
 
     # Batch-lookup order userrefs for bot identification
     _populate_userref_cache(trades)
 
-    # Calculate realized P&L by matching buy/sell pairs
-    print("  🔄 Calculating realized P&L...")
+    # Calculate realized P&L by matching buy/sell pairs (FIFO)
     pnl_trades, open_positions = calculate_realized_pnl(trades)
-    
-    # Calculate unrealized P&L for current holdings
-    print("  � Calculating unrealized P&L for holdings...")
-    unrealized_trades = calculate_unrealized_pnl(open_positions)
-    
-    # Combine realized and unrealized trades
-    all_trades_analysis = pnl_trades + unrealized_trades
-    
-    if not all_trades_analysis:
-        print("  📝 No trading activity found")
-        return
-    
-    # Filter by period
-    if period_days:
-        print(f"  📅 Analyzing last {period_days} days")
-    else:
-        print(f"  📅 Analyzing all trading activity")
-    
-    # Show holdings summary
-    if open_positions:
-        print(f"\n  💼 Current Holdings:")
-        print(f"  " + "="*60)
-        total_unrealized = 0
-        for symbol, positions in open_positions.items():
-            total_volume = sum(p['volume'] for p in positions)
-            total_cost = sum(p['entry_cost'] + p['entry_fee'] for p in positions)
-            avg_entry = total_cost / total_volume if total_volume > 0 else 0
-            print(f"  📊 {symbol}: {total_volume:.6f} shares | Avg entry: ${avg_entry:.4f} | Cost: ${total_cost:.2f}")
-        
-        # Show unrealized P&L
-        if unrealized_trades:
-            print(f"\n  📈 Unrealized P&L:")
-            print(f"  " + "="*60)
-            for trade in unrealized_trades:
-                pnl = trade['pnl_amount']
-                pnl_color = "🟢" if pnl >= 0 else "🔴"
-                current_price = trade.get('current_price', 0)
-                entry_price = trade['entry_price']
-                print(f"  {pnl_color} {trade['symbol']} | ${pnl:+8.2f} ({trade['pnl_pct']:+6.2f}%) | Entry: ${entry_price:.4f} | Current: ${current_price:.4f}")
-                total_unrealized += pnl
-            
-            print(f"  � Total Unrealized P&L: ${total_unrealized:+.2f}")
-    
-    # Separate realized trades for performance analysis
     realized_trades = [t for t in pnl_trades if t['type'] == 'sell']
-    
-    if not realized_trades:
-        print(f"\n  📝 No completed trades yet (only open positions)")
-        print(f"  💡 Realized P&L analysis will show completed trades when you sell")
-        return
-    
-    print(f"\n  📊 Realized Trades: {len(realized_trades)} completed")
-    
-    # Performance analysis (only on realized trades)
-    performance = analyze_performance(realized_trades)
-    display_performance_summary(performance)
-    
-    # Symbol breakdown
-    symbol_stats = analyze_by_symbol(pnl_trades)
-    display_symbol_breakdown(symbol_stats)
-    
-    # Bot breakdown
-    bot_stats = analyze_by_bot(pnl_trades)
-    display_bot_breakdown(bot_stats)
-    
-    # Period breakdown
-    monthly_stats = analyze_by_period(pnl_trades, 'monthly')
-    display_period_breakdown(monthly_stats, 'monthly')
-    
-    # Trade list
-    display_trade_list(pnl_trades)
-    
+
+    if realized_trades:
+        performance = analyze_performance(realized_trades)
+
+        # Cross-check: FIFO realized P&L vs real P&L
+        fifo_realized = performance['total_pnl']
+        fifo_unrealized = sum(h['value'] for h in holdings) - sum(
+            p['entry_cost'] + p['entry_fee']
+            for positions in open_positions.values()
+            for p in positions
+        )
+
+        print(f"\n  📊 TRADE PERFORMANCE (FIFO estimate)")
+        print(f"  " + "="*50)
+        print(f"  Completed trades: {performance['total_trades']}")
+        print(f"  Win rate:         {performance['win_rate']:.1f}%")
+        print(f"  FIFO realized:    ${fifo_realized:+.2f}")
+        print(f"  Profit factor:    {performance['profit_factor']:.2f}")
+        print(f"  Avg win:          ${performance['avg_win']:.2f}")
+        print(f"  Avg loss:         ${performance['avg_loss']:.2f}")
+        print(f"  Best trade:       ${performance['max_win']:.2f}")
+        print(f"  Worst trade:      ${performance['max_loss']:.2f}")
+
+        # Note if FIFO doesn't match reality
+        fifo_total = fifo_realized + fifo_unrealized
+        if abs(fifo_total - real_pnl) > 5:
+            print(f"\n  ⚠️ FIFO estimate (${fifo_total:+.2f}) differs from real P&L (${real_pnl:+.2f})")
+            print(f"     This happens when trade history doesn't cover all original buys.")
+
+        # Bot breakdown
+        bot_stats = analyze_by_bot(realized_trades)
+        display_bot_breakdown(bot_stats)
+
+        # Symbol breakdown — top winners and losers
+        symbol_stats = analyze_by_symbol(realized_trades)
+        if symbol_stats:
+            sorted_symbols = sorted(symbol_stats.items(), key=lambda x: x[1]['total_pnl'], reverse=True)
+            print(f"\n  📈 Top Performers (realized):")
+            for sym, stats in sorted_symbols[:5]:
+                if stats['total_pnl'] > 0:
+                    print(f"    🟢 {sym:8} ${stats['total_pnl']:+8.2f} | {stats['total_trades']} trades | {stats['win_rate']:.0f}% win")
+            losers = [s for s in sorted_symbols if s[1]['total_pnl'] < -0.10]
+            if losers:
+                print(f"\n  📉 Worst Performers (realized):")
+                for sym, stats in losers[-5:]:
+                    print(f"    🔴 {sym:8} ${stats['total_pnl']:+8.2f} | {stats['total_trades']} trades | {stats['win_rate']:.0f}% win")
+
+    # ── 4. BIGGEST UNREALIZED POSITIONS ──────────
+    if holdings:
+        # Show biggest unrealized losses
+        print(f"\n  📉 Holdings by Value:")
+        print(f"  " + "-"*50)
+        for h in holdings[:10]:
+            print(f"    {h['asset']:8} ${h['value']:>8.2f}")
+
+    # Monthly breakdown
+    if realized_trades:
+        monthly_stats = analyze_by_period(realized_trades, 'monthly')
+        display_period_breakdown(monthly_stats, 'monthly')
+
+    # Recent trades
+    if realized_trades:
+        print(f"\n  📋 Recent Closed Trades:")
+        print(f"  " + "-"*70)
+        sorted_trades = sorted(realized_trades, key=lambda x: x.get('timestamp', ''), reverse=True)
+        for t in sorted_trades[:10]:
+            pnl = t.get('pnl_amount', 0)
+            emoji = "🟢" if pnl > 0 else "🔴" if pnl < 0 else "🔵"
+            try:
+                ts_str = datetime.fromisoformat(t.get('timestamp', '')).strftime("%m/%d %H:%M")
+            except Exception:
+                ts_str = "?"
+            bot = t.get('bot_source', '?')
+            print(f"    {emoji} [{ts_str}] {t['symbol']:8} ${pnl:+8.2f} ({t['pnl_pct']:+.1f}%) | {bot}")
+
     # Charts
-    if show_chart and len(pnl_trades) > 1:
+    if show_chart and realized_trades:
         print(f"\n  📈 Cumulative P&L Chart:")
-        pnl_values = [t.get('pnl_amount', 0) for t in pnl_trades]
+        pnl_values = [t.get('pnl_amount', 0) for t in realized_trades]
         chart = create_pnl_chart(pnl_values)
         print(chart)
-        
-        # Symbol performance chart
-        if len(symbol_stats) > 1:
-            print(f"\n  📊 Symbol Performance Chart:")
-            symbols = list(symbol_stats.keys())
-            pnl_by_symbol = [symbol_stats[s]['total_pnl'] for s in symbols]
-            symbol_chart = create_bar_chart(pnl_by_symbol, symbols)
-            print(symbol_chart)
-    
+
     # Export
     if export_format == 'csv':
         export_to_csv(pnl_trades)
-    
+
     # Telegram summary
-    send_telegram_summary(performance, symbol_stats, monthly_stats)
-    
-    print(f"\n  ✅ Analysis complete!")
-    print(f"  📊 Total analyzed: {len(pnl_trades)} completed trades from {len(trades)} raw trades")
+    if realized_trades:
+        performance = analyze_performance(realized_trades)
+        symbol_stats = analyze_by_symbol(realized_trades)
+        monthly_stats = analyze_by_period(realized_trades, 'monthly')
+        send_telegram_summary(performance, symbol_stats, monthly_stats)
+
+    print(f"\n  ✅ Done — Real P&L: ${real_pnl:+.2f} ({real_pnl_pct:+.1f}%)")
 
 # ─────────────────────────────────────────────
 # 🎯 MAIN ENTRY POINT

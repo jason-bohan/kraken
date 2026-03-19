@@ -1,0 +1,12 @@
+[2026-03-15 17:44:15.185231] Telegram bot started — listening for commands
+  [2026-03-15 17:44:43.783127] Command: /bots
+[2026-03-15 17:46:20.834204] Telegram bot started — listening for commands
+  [2026-03-15 17:46:40.611634] Command: /bots
+  [2026-03-15 17:47:23.264195] Command: /info momentum
+  [2026-03-15 17:47:45.151767] Command: /info dot
+  [2026-03-15 17:48:01.842102] Command: /help
+  [2026-03-15 17:48:15.096131] Command: /portfolio
+  [2026-03-15 19:18:18.779918] Command: /pnl
+  [2026-03-15 19:18:40.759740] Command: /portfolio
+  Poll error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8773203607:AAGLwpGvZa5sttYm-uzuKnWp5K0zIqP9lNk/getUpdates?offset=270693360&timeout=30 (Caused by NewConnectionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable"))
+  Telegram error: {'ok': False, 'error_code': 502, 'description': 'Bad Gateway'}

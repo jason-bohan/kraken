@@ -374,8 +374,19 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
             if position:
                 # Check if Kraken already closed via server-side orders
                 if not dry_run and position.get("exit_orders") and check_exit_orders(position["exit_orders"]):
+                    # Server-side bracket filled — record the exit in learning DB
+                    entry = position["entry_price"]
+                    volume = position["volume"]
+                    exit_pnl_pct = (price - entry) / entry if entry else 0
+                    exit_pnl_usd = (price - entry) * volume
+                    exit_reason = "take_profit" if price >= entry else "stop_loss"
+                    with trade_ids_lock:
+                        tid = active_trade_ids.pop(pair, None)
+                    if tid:
+                        LEARNER.record_exit(tid, price, exit_pnl_usd, exit_pnl_pct, exit_reason)
+                    print(f"  [{ts}] 🎯 {pair} bracket filled ({exit_reason}) {exit_pnl_pct*100:+.2f}%")
                     with deployed_lock:
-                        deployed_usd = max(0, deployed_usd - (position["entry_price"] * position["volume"]))
+                        deployed_usd = max(0, deployed_usd - (entry * volume))
                     with positions_lock:
                         positions.pop(pair, None)
                     position = None
@@ -403,6 +414,9 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             new_bal = dry_balance
                         print(f"  [DRY] Sold {volume} {pair} | P&L: ${actual_pnl:+.4f} | Balance: ${new_bal:.2f}")
                     else:
+                        # Cancel SL before market sell to free coins
+                        if position.get("exit_orders"):
+                            cancel_remaining_exit(position["exit_orders"])
                         ok, result = place_order(pair, "sell", "market", volume, userref=8)
                         if not ok:
                             print(f"  ❌ Sell failed: {result}")
@@ -429,6 +443,9 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                             new_bal = dry_balance
                         print(f"  [DRY] Stop sold {volume} {pair} | P&L: ${actual_pnl:+.4f} | Balance: ${new_bal:.2f}")
                     else:
+                        # Cancel SL before market sell (SL may not have fired yet at this price)
+                        if position.get("exit_orders"):
+                            cancel_remaining_exit(position["exit_orders"])
                         ok, result = place_order(pair, "sell", "market", volume, userref=8)
                         if not ok:
                             print(f"  ❌ Stop sell failed: {result}")
