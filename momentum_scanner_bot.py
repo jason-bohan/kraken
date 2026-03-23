@@ -33,6 +33,7 @@ from kraken_connection import (
     place_order, calculate_order_size, get_min_order_info, cancel_order,
 )
 from position_guardian import _fmt_price
+from market_sentiment import should_buy as check_sentiment, format_sentiment
 
 # ─────────────────────────────────────────────
 # CONFIG
@@ -52,7 +53,7 @@ MIN_TRADE_RATIO = 1.5        # today's trade rate vs 24h avg
 
 # Exit: standalone SL on Kraken + bot loop handles TP
 PROFIT_PCT = 0.10            # +10% take profit (bot loop market sell)
-STOP_PCT = 0.05              # -5% stop loss (standalone order on Kraken)
+STOP_PCT = 0.08              # -8% stop loss — backtested optimal (wider avoids noise stopouts)
 
 # Skip stablecoins, wrapped tokens, leveraged
 SKIP_BASES = {
@@ -348,6 +349,9 @@ def execute_buy(signal: dict, dry_run: bool) -> bool:
     usd = float(balances.get("ZUSD", 0))
     available = max(0, usd - RESERVE_USD)
     spend = min(available, MAX_TRADE_USD)
+    # Apply sentiment size multiplier
+    sentiment = check_sentiment()
+    spend = round(spend * sentiment["size_multiplier"], 2)
 
     if spend < 1.0:
         print(f"  [{ts()}] Not enough USD (${usd:.2f}) to buy {name}")
@@ -504,7 +508,9 @@ def run(dry_run: bool = False):
             check_positions()
 
             # 5. Scan for new signals if we have room
-            if len(positions) < MAX_POSITIONS and ready > 0:
+            sentiment = check_sentiment()
+            print(f"  {format_sentiment()}")
+            if len(positions) < MAX_POSITIONS and ready > 0 and sentiment["allow"]:
                 balances = get_balance()
                 held_bases = get_held_bases(balances)
 
@@ -537,6 +543,8 @@ def run(dry_run: bool = False):
                 else:
                     if ready > 0:
                         print(f"  No signals ({ready} pairs ready)")
+            elif not sentiment["allow"]:
+                print(f"  🚫 Buys blocked: {sentiment['reason']}")
             elif len(positions) >= MAX_POSITIONS:
                 print(f"  At max positions ({MAX_POSITIONS}/{MAX_POSITIONS})")
 

@@ -33,6 +33,7 @@ from kraken_connection import (
     calculate_order_size
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
+from market_sentiment import should_buy as check_sentiment, format_sentiment
 
 # ─────────────────────────────────────────────
 # SETTINGS
@@ -288,16 +289,25 @@ def run(dry_run: bool = False):
                 not_overbought = rsi < RSI_OVERBOUGHT
 
                 if has_usd and (rsi_signal or dip_signal) and not_overbought:
+                    # Check market sentiment before buying
+                    sentiment = check_sentiment()
+                    if not sentiment["allow"]:
+                        print(f"  🚫 Buy blocked: {sentiment['reason']}")
+                        time.sleep(CHECK_SECS)
+                        continue
+
                     reasons = []
                     if rsi_signal: reasons.append(f"RSI {rsi:.0f}")
                     if dip_signal: reasons.append(f"dip -{dip_pct*100:.1f}%")
                     reason_str = ", ".join(reasons)
 
                     volume = get_buy_size(price, dry_run)
+                    # Apply sentiment size multiplier
+                    volume = round(volume * sentiment["size_multiplier"], 4)
                     if volume <= 0:
                         print(f"  ⚠️ Not enough USD (need ${MIN_TRADE_USD:.0f}+), skipping")
                     else:
-                        print(f"  🎯 BUY signal: {reason_str}")
+                        print(f"  🎯 BUY signal: {reason_str} | Sentiment: {sentiment['zone']} ({sentiment['size_multiplier']}x)")
                         print(f"  🛒 Buying {volume:.4f} DOT @ ${price:.4f} (${volume*price:.2f})")
                         if not dry_run:
                             ok, result = place_order(PAIR, "buy", "market", volume=volume,

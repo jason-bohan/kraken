@@ -34,6 +34,7 @@ from kraken_connection import (
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 from learning_engine import LearningEngine
+from market_sentiment import should_buy as check_sentiment, format_sentiment
 import requests as req
 
 BOT_NAME = "dynamic_hft_bot"
@@ -482,9 +483,17 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | Trend {trend_str}{held_str}{bal_str}")
 
                 if (rsi_signal or dip_signal) and not_overbought and uptrend and not already_held:
+                    # Check market sentiment before buying
+                    sentiment = check_sentiment()
+                    if not sentiment["allow"]:
+                        print(f"  [{ts}] 🚫 {pair} signal blocked: {sentiment['reason']}")
+                        continue
+
                     reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
 
                     volume = get_trade_size(pair, price, dry_run)
+                    # Apply sentiment size multiplier
+                    volume = round(volume * sentiment["size_multiplier"], 8)
                     if volume <= 0:
                         print(f"  [{ts}] ⚠️ {pair} signal but no budget left")
                     else:

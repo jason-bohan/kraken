@@ -35,6 +35,7 @@ from kraken_connection import (
     calculate_order_size
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
+from market_sentiment import should_buy as check_sentiment, format_sentiment
 
 # ─────────────────────────────────────────────
 # SETTINGS
@@ -44,7 +45,7 @@ ASSET          = "XDG"         # DOGE asset name in balance
 QUOTE          = "ZUSD"        # Quote currency
 
 # DOGE-specific trading parameters (optimized for meme coin volatility)
-PROFIT_PCT     = 0.15          # 15% profit target - realistic DOGE pump target
+PROFIT_PCT     = 0.10          # 10% profit target — backtested optimal
 STOP_PCT       = 0.08          # 8% stop loss - wide enough for DOGE noise (was 3%, too tight)
 RSI_PERIOD     = 14            # RSI lookback periods
 RSI_OVERSOLD   = 25            # Extreme oversold for DOGE bounce
@@ -257,10 +258,17 @@ def execute_doge_buy(analysis: dict, dry_run: bool = False) -> dict:
         rsi = analysis.get("rsi", 50)
         if signal_strength < MIN_SIGNAL_STRENGTH or rsi > RSI_OVERBOUGHT:
             return {"success": False, "reason": f"Weak signals (strength: {signal_strength})"}
+
+        # Check market sentiment
+        sentiment = check_sentiment()
+        if not sentiment["allow"]:
+            print(f"  🚫 Buy blocked: {sentiment['reason']}")
+            return {"success": False, "reason": sentiment["reason"]}
         
-        # Calculate position size
+        # Calculate position size with sentiment scaling
         buy_volume = get_buy_size(current_price, dry_run)
-        
+        buy_volume = round(buy_volume * sentiment["size_multiplier"])
+
         if buy_volume <= 0:
             return {"success": False, "reason": "Insufficient USD or cannot afford order"}
         

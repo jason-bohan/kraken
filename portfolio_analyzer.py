@@ -25,6 +25,7 @@ import csv
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from kraken_connection import get_balance, get_ticker, get_trade_history, get_closed_orders, query_orders
+from market_sentiment import get_market_sentiment, should_buy as check_sentiment, classify_sentiment
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -953,6 +954,53 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     dust_count = sum(1 for h in holdings if h['value'] < 0.50)
     if dust_count:
         print(f"  {'(dust)':12} {dust_count} positions {'':>19} = ${dust_value:.2f}")
+
+    # ── 1b. MARKET SENTIMENT ─────────────────────
+    try:
+        sentiment = get_market_sentiment()
+        decision = check_sentiment(sentiment)
+        fg = sentiment.get("fear_greed", "?")
+        fg_label = sentiment.get("fear_greed_label", "?")
+        zone = classify_sentiment(fg) if isinstance(fg, int) else "?"
+        mkt_chg = sentiment.get("market_cap_change_24h", 0)
+        btc_dom = sentiment.get("btc_dominance", 0)
+        mkt_cap = sentiment.get("total_market_cap", 0)
+
+        # Zone color
+        zone_emoji = {"EXTREME_FEAR": "🔴", "FEAR": "🟠", "NEUTRAL": "🔵",
+                       "GREED": "🟢", "EXTREME_GREED": "🟢"}.get(zone, "⚪")
+
+        print(f"\n  {zone_emoji} MARKET SENTIMENT")
+        print(f"  " + "="*50)
+        print(f"  Fear & Greed:     {fg} ({fg_label})")
+        print(f"  Market 24h:       {mkt_chg:+.1f}%")
+        print(f"  BTC Dominance:    {btc_dom:.1f}%")
+        if mkt_cap > 0:
+            print(f"  Total Market Cap: ${mkt_cap/1e12:.2f}T")
+        buy_mode = "BLOCKED" if not decision["allow"] else f"{decision['size_multiplier']}x size"
+        print(f"  Bot buy mode:     {buy_mode}")
+        print(f"  Reason:           {decision['reason']}")
+
+        # On-chain signals
+        try:
+            from onchain_signals import get_onchain_signals, format_onchain
+            onchain = get_onchain_signals()
+            funding_sig = decision.get("funding_signal", "?")
+            print(f"\n  ⛓️ ON-CHAIN SIGNALS")
+            print(f"  " + "="*50)
+            print(f"  {format_onchain(onchain)}")
+            print(f"  Funding signal:   {funding_sig}")
+            for name in ["BTC", "ETH"]:
+                f = onchain.get("funding", {}).get(name, {})
+                ls = onchain.get("long_short", {}).get(name, {})
+                oi = onchain.get("open_interest", {}).get(name, {})
+                print(f"  {name}: funding {f.get('rate',0)*100:.4f}% | "
+                      f"L/S {ls.get('ratio',0):.2f} | "
+                      f"OI ${oi.get('current_usd',0)/1e9:.1f}B ({oi.get('change_24h',0):+.1f}%)")
+        except Exception as e:
+            print(f"\n  ⚠️ On-chain signals unavailable: {e}")
+    except Exception as e:
+        print(f"\n  ⚠️ Sentiment unavailable: {e}")
 
     # ── 2. DEPOSITS → REAL P&L ──────────────────
     print(f"\n  Fetching deposit history...")

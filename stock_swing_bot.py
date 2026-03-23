@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, place_bracket_order, get_open_orders, cancel_order
 from kraken_connection import calculate_order_size
 from learning_engine import LearningEngine
+from market_sentiment import should_buy as check_sentiment, format_sentiment
+from market_sentiment import should_buy as check_sentiment, format_sentiment
 
 # ─────────────────────────────────────────────
 # 📈 DYNAMIC STOCK CONFIGURATION
@@ -761,7 +763,12 @@ def execute_buy(signal_info: dict, dry_run: bool) -> bool:
             stop_loss_price = current_price * (1 - CONFIG["stop_loss"])
         
         position_shares = calculate_position_size(current_price, stop_loss_price, account_balance)
-        
+        # Apply sentiment size multiplier if available
+        size_mult = signal_info.get("size_multiplier", 1.0)
+        if size_mult < 1.0:
+            position_shares = round(position_shares * size_mult, 8)
+            print(f"  🌍 Sentiment scaling: {size_mult}x → {position_shares}")
+
         if position_shares <= 0:
             print(f"  ❌ Invalid position size: {position_shares}")
             return False
@@ -1145,10 +1152,16 @@ def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
                 
                 # Execute trades based on signal
                 if signal['signal'] == 'buy' and signal['confidence'] >= CONFIG['min_confidence']:
-                    if execute_buy(signal, dry_run):
-                        print("  ✅ Buy order placed")
+                    sentiment = check_sentiment()
+                    print(f"  🌍 {format_sentiment()}")
+                    if not sentiment["allow"]:
+                        print(f"  🚫 {sentiment['reason']}")
                     else:
-                        print("  ❌ Buy order failed")
+                        signal["size_multiplier"] = sentiment["size_multiplier"]
+                        if execute_buy(signal, dry_run):
+                            print("  ✅ Buy order placed")
+                        else:
+                            print("  ❌ Buy order failed")
                 elif signal['signal'] == 'sell':
                     print("  ⚠️ Sell signal but no position")
             elif not manual_entry:

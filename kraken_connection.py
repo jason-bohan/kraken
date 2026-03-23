@@ -290,16 +290,18 @@ def calculate_order_size(pair: str, price: float, available_usd: float = None, a
     min_cost = min_info['costmin']
     
     if available_usd is not None:  # Buying
-        # Ensure volume is at least ordermin so the position can be sold later
-        cost_from_min_volume = min_volume * price
+        # Buy at least 2x minimum so position stays sellable after price drops
+        safe_min_volume = min_volume * 2
+        cost_from_min_volume = safe_min_volume * price
         required_cost = max(min_cost, cost_from_min_volume)
 
         if available_usd >= required_cost:
-            volume = max(min_volume, required_cost / price)
+            volume = max(safe_min_volume, required_cost / price)
             actual_cost = volume * price
             return {'volume': volume, 'cost': actual_cost, 'can_afford': True}
         else:
-            return {'volume': 0, 'cost': 0, 'can_afford': False, 'error': 'Insufficient USD'}
+            return {'volume': 0, 'cost': 0, 'can_afford': False,
+                    'error': f'Need ${required_cost:.2f} for 2x min order, have ${available_usd:.2f}'}
     
     elif available_asset is not None:  # Selling
         if available_asset >= min_volume:

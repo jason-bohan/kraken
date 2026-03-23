@@ -29,6 +29,7 @@ from kraken_connection import (
 )
 from position_guardian import _fmt_price
 from learning_engine import LearningEngine
+from market_sentiment import get_market_sentiment, format_sentiment, should_buy as check_sentiment
 
 # ─────────────────────────────────────────────
 # CONFIG
@@ -75,8 +76,8 @@ ASSET_TO_PAIR = {
 
 SKIP_ASSETS = {"ZUSD", "USD", "USDC", "USDT", "KFEE", "NFTS"}
 
-PROFIT_PCT = 0.08
-STOP_PCT = 0.04
+PROFIT_PCT = 0.10            # 10% profit target — backtested optimal
+STOP_PCT = 0.08              # 8% stop loss — wider avoids noise stopouts
 MIN_USD_VALUE = 0.50
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -283,7 +284,45 @@ def protect_positions() -> list[str]:
         if descr.get("type") == "sell":
             protected_pairs_set.add(descr.get("pair", ""))
 
-    # Step 3: Place standalone stop-loss on unprotected positions
+    # Step 3: Check TP on positions with existing SL orders
+    # (Catches orphaned positions where no bot is monitoring TP)
+    if protected_notes:
+        open_orders = get_open_orders()
+    for txid, order in open_orders.items():
+        descr = order.get("descr", {})
+        if descr.get("type") != "sell" or descr.get("ordertype") != "stop-loss":
+            continue
+        pair = descr.get("pair", "")
+        sl_price = float(descr.get("price", 0))
+        vol = float(order.get("vol", 0))
+        if sl_price <= 0 or vol <= 0:
+            continue
+
+        # Estimate entry from SL price
+        entry_est = sl_price / (1 - STOP_PCT)
+        tp_price = entry_est * (1 + PROFIT_PCT)
+
+        ticker = get_ticker(pair)
+        if not ticker:
+            continue
+        price = float(ticker.get("c", [0])[0])
+        pnl_pct = (price - entry_est) / entry_est if entry_est > 0 else 0
+
+        if price >= tp_price:
+            print(f"  [{ts()}] TP HIT: {pair} ${price:.4f} >= ${tp_price:.4f} (+{pnl_pct*100:.1f}%) — selling")
+            cancel_order(txid)
+            time.sleep(1)
+            ok, result = place_order(pair, "sell", "market", volume=vol)
+            if ok:
+                pnl_usd = (price - entry_est) * vol
+                note = f"  TP SOLD {pair}: +{pnl_pct*100:.1f}% (${pnl_usd:+.2f})"
+                print(f"  [{ts()}] {note}")
+                protected_notes.append(note)
+                tg(f"💰 *TP hit*: sold {vol} {pair} @ ${price:.4f} (+{pnl_pct*100:.1f}%)")
+            else:
+                print(f"  [{ts()}] TP sell failed for {pair}: {result}")
+
+    # Step 4: Place standalone stop-loss on unprotected positions
     for asset, bal_str in balances.items():
         volume = float(bal_str)
         if volume <= 0 or asset in SKIP_ASSETS:
@@ -398,8 +437,36 @@ def main():
         top_holdings = []
         usd_bal = 0
 
+    # Sentiment check (now includes on-chain signals)
+    print(f"\n  [Sentiment + On-Chain]")
+    try:
+        sentiment = get_market_sentiment()
+        decision = check_sentiment(sentiment)
+        print(f"  {format_sentiment(sentiment)}")
+        print(f"  Buy allowed: {decision['allow']} | Size: {decision['size_multiplier']}x")
+        print(f"  {decision['reason']}")
+    except Exception as e:
+        print(f"  Sentiment check failed: {e}")
+        sentiment = {}
+        decision = {"allow": True, "reason": "Sentiment unavailable"}
+
+    onchain_line = ""
+    try:
+        from onchain_signals import get_onchain_signals, format_onchain
+        onchain = get_onchain_signals()
+        onchain_line = format_onchain(onchain)
+        print(f"  {onchain_line}")
+    except Exception as e:
+        print(f"  On-chain unavailable: {e}")
+
     # Telegram report — always send the 30-min snapshot
     lines = [f"*30m Update — {ts()}*"]
+    fg = sentiment.get("fear_greed", "?")
+    fg_label = sentiment.get("fear_greed_label", "?")
+    mkt_chg = sentiment.get("market_cap_change_24h", 0)
+    lines.append(f"Sentiment: F&G {fg} ({fg_label}) | Mkt {mkt_chg:+.1f}%")
+    if onchain_line:
+        lines.append(f"On-chain: {onchain_line}")
     lines.append(f"Bots: {len(running)}/{len(EXPECTED_BOTS)}")
     if total_value > 0:
         lines.append(f"Portfolio: *${total_value:.2f}* (cash ${usd_bal:.2f})")
