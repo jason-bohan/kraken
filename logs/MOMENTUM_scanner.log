@@ -29385,3 +29385,59 @@
 [12:47:13] Scan #1868
   636 USD pairs found
   636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+  No signals (636 pairs ready)
+  Positions (2/3):
+    SHAPE: entry $0.0009 → $0.0008 (-16.5%)
+    AXS: entry $1.1080 → $1.0920 (-1.4%)
+
+[12:52:23] Scan #1869
+  636 USD pairs found
+  636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+  No signals (636 pairs ready)
+  Positions (2/3):
+    SHAPE: entry $0.0009 → $0.0008 (-16.5%)
+    AXS: entry $1.1080 → $1.0920 (-1.4%)
+
+[12:57:32] Scan #1870
+  636 USD pairs found
+  636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+  No signals (636 pairs ready)
+  Positions (2/3):
+    SHAPE: entry $0.0009 → $0.0008 (-16.5%)
+    AXS: entry $1.1080 → $1.0980 (-0.9%)
+
+[13:02:41] Scan #1871
+  636 USD pairs found
+  636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+  No signals (636 pairs ready)
+  Positions (2/3):
+    SHAPE: entry $0.0009 → $0.0008 (-16.5%)
+    AXS: entry $1.1080 → $1.1010 (-0.6%)
+
+[13:07:51] Scan #1872
+  636 USD pairs found
+  636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+  No signals (636 pairs ready)
+  Positions (2/3):
+    SHAPE: entry $0.0009 → $0.0008 (-15.4%)
+    AXS: entry $1.1080 → $1.0990 (-0.8%)
+
+[13:13:01] Scan #1873
+  636 USD pairs found
+  636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+  No signals (636 pairs ready)
+  Positions (2/3):
+    SHAPE: entry $0.0009 → $0.0008 (-16.5%)
+    AXS: entry $1.1080 → $1.0970 (-1.0%)
+
+[13:18:10] Scan #1874
+  636 USD pairs found
+  636 tickers fetched
+  F&G: 50 (Neutral) | Market 24h: +0.0% | BTC dom: 0.0% [cache]
+ bash: line 1: python: command not found

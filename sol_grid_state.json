@@ -1,0 +1,26 @@
+{
+  "orders": {
+    "OFXJXC-5ZOBE-K5ZOVB": {
+      "side": "buy",
+      "price": 79.89,
+      "volume": 0.1252
+    },
+    "O5URSP-XSEEF-CDZGCA": {
+      "side": "buy",
+      "price": 76.89,
+      "volume": 0.1301
+    },
+    "OPZGVC-K3Z3W-UBH3Q4": {
+      "side": "buy",
+      "price": 73.89,
+      "volume": 0.1353
+    },
+    "OGZLHA-SXDBC-V2YZVE": {
+      "side": "buy",
+      "price": 70.89,
+      "volume": 0.1411
+    }
+  },
+  "total_profit": 0.0,
+  "fills": 0
+}

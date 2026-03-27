@@ -72291,3 +72291,297 @@
   🛑 STOP LOSS -5.64% | Selling BTC @ $66064.60
   ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
   ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+  📊 Cycle 9690 | BTC: 0.000364 | USD: $49.76 | Total: ~$73.83
+
+[14:21:30] BTC $65981.10 | RSI 83.3 | High $66694.90 | Dip 1.1%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.76% ($-0.00)
+  🛑 STOP LOSS -5.76% | Selling BTC @ $65981.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:22:30] BTC $65876.90 | RSI 82.2 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.91% ($-0.00)
+  🛑 STOP LOSS -5.91% | Selling BTC @ $65876.90
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:23:31] BTC $65822.10 | RSI 81.4 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.99% ($-0.00)
+  🛑 STOP LOSS -5.99% | Selling BTC @ $65822.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:24:31] BTC $65943.10 | RSI 82.9 | High $66694.90 | Dip 1.1%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.81% ($-0.00)
+  🛑 STOP LOSS -5.81% | Selling BTC @ $65943.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:25:31] BTC $65892.10 | RSI 82.1 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.89% ($-0.00)
+  🛑 STOP LOSS -5.89% | Selling BTC @ $65892.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:26:32] BTC $65815.30 | RSI 81.3 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.00% ($-0.00)
+  🛑 STOP LOSS -6.00% | Selling BTC @ $65815.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:27:32] BTC $65789.00 | RSI 80.8 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.04% ($-0.00)
+  🛑 STOP LOSS -6.04% | Selling BTC @ $65789.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:28:32] BTC $65720.10 | RSI 80.4 | High $66694.90 | Dip 1.5%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.13% ($-0.00)
+  🛑 STOP LOSS -6.13% | Selling BTC @ $65720.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:29:33] BTC $65720.10 | RSI 80.4 | High $66694.90 | Dip 1.5%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.13% ($-0.00)
+  🛑 STOP LOSS -6.13% | Selling BTC @ $65720.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:30:33] BTC $65750.00 | RSI 80.3 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.09% ($-0.00)
+  🛑 STOP LOSS -6.09% | Selling BTC @ $65750.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+  📊 Cycle 9700 | BTC: 0.000364 | USD: $36.16 | Total: ~$60.11
+
+[14:31:33] BTC $65779.70 | RSI 80.3 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.05% ($-0.00)
+  🛑 STOP LOSS -6.05% | Selling BTC @ $65779.70
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:32:34] BTC $65760.10 | RSI 80.3 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.08% ($-0.00)
+  🛑 STOP LOSS -6.08% | Selling BTC @ $65760.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:33:34] BTC $65763.80 | RSI 80.3 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.07% ($-0.00)
+  🛑 STOP LOSS -6.07% | Selling BTC @ $65763.80
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:34:34] BTC $65830.00 | RSI 80.3 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.98% ($-0.00)
+  🛑 STOP LOSS -5.98% | Selling BTC @ $65830.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:35:35] BTC $65883.30 | RSI 84.7 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.90% ($-0.00)
+  🛑 STOP LOSS -5.90% | Selling BTC @ $65883.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:36:35] BTC $65926.50 | RSI 84.7 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.84% ($-0.00)
+  🛑 STOP LOSS -5.84% | Selling BTC @ $65926.50
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:37:35] BTC $65899.50 | RSI 84.7 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.88% ($-0.00)
+  🛑 STOP LOSS -5.88% | Selling BTC @ $65899.50
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:38:36] BTC $65800.10 | RSI 84.1 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.02% ($-0.00)
+  🛑 STOP LOSS -6.02% | Selling BTC @ $65800.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:39:36] BTC $65785.40 | RSI 83.8 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.04% ($-0.00)
+  🛑 STOP LOSS -6.04% | Selling BTC @ $65785.40
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:40:36] BTC $65824.90 | RSI 83.8 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.98% ($-0.00)
+  🛑 STOP LOSS -5.98% | Selling BTC @ $65824.90
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+  📊 Cycle 9710 | BTC: 0.000364 | USD: $58.11 | Total: ~$82.09
+
+[14:41:37] BTC $65858.30 | RSI 83.8 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.94% ($-0.00)
+  🛑 STOP LOSS -5.94% | Selling BTC @ $65858.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:42:37] BTC $65794.40 | RSI 83.8 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.03% ($-0.00)
+  🛑 STOP LOSS -6.03% | Selling BTC @ $65794.40
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:43:38] BTC $65790.00 | RSI 83.8 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.03% ($-0.00)
+  🛑 STOP LOSS -6.03% | Selling BTC @ $65790.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:44:38] BTC $65843.50 | RSI 83.8 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.96% ($-0.00)
+  🛑 STOP LOSS -5.96% | Selling BTC @ $65843.50
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:45:38] BTC $65851.30 | RSI 83.4 | High $66694.90 | Dip 1.3%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.95% ($-0.00)
+  🛑 STOP LOSS -5.95% | Selling BTC @ $65851.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:46:39] BTC $65789.60 | RSI 82.4 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.03% ($-0.00)
+  🛑 STOP LOSS -6.03% | Selling BTC @ $65789.60
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:47:39] BTC $65786.90 | RSI 82.7 | High $66694.90 | Dip 1.4%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -6.04% ($-0.00)
+  🛑 STOP LOSS -6.04% | Selling BTC @ $65786.90
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:48:39] BTC $65880.00 | RSI 83.5 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.91% ($-0.00)
+  🛑 STOP LOSS -5.91% | Selling BTC @ $65880.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:49:40] BTC $65865.50 | RSI 83.5 | High $66694.90 | Dip 1.2%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.93% ($-0.00)
+  🛑 STOP LOSS -5.93% | Selling BTC @ $65865.50
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:50:40] BTC $65983.40 | RSI 84.5 | High $66694.90 | Dip 1.1%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.76% ($-0.00)
+  🛑 STOP LOSS -5.76% | Selling BTC @ $65983.40
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+  📊 Cycle 9720 | BTC: 0.000364 | USD: $58.11 | Total: ~$82.15
+
+[14:51:41] BTC $66000.10 | RSI 84.5 | High $66694.90 | Dip 1.0%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.73% ($-0.00)
+  🛑 STOP LOSS -5.73% | Selling BTC @ $66000.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:52:41] BTC $66002.80 | RSI 84.5 | High $66694.90 | Dip 1.0%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.73% ($-0.00)
+  🛑 STOP LOSS -5.73% | Selling BTC @ $66002.80
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:53:41] BTC $66002.80 | RSI 84.5 | High $66694.90 | Dip 1.0%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.73% ($-0.00)
+  🛑 STOP LOSS -5.73% | Selling BTC @ $66002.80
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:54:42] BTC $65971.60 | RSI 84.5 | High $66694.90 | Dip 1.1%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.77% ($-0.00)
+  🛑 STOP LOSS -5.77% | Selling BTC @ $65971.60
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:55:42] BTC $66019.30 | RSI 87.0 | High $66694.90 | Dip 1.0%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.71% ($-0.00)
+  🛑 STOP LOSS -5.71% | Selling BTC @ $66019.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:56:42] BTC $66110.80 | RSI 87.0 | High $66694.90 | Dip 0.9%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.58% ($-0.00)
+  🛑 STOP LOSS -5.58% | Selling BTC @ $66110.80
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:57:43] BTC $66126.60 | RSI 87.0 | High $66694.90 | Dip 0.9%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.55% ($-0.00)
+  🛑 STOP LOSS -5.55% | Selling BTC @ $66126.60
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:58:43] BTC $66191.00 | RSI 87.0 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.46% ($-0.00)
+  🛑 STOP LOSS -5.46% | Selling BTC @ $66191.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[14:59:44] BTC $66166.20 | RSI 87.0 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.50% ($-0.00)
+  🛑 STOP LOSS -5.50% | Selling BTC @ $66166.20
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:00:44] BTC $66170.80 | RSI 88.0 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.49% ($-0.00)
+  🛑 STOP LOSS -5.49% | Selling BTC @ $66170.80
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+  📊 Cycle 9730 | BTC: 0.000364 | USD: $58.11 | Total: ~$82.21
+
+[15:01:44] BTC $66166.30 | RSI 88.0 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.50% ($-0.00)
+  🛑 STOP LOSS -5.50% | Selling BTC @ $66166.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:02:45] BTC $66180.50 | RSI 88.0 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.48% ($-0.00)
+  🛑 STOP LOSS -5.48% | Selling BTC @ $66180.50
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:03:45] BTC $66216.70 | RSI 88.0 | High $66694.90 | Dip 0.7%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.42% ($-0.00)
+  🛑 STOP LOSS -5.42% | Selling BTC @ $66216.70
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:04:46] BTC $66213.00 | RSI 88.0 | High $66694.90 | Dip 0.7%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.43% ($-0.00)
+  🛑 STOP LOSS -5.43% | Selling BTC @ $66213.00
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:05:46] BTC $66150.10 | RSI 86.9 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.52% ($-0.00)
+  🛑 STOP LOSS -5.52% | Selling BTC @ $66150.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:06:46] BTC $66173.30 | RSI 87.2 | High $66694.90 | Dip 0.8%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.49% ($-0.00)
+  🛑 STOP LOSS -5.49% | Selling BTC @ $66173.30
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:07:47] BTC $66072.10 | RSI 85.9 | High $66694.90 | Dip 0.9%
+  📦 [SELL] 0.0 BTC | Entry $70014.40 | PnL -5.63% ($-0.00)
+  🛑 STOP LOSS -5.63% | Selling BTC @ $66072.10
+  ❌ Order error: ['EGeneral:Invalid arguments:volume minimum not met']
+  ❌ Stop sell failed: {'error': ['EGeneral:Invalid arguments:volume minimum not met']}
+
+[15:08:47] BTC $66200.70 | RSI 87.6 | High $66694.90 | Dip 0.7%
