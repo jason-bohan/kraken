@@ -55,9 +55,11 @@ RSI_OVERBOUGHT   = 70           # never enter when RSI is above this (too pumped
 DIP_MIN          = 0.02         # enter on 2%+ dip
 DIP_MAX          = 0.15         # skip if drop > 15% (crash territory)
 RSI_PERIOD       = 14
+MIN_CONFIDENCE   = 0.30         # minimum confidence score to enter a trade
 MAX_USD_PER_PAIR = 15.0         # max $ to risk per pair (must exceed Kraken ~$10 min)
 MAX_TOTAL_USD    = 30.0         # hard cap across all pairs
-MIN_VOLUME_USD   = 1_000_000   # skip pairs with < $1M 24h volume
+MIN_VOLUME_USD   = 1_000_000   # skip pairs with < $1M 24h volume (bull/neutral)
+MIN_VOLUME_BEAR  = 10_000_000  # $10M volume filter in bear market (cuts illiquid coins)
 MIN_VOLATILITY   = 0.05         # skip pairs with < 5% 24h swing
 RESERVE_USD      = 5.0          # always keep $5 in reserve
 DRY_START_BAL    = 50.0         # default fake starting balance for dry run
@@ -85,6 +87,10 @@ dry_start_bal   = DRY_START_BAL
 # Trade log for dry run summary
 dry_trades      = []            # list of { pair, side, price, volume, pnl_usd }
 dry_trades_lock = threading.Lock()
+
+# Market regime — updated every rescan cycle, read by all pair threads
+market_regime      = "neutral"   # "bull", "neutral", or "bear"
+market_regime_lock = threading.Lock()
 
 
 # ─────────────────────────────────────────────
@@ -192,6 +198,27 @@ def get_all_tickers() -> dict:
     return {}
 
 
+def get_market_regime() -> str:
+    """
+    Determine market regime using Fear & Greed + 24h market cap change.
+      bull    — mkt_change > +1% AND fear_greed > 40  → small caps allowed, trend filter off
+      bear    — mkt_change < -2% OR  fear_greed < 25  → $10M volume floor, trend filter on
+      neutral — everything else                        → behaves like bull
+    """
+    try:
+        from market_sentiment import get_market_sentiment
+        s = get_market_sentiment()
+        fg  = s.get("fear_greed", 50)
+        chg = s.get("market_cap_change_24h", 0)
+        if chg < -2.0 or fg < 25:
+            return "bear"
+        if chg > 1.0 and fg > 40:
+            return "bull"
+    except Exception:
+        pass
+    return "neutral"
+
+
 def score_pairs(tickers: dict) -> list:
     """
     Score all pairs by volatility * volume, adjusted by historical performance.
@@ -201,6 +228,10 @@ def score_pairs(tickers: dict) -> list:
       - win rate < 40% or negative avg P&L   -> down to 0.5x penalty
       - no history                            -> neutral 1.0x
     """
+    with market_regime_lock:
+        regime = market_regime
+    vol_floor = MIN_VOLUME_BEAR if regime == "bear" else MIN_VOLUME_USD
+
     scored = []
     for pair, data in tickers.items():
         try:
@@ -210,7 +241,7 @@ def score_pairs(tickers: dict) -> list:
             vol        = float(data["v"][1])
             volume_usd = vol * last
 
-            if low == 0 or volume_usd < MIN_VOLUME_USD:
+            if low == 0 or volume_usd < vol_floor:
                 continue
 
             volatility = (high - low) / low
@@ -470,8 +501,10 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 dip_signal = DIP_MIN <= dip <= DIP_MAX
                 not_overbought = rsi < RSI_OVERBOUGHT  # block entry if RSI is too pumped
 
-                # Trend filter disabled — backtesting showed it filters profitable entries
-                uptrend = True
+                # Trend filter: active in bear market, disabled in bull/neutral
+                with market_regime_lock:
+                    regime = market_regime
+                uptrend = (price > ma20) if regime == "bear" else True
 
                 # Holdings check: don't buy if we already hold this asset
                 balances_snapshot = get_balance() if not dry_run else {}
@@ -480,9 +513,15 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                 bal_str   = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
                 trend_str = "UP" if uptrend else "DOWN"
                 held_str  = " HELD" if already_held else ""
-                print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | Trend {trend_str}{held_str}{bal_str}")
+                print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | Trend {trend_str} [{regime}]{held_str}{bal_str}")
+
+                confidence = min(1.0, (RSI_OVERSOLD - rsi) / RSI_OVERSOLD + dip)
 
                 if (rsi_signal or dip_signal) and not_overbought and uptrend and not already_held:
+                    if confidence < MIN_CONFIDENCE:
+                        print(f"  [{ts}] 🚫 {pair} skipped: confidence {confidence:.3f} < {MIN_CONFIDENCE}")
+                        continue
+
                     # Check market sentiment before buying
                     sentiment = check_sentiment()
                     if not sentiment["allow"]:
@@ -529,7 +568,7 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
                                     side="buy",
                                     entry_price=price,
                                     position_size=volume,
-                                    confidence=min(1.0, (RSI_OVERSOLD - rsi) / RSI_OVERSOLD + dip),
+                                    confidence=confidence,
                                     features={"rsi": rsi, "dip": dip, "price": price, "ma20": ma20},
                                     config={"rsi_oversold": RSI_OVERSOLD, "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT},
                                 )
@@ -579,6 +618,18 @@ def run(dry_run: bool = False, sim_balance: float = DRY_START_BAL):
             scan_cycle += 1
             ts = datetime.now().strftime("%H:%M:%S")
             print(f"\n[{ts}] 🔍 Scan #{scan_cycle} — finding top {TOP_N} volatile pairs...")
+
+            # Update market regime
+            global market_regime
+            new_regime = get_market_regime()
+            with market_regime_lock:
+                prev_regime = market_regime
+                market_regime = new_regime
+            if new_regime != prev_regime:
+                print(f"  [{ts}] 📊 Market regime: {prev_regime.upper()} → {new_regime.upper()}")
+                tg(f"📊 Market regime changed: *{prev_regime.upper()}* → *{new_regime.upper()}*")
+            else:
+                print(f"  [{ts}] 📊 Market regime: {new_regime.upper()}")
 
             new_pairs = get_top_pairs(TOP_N)
             if not new_pairs:
