@@ -30,7 +30,7 @@ Passing means "worth a dry run", not "proven".
 | 6 | 2026-11-02 | **Cross-coin momentum** (spec below) | 2.7 years, daily, 16 coins | **Fail (near miss).** Default settings: +86.8% vs BTC buy-and-hold +55.0% (Sharpe 0.68 vs 0.58), beats 92% of random picks, +40.5% with costs doubled, 304 trades. But walk-forward −41.9% vs BTC −17.1% on the same unseen periods: the best settings on past data (always top_k 2, weak/no market filter) did badly next. Max drawdown 58.5% vs 53.1% for BTC. |
 | 7 | from 2026-11-02 | **Momentum + BTC filter, forward paper trading** (spec below) | live Kraken prices, weekly, no money | _running_ |
 | 8 | 2026-11-02 | **Regular buying (DCA) with a trend safety switch** (spec below) | 2016-06 → 2026-11, daily, BTC / ETH / 50-50 | **Fail.** Switch passed in 1/7 windows for BTC, 0/7 for 50/50 (and ETH). It cut max drawdown in every window, but usually by 12–37%, not the required third, and its final value swung from 62% to 148% of plain DCA. Plain DCA itself grew a lot in every window but with 53–94% drawdowns. |
-| 9 | 2026-11-02 | **Long/short trend** (spec below) — tested before #7's week 13 at the owner's request | 2016-06 → 2026-11, daily, BTC / ETH | _pending_ |
+| 9 | 2026-11-02 | **Long/short trend** (spec below) — tested before #7's week 13 at the owner's request | 2016-06 → 2026-11, daily, BTC / ETH | **Fail.** Short leg lost money in every window: long/short beat the long-only switch in 0/7 windows for BTC and ETH, at 0%, 0.03% and 0.12%/day short cost, and with 50/100/200-day averages (ETH: 1–2/7 at 50/200). BTC from 2017: 37× vs long-only 99× vs hold 78×; ETH from 2020: 0.24× vs hold 17×. |
 
 Note: the first trend runs reported "beats 100% of random". That was a bug in
 the random baseline (random entries reused the trend exit and churned to
@@ -191,9 +191,9 @@ decision uses 100.
 - Per the rule: fail. For real money, plain DCA sized so that a 75%+ drop is
   survivable is the evidence-backed default.
 
-## Where things stand (2026-11-02)
+## Where things stand (2026-11-02, updated after #9)
 
-8 ideas tested, 0 passed. Momentum + BTC filter (#7) is the only idea still
+9 ideas tested, 0 passed. Momentum + BTC filter (#7) is the only idea still
 alive, and only in forward paper trading. Testing more ideas on the same
 history raises the chance of a lucky "pass", so new ideas should wait until
 #7 has run for at least 13 weeks.
@@ -232,3 +232,13 @@ data: 7 windows.
    with more than the long-only switch.
 
 The 50- and 200-day averages are reported for information only.
+
+
+### #9 result notes
+
+- Even with **zero** cost to hold a short, shorting below the average lost
+  money relative to sitting in cash, in every window. Drops below the
+  100-day average were, on balance, followed by recoveries and whipsaws, not
+  by further falls big enough to pay for the trades.
+- Long/short drawdowns were no better than long-only (BTC ~60% vs 40–68%;
+  ETH 72–94%), so the short side added risk as well as cost.
