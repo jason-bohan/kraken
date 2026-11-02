@@ -1,0 +1,80 @@
+{
+  "idea": "RESEARCH.md #7 \u2014 momentum + BTC filter, forward paper trading",
+  "params": {
+    "lookback": 28,
+    "top_k": 3,
+    "filter_sma": 100,
+    "rebalance_days": 7
+  },
+  "costs": {
+    "fee": 0.004,
+    "slippage": 0.0005
+  },
+  "started": 1793661812,
+  "start_value": 1000.0,
+  "btc_start_price": 76700.2,
+  "cash": 1000.0,
+  "holdings": {},
+  "last_prices": {
+    "XBTUSD": 76700.2,
+    "ETHUSD": 2249.2,
+    "SOLUSD": 91.74,
+    "ADAUSD": 0.188503,
+    "XDGUSD": 0.074074,
+    "LINKUSD": 11.11835,
+    "AVAXUSD": 8.39,
+    "XRPUSD": 1.24823,
+    "DOTUSD": 0.937,
+    "LTCUSD": 53.7,
+    "BCHUSD": 276.07,
+    "UNIUSD": 7.1243,
+    "AAVEUSD": 126.75,
+    "XLMUSD": 0.162856,
+    "ATOMUSD": 1.4309,
+    "NEARUSD": 3.8651
+  },
+  "last_rebalance": 1793661812,
+  "trades": [],
+  "weeks": [
+    {
+      "time": 1793661812,
+      "date": "2026-11-02 23:23 UTC",
+      "value": 1000.0,
+      "btc_buy_hold": 1000.0,
+      "holdings": [],
+      "rebalanced": true,
+      "decision": {
+        "market_ok": true,
+        "btc_close": 78239.2,
+        "btc_sma": 76411.265,
+        "picks": [],
+        "top_scores": [
+          [
+            -0.0956,
+            "XBTUSD"
+          ],
+          [
+            -0.1086,
+            "BCHUSD"
+          ],
+          [
+            -0.1288,
+            "NEARUSD"
+          ],
+          [
+            -0.1618,
+            "ATOMUSD"
+          ],
+          [
+            -0.1666,
+            "ETHUSD"
+          ],
+          [
+            -0.1783,
+            "XRPUSD"
+          ]
+        ]
+      }
+    }
+  ]
+}
