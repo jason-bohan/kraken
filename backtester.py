@@ -75,44 +75,58 @@ class Trade:
     net_return: float
 
 
-def simulate(candles: list, signals: list, exits, costs: Costs, start: int = 0, end: int | None = None) -> tuple[list, int]:
+def simulate(candles: list, signals: list, exits, costs: Costs, start: int = 0, end: int | None = None,
+             exit_signals: list | None = None) -> tuple[list, int]:
     """
     Long-only, one position at a time.
+
     signals[i] is truthy when the strategy would buy at the close of candle i;
-    the order fills at the open of candle i+1. exits(i, entry_price, signal) →
-    (stop, target). Returns (trades, bars_in_market).
+    the order fills at the open of candle i+1. exits(i, entry_price, signal)
+    returns (stop, target) or (stop, target, max_bars); stop/target may be None.
+    exit_signals[i] truthy = sell at the open of candle i+1. A position still
+    open after max_bars candles is sold at that candle's close.
+    Returns (trades, bars_in_market).
     """
     end = len(candles) if end is None else end
     trades, bars_in = [], 0
-    pos = None  # (entry_time, entry_eff, stop, target)
+    pos = None  # [entry_time, entry_eff, stop, target, max_bars, bars_held]
+
+    def close(t, price, reason):
+        exit_eff = price * (1 - costs.slippage)
+        net = (exit_eff * (1 - costs.fee)) / (pos[1] * (1 + costs.fee)) - 1
+        trades.append(Trade(pos[0], t, pos[1], exit_eff, reason, net))
+
     for i in range(max(start, 1), end):
-        t, o, h, lo = candles[i][0], candles[i][1], candles[i][2], candles[i][3]
+        t, o, h, lo, c = candles[i][0], candles[i][1], candles[i][2], candles[i][3], candles[i][4]
+        if pos is not None and exit_signals and exit_signals[i - 1]:
+            close(t, o, "signal")
+            pos = None
         if pos is None and signals[i - 1]:
-            entry_eff = o * (1 + costs.slippage)
-            stop, target = exits(i - 1, o, signals[i - 1])
-            pos = (t, entry_eff, stop, target)
+            ex = exits(i - 1, o, signals[i - 1])
+            stop, target = ex[0], ex[1]
+            max_bars = ex[2] if len(ex) > 2 else None
+            pos = [t, o * (1 + costs.slippage), stop, target, max_bars, 0]
         if pos is None:
             continue
         bars_in += 1
-        _, entry_eff, stop, target = pos
+        pos[5] += 1
+        stop, target = pos[2], pos[3]
         exit_price = reason = None
-        if o <= stop:
+        if stop is not None and o <= stop:
             exit_price, reason = o, "stop"            # gapped through the stop
-        elif o >= target:
+        elif target is not None and o >= target:
             exit_price, reason = o, "target"
-        elif lo <= stop:
+        elif stop is not None and lo <= stop:
             exit_price, reason = stop, "stop"         # stop first if both were touched
-        elif h >= target:
+        elif target is not None and h >= target:
             exit_price, reason = target, "target"
+        elif pos[4] and pos[5] >= pos[4]:
+            exit_price, reason = c, "time"
         if exit_price is not None:
-            exit_eff = exit_price * (1 - costs.slippage)
-            net = (exit_eff * (1 - costs.fee)) / (entry_eff * (1 + costs.fee)) - 1
-            trades.append(Trade(pos[0], t, entry_eff, exit_eff, reason, net))
+            close(t, exit_price, reason)
             pos = None
     if pos is not None:  # mark open position to the last close
-        last = candles[end - 1][4] * (1 - costs.slippage)
-        net = (last * (1 - costs.fee)) / (pos[1] * (1 + costs.fee)) - 1
-        trades.append(Trade(pos[0], candles[end - 1][0], pos[1], last, "open_at_end", net))
+        close(candles[end - 1][0], candles[end - 1][4], "open_at_end")
     return trades, bars_in
 
 
@@ -153,12 +167,13 @@ def random_baseline(adapter, params: dict, signals: list, costs: Costs, runs: in
     n_sig = sum(1 for s in signals[start:] if s)
     p = n_sig / max(1, len(candles) - start)
     exits = adapter.exits(params)
+    exit_sig = adapter.exit_signals(params)
     rng = random.Random(seed)
     totals = []
     for _ in range(runs):
         rnd = [adapter.random_signal(i) if i >= start and rng.random() < p else None
                for i in range(len(candles))]
-        trades, bars = simulate(candles, rnd, exits, costs, start)
+        trades, bars = simulate(candles, rnd, exits, costs, start, exit_signals=exit_sig)
         totals.append(metrics(trades, candles, bars, start)["total_return"])
     return totals
 
@@ -174,14 +189,18 @@ def percentile_of(value: float, dist: list) -> float:
 # builds signal arrays and exit rules for a given set of settings quickly.
 
 class HftAdapter:
-    """dynamic_hft_bot: 1-minute candles, fixed % take-profit / stop."""
+    """dynamic_hft_bot: 1-minute candles, fixed % take-profit / stop, optional trend filter and time limit."""
     name = "hft"
     interval = 1
+    min_trades = 10
     grid = {
-        "rsi_oversold": [25, 30, 35, 40],
+        "rsi_oversold": [30, 40],
+        "trend_period": [0, 240, 720],          # minutes of 1m closes in the trend SMA (0 = off)
         "profit_pct": [0.01, 0.02, 0.04, 0.10],
         "stop_pct": [0.01, 0.02, 0.04, 0.08],
+        "max_hold_minutes": [0, 360],           # 0 = no time limit
     }
+    entry_keys = ("rsi_oversold", "trend_period")
 
     def __init__(self, candles: list, base_params: dict):
         self.candles = candles
@@ -189,26 +208,53 @@ class HftAdapter:
         self.snaps = [None] * len(candles)
         need = max(self.base["rsi_period"] + 5, self.base["high_lookback"], self.base["ma_period"])
         self.warmup = need
+        snap_params = {**self.base, "trend_period": 0}  # trend SMA is precomputed below (faster)
         for i in range(need, len(candles)):
-            self.snaps[i] = strategies.hft_snapshot(candles[i - need + 1:i + 1], self.base)
+            self.snaps[i] = strategies.hft_snapshot(candles[i - need + 1:i + 1], snap_params)
+        closes = [c[4] for c in candles]
+        self.trend_ma = {}
+        periods = set(self.grid["trend_period"]) | {int(self.base.get("trend_period", 0))}
+        for n in periods:
+            if not n:
+                continue
+            ma, run = [None] * len(closes), 0.0
+            for i, c in enumerate(closes):
+                run += c
+                if i >= n:
+                    run -= closes[i - n]
+                if i >= n - 1:
+                    ma[i] = run / n
+            self.trend_ma[n] = ma
 
     def signals(self, params: dict) -> list:
         p = {**self.base, **params}
+        tp = int(p.get("trend_period", 0))
+        ma = self.trend_ma.get(tp)
         out = [None] * len(self.candles)
         for i, snap in enumerate(self.snaps):
-            if snap and strategies.hft_entry(self.candles[i][4], snap, "neutral", p)["enter"]:
+            if not snap:
+                continue
+            if tp:
+                snap = {**snap, "trend_ma": ma[i]}
+            if strategies.hft_entry(self.candles[i][4], snap, "neutral", p)["enter"]:
                 out[i] = True
         return out
 
     def exits(self, params: dict):
         p = {**self.base, **params}
-        return lambda i, entry, sig: (entry * (1 - p["stop_pct"]), entry * (1 + p["profit_pct"]))
+        max_bars = int(p.get("max_hold_minutes", 0)) // self.interval or None
+        return lambda i, entry, sig: (entry * (1 - p["stop_pct"]), entry * (1 + p["profit_pct"]), max_bars)
+
+    def exit_signals(self, params: dict):
+        return None
 
     def random_signal(self, i: int):
         return True
 
     def breakeven(self, params: dict, costs: Costs) -> float | None:
         p = {**self.base, **params}
+        if p.get("max_hold_minutes"):
+            return None  # time exits make outcomes non-binary
         return strategies.breakeven_win_rate(p["profit_pct"], p["stop_pct"], costs.round_trip)
 
 
@@ -216,6 +262,7 @@ class SwingAdapter:
     """stock_swing_bot: 5m candles resampled to 15m/1h/4h, evaluated every 15 minutes."""
     name = "swing"
     interval = 5
+    min_trades = 5
     window = 100  # candles per timeframe given to the indicators
     grid = {
         "min_confidence": [0.5, 0.6, 0.7],
@@ -286,8 +333,56 @@ class SwingAdapter:
             return stop, entry * (1 + p["profit_target"])
         return f
 
+    def exit_signals(self, params: dict):
+        return None
+
     def breakeven(self, params: dict, costs: Costs) -> float | None:
         return None  # stop distance varies with ATR
+
+
+class TrendAdapter:
+    """
+    Trend-following candidate (no live bot yet): long while fast EMA > slow EMA
+    and close > slow EMA; sell when that breaks. Optional ATR stop.
+    """
+    name = "trend"
+    interval = 1440
+    min_trades = 3
+    grid = {"fast": [10, 20], "slow": [50, 100, 200], "atr_stop": [0.0, 3.0]}
+    entry_keys = ("fast", "slow")
+
+    def __init__(self, candles: list, base_params: dict):
+        self.candles = candles
+        self.base = {**strategies.TREND_DEFAULTS, **base_params}
+        closes = [c[4] for c in candles]
+        highs = [c[2] for c in candles]
+        lows = [c[3] for c in candles]
+        periods = set(self.grid["fast"]) | set(self.grid["slow"]) | {int(self.base["fast"]), int(self.base["slow"])}
+        self.ema = {n: strategies.ema_full(closes, n) for n in periods}
+        self.atr = [strategies.atr(highs[max(0, i - 14):i + 1], lows[max(0, i - 14):i + 1],
+                                   closes[max(0, i - 14):i + 1]) for i in range(len(candles))]
+        self.warmup = max(self.grid["slow"])
+
+    def _state(self, params: dict) -> list:
+        p = {**self.base, **params}
+        fast, slow = self.ema[int(p["fast"])], self.ema[int(p["slow"])]
+        return [strategies.trend_state(c[4], fast[i], slow[i]) for i, c in enumerate(self.candles)]
+
+    def signals(self, params: dict) -> list:
+        return [True if on else None for on in self._state(params)]
+
+    def exit_signals(self, params: dict) -> list:
+        return [not on for on in self._state(params)]
+
+    def exits(self, params: dict):
+        k = float({**self.base, **params}["atr_stop"])
+        return lambda i, entry, sig: (entry - k * self.atr[i] if k and self.atr[i] else None, None)
+
+    def random_signal(self, i: int):
+        return True
+
+    def breakeven(self, params: dict, costs: Costs) -> float | None:
+        return None
 
 
 # ─────────────────────────────────────────────
@@ -296,33 +391,44 @@ class SwingAdapter:
 
 def run_once(adapter, params: dict, costs: Costs, start: int = 0, end: int | None = None) -> dict:
     sig = adapter.signals(params)
-    trades, bars = simulate(adapter.candles, sig, adapter.exits(params), costs, start, end)
+    trades, bars = simulate(adapter.candles, sig, adapter.exits(params), costs, start, end,
+                            exit_signals=adapter.exit_signals(params))
     return {"metrics": metrics(trades, adapter.candles, bars, start, end), "trades": trades, "signals": sig}
 
 
-def walk_forward(adapter, costs: Costs, folds: int = 4, min_trades: int = 5) -> dict:
-    """Expanding-window walk-forward over the parameter grid."""
+def walk_forward(adapter, costs: Costs, folds: int = 4) -> dict:
+    """
+    Expanding-window walk-forward: for each fold, pick the best setting combo
+    on everything before it, then score that combo on the fold (unseen data).
+    """
     n = len(adapter.candles)
     bounds = [int(n * k / folds) for k in range(folds + 1)]
     keys = list(adapter.grid)
     combos = [dict(zip(keys, vals)) for vals in itertools.product(*adapter.grid.values())]
-    sig_cache = {}
+    entry_keys = getattr(adapter, "entry_keys", tuple(keys))
+    sig_cache, exit_cache = {}, {}
+
+    def cached(combo):
+        k = tuple(combo[x] for x in entry_keys)
+        if k not in sig_cache:
+            sig_cache[k] = adapter.signals(combo)
+            exit_cache[k] = adapter.exit_signals(combo)
+        return sig_cache[k], exit_cache[k]
+
     oos_trades, oos_bars, chosen = [], 0, []
     for f in range(1, folds):
         best, best_ret = None, None
         for combo in combos:
-            key = tuple(combo.items())
-            if key not in sig_cache:
-                sig_cache[key] = adapter.signals(combo)
-            tr, bars = simulate(adapter.candles, sig_cache[key], adapter.exits(combo), costs, 0, bounds[f])
+            sig, ex_sig = cached(combo)
+            tr, bars = simulate(adapter.candles, sig, adapter.exits(combo), costs, 0, bounds[f], ex_sig)
             m = metrics(tr, adapter.candles, bars, 0, bounds[f])
-            if m["trades"] >= min_trades and (best_ret is None or m["total_return"] > best_ret):
+            if m["trades"] >= adapter.min_trades and (best_ret is None or m["total_return"] > best_ret):
                 best, best_ret = combo, m["total_return"]
         if best is None:
             chosen.append({"fold": f, "params": None, "in_sample_return": None})
             continue
-        tr, bars = simulate(adapter.candles, sig_cache[tuple(best.items())], adapter.exits(best),
-                            costs, bounds[f], bounds[f + 1])
+        sig, ex_sig = cached(best)
+        tr, bars = simulate(adapter.candles, sig, adapter.exits(best), costs, bounds[f], bounds[f + 1], ex_sig)
         oos_trades += tr
         oos_bars += bars
         chosen.append({"fold": f, "params": best, "in_sample_return": best_ret,
@@ -333,7 +439,8 @@ def walk_forward(adapter, costs: Costs, folds: int = 4, min_trades: int = 5) -> 
 
 def verdict(m: dict, rand_pct: float | None, wf: dict | None, stressed: dict) -> str:
     if m["trades"] < 10:
-        return "Too few trades to judge — test a longer period or more pairs."
+        state = "losing so far" if m["expectancy"] <= 0 else "profitable so far"
+        return f"Too few trades to judge ({m['trades']}, {state}) — test a longer period or more pairs."
     if m["expectancy"] <= 0:
         return "Loses money after costs."
     if rand_pct is not None and rand_pct < 0.90:
@@ -383,9 +490,11 @@ def print_report(pair: str, adapter, params: dict, costs: Costs, res: dict, rand
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("strategy", choices=["hft", "swing"])
+    ap.add_argument("strategy", choices=["hft", "swing", "trend"])
     ap.add_argument("--pairs", default=None, help="comma-separated Kraken pairs (default depends on strategy)")
-    ap.add_argument("--days", type=float, default=None, help="history length (default hft 30, swing 180)")
+    ap.add_argument("--days", type=float, default=None, help="history length (default hft 30, swing 180, trend 1095)")
+    ap.add_argument("--interval", type=int, choices=[240, 1440], default=1440,
+                    help="trend only: candle size in minutes (240 = 4h, 1440 = daily)")
     ap.add_argument("--source", choices=["coinbase", "kraken"], default="coinbase")
     ap.add_argument("--csv", action="append", default=[], metavar="PAIR=PATH",
                     help="use a local candle file for PAIR (Kraken OHLCVT export); repeatable")
@@ -410,32 +519,45 @@ def main():
         pairs = (args.pairs or "SOLUSD,XDGUSD,ETHUSD").split(",")
         days = args.days or 30
         base = {**dynamic_hft_bot.STRATEGY_PARAMS, **overrides}
-    else:
+    elif args.strategy == "swing":
         import stock_swing_bot
         pairs = (args.pairs or "XBTUSD,ETHUSD,SOLUSD,ADAUSD").split(",")
         days = args.days or 180
+    else:
+        pairs = (args.pairs or "XBTUSD,ETHUSD,SOLUSD,ADAUSD,XDGUSD,LINKUSD").split(",")
+        days = args.days or 1095
+        base = overrides
 
-    interval = HftAdapter.interval if args.strategy == "hft" else SwingAdapter.interval
+    interval = {"hft": HftAdapter.interval, "swing": SwingAdapter.interval, "trend": args.interval}[args.strategy]
+    fetch_interval = 60 if interval == 240 else interval  # Coinbase has no 4h candles: build from 1h
     report = {"strategy": args.strategy, "created": int(time.time()), "days": days,
               "costs": asdict(costs), "pairs": {}}
+    all_trades = []
 
     for pair in pairs:
         print(f"\n  Loading {pair} {interval}m candles ({days:g} days)...")
         try:
             candles = (market_data.load_csv(csv_files[pair]) if pair in csv_files
-                       else market_data.get_candles(pair, interval, days, args.source))
+                       else market_data.get_candles(pair, fetch_interval, days, args.source))
         except Exception as e:
             print(f"  ⚠️ Could not load {pair}: {e}")
             continue
-        if args.strategy == "hft" and pair in csv_files:
-            candles = candles[-int(days * 1440):]
-        if len(candles) < 500:
+        if fetch_interval != interval:
+            candles = market_data.resample(candles, interval)
+        if pair in csv_files:
+            candles = candles[-int(days * 1440 / interval):]
+        min_candles = 300 if args.strategy == "trend" else 500
+        if len(candles) < min_candles:
             print(f"  ⚠️ Only {len(candles)} candles for {pair} — skipping")
             continue
 
         if args.strategy == "hft":
             adapter = HftAdapter(candles, base)
             params = {k: base[k] for k in adapter.grid}
+        elif args.strategy == "trend":
+            adapter = TrendAdapter(candles, base)
+            adapter.interval = interval
+            params = {k: adapter.base[k] for k in adapter.grid}
         else:
             config = {**stock_swing_bot.get_stock_config(stock_symbol(pair)), "min_confidence": 0.6, **overrides}
             adapter = SwingAdapter(candles, config)
@@ -450,6 +572,7 @@ def main():
         text = verdict(res["metrics"], rand_pct, wf, stressed)
         print_report(pair, adapter, params, costs, res, rand, rand_pct, wf, stressed, text)
 
+        all_trades.extend(res["trades"])
         report["pairs"][pair] = {
             "candles": len(candles), "interval": interval, "params": params,
             "metrics": res["metrics"], "costs_doubled": stressed,
@@ -458,10 +581,44 @@ def main():
             "equity": _equity_points(res["trades"]),
         }
 
+    if len(report["pairs"]) > 1:
+        report["summary"] = print_summary(report, all_trades)
+
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORT_DIR / f"{args.strategy}_{time.strftime('%Y%m%d_%H%M%S')}.json"
     out.write_text(json.dumps(report, indent=2, default=_json_default))
     print(f"\n  Report saved: {out}")
+
+
+def print_summary(report: dict, trades: list) -> dict:
+    """All coins together: one coin rarely has enough trades to judge on its own."""
+    pairs = report["pairs"].values()
+    rets = [t.net_return for t in trades]
+    wins = [r for r in rets if r > 0]
+    avg = lambda xs: statistics.mean(xs) if xs else 0.0  # noqa: E731
+    wf = [p["walk_forward"]["out_of_sample"] for p in pairs if p.get("walk_forward")]
+    summary = {
+        "pairs": len(report["pairs"]),
+        "trades": len(rets),
+        "win_rate": len(wins) / len(rets) if rets else 0.0,
+        "expectancy": avg(rets),
+        "avg_return": avg([p["metrics"]["total_return"] for p in pairs]),
+        "avg_buy_hold": avg([p["metrics"]["buy_hold"] for p in pairs]),
+        "avg_max_drawdown": avg([p["metrics"]["max_drawdown"] for p in pairs]),
+        "avg_walk_forward": avg([w["total_return"] for w in wf]) if wf else None,
+        "walk_forward_trades": sum(w["trades"] for w in wf),
+        "avg_costs_doubled": avg([p["costs_doubled"]["total_return"] for p in pairs]),
+    }
+    print(f"\n  ══ ALL {summary['pairs']} COINS · {report['strategy']} ══")
+    print(f"  Trades {summary['trades']} | win rate {summary['win_rate']*100:.1f}% | "
+          f"avg per trade {pct(summary['expectancy'])} (after costs)")
+    print(f"  Avg net return per coin {pct(summary['avg_return'])} vs buy & hold {pct(summary['avg_buy_hold'])} | "
+          f"avg max drawdown {summary['avg_max_drawdown']*100:.1f}%")
+    if summary["avg_walk_forward"] is not None:
+        print(f"  Walk-forward on unseen data: avg {pct(summary['avg_walk_forward'])} per coin "
+              f"over {summary['walk_forward_trades']} trades")
+    print(f"  With costs doubled: avg {pct(summary['avg_costs_doubled'])} per coin")
+    return summary
 
 
 def stock_symbol(pair: str) -> str:

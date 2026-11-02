@@ -204,10 +204,12 @@ HFT_DEFAULTS = {
     "dip_min": 0.02,        # ... or when price is 2-15% below the 30-min high
     "dip_max": 0.15,
     "high_lookback": 30,    # candles for the "recent high"
-    "ma_period": 20,        # trend filter (bear regime only)
+    "ma_period": 20,        # short MA filter (bear regime only)
+    "trend_period": 0,      # >0: only buy above the SMA of this many 1m closes (max 720 live)
     "min_confidence": 0.30,
     "profit_pct": 0.10,
     "stop_pct": 0.08,
+    "max_hold_minutes": 0,  # >0: sell at market after this long if neither level was hit
 }
 
 
@@ -217,11 +219,15 @@ def hft_snapshot(candles: list, params: dict = HFT_DEFAULTS) -> dict | None:
         return None
     closes = [float(c[4]) for c in candles]
     highs = [float(c[2]) for c in candles]
-    return {
+    snap = {
         "rsi": rsi(closes, params["rsi_period"]),
         "recent_high": max(highs[-params["high_lookback"]:]),
         "ma": sma(closes, params["ma_period"]),
     }
+    tp = params.get("trend_period", 0)
+    if tp:
+        snap["trend_ma"] = sma(closes, tp) if len(closes) >= tp else None
+    return snap
 
 
 def hft_entry(price: float, snap: dict, regime: str = "neutral", params: dict = HFT_DEFAULTS) -> dict:
@@ -233,11 +239,36 @@ def hft_entry(price: float, snap: dict, regime: str = "neutral", params: dict = 
     dip_signal = params["dip_min"] <= dip <= params["dip_max"]
     not_overbought = r < params["rsi_overbought"]
     uptrend = price > snap["ma"] if regime == "bear" else True
+    if params.get("trend_period", 0):
+        trend_ma = snap.get("trend_ma")
+        uptrend = uptrend and trend_ma is not None and price > trend_ma
     confidence = min(1.0, (params["rsi_oversold"] - r) / params["rsi_oversold"] + dip)
 
     enter = (rsi_signal or dip_signal) and not_overbought and uptrend and confidence >= params["min_confidence"]
     return {"enter": enter, "confidence": confidence, "dip": dip,
             "reason": f"RSI {r:.0f} + dip -{dip*100:.1f}%"}
+
+
+# ─────────────────────────────────────────────
+# TREND STRATEGY (backtest candidate — no live bot yet)
+# ─────────────────────────────────────────────
+#
+# Classic trend-following on 4h/daily candles: be long while the fast EMA is
+# above the slow EMA and price is above the slow EMA; get out when either
+# breaks. Few trades, so fees matter little. An optional ATR stop caps losses.
+
+TREND_DEFAULTS = {"fast": 20, "slow": 100, "atr_stop": 0.0}
+
+
+def ema_full(closes: list, period: int) -> list:
+    """EMA aligned to closes (None until enough data)."""
+    s = ema_series(closes, period)
+    return [None] * (period - 1) + s
+
+
+def trend_state(close: float, ema_fast: float | None, ema_slow: float | None) -> bool:
+    """True when the trend rule says to be long."""
+    return ema_fast is not None and ema_slow is not None and close > ema_slow and ema_fast > ema_slow
 
 
 # ─────────────────────────────────────────────

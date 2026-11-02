@@ -73,12 +73,16 @@ SL_RETRY_SECS    = 300          # retry a missing stop-loss at most this often
 DRY_START_BAL    = 50.0         # default fake starting balance for dry run
 DEBUG_PAIRS      = False        # set True to print all pair scores during scan
 
+TREND_PERIOD     = 0            # >0: only buy above the SMA of this many 1m closes (≤ 720)
+MAX_HOLD_MINUTES = 0            # >0: sell at market after this long if neither level was hit
+
 # Entry/exit parameters as used by strategies.hft_entry (also what backtester.py tests)
 STRATEGY_PARAMS = {
     **strategies.HFT_DEFAULTS,
     "rsi_period": RSI_PERIOD, "rsi_oversold": RSI_OVERSOLD, "rsi_overbought": RSI_OVERBOUGHT,
     "dip_min": DIP_MIN, "dip_max": DIP_MAX, "min_confidence": MIN_CONFIDENCE,
     "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT,
+    "trend_period": TREND_PERIOD, "max_hold_minutes": MAX_HOLD_MINUTES,
 }
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT    = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -389,7 +393,8 @@ def open_position(pair: str, volume: float, price: float, confidence: float,
         if not dry_buy(pair, volume, price):
             print(f"  [DRY] ⚠️ Insufficient virtual balance")
             return None
-        position = {"entry_price": price, "volume": volume, "fees": 0.0}
+        position = {"entry_price": price, "volume": volume, "fees": 0.0,
+                    "entry_time": datetime.now().isoformat(timespec="seconds")}
         _save(pair, position, dry_run)
         print(f"  [DRY] Bought {volume} {pair} @ ${price:.4f} | Balance: ${dry_balance:.2f}")
         return position
@@ -600,9 +605,17 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event, position: 
                 bal_str = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
                 print(f"  [{ts}] {pair:<18} ${price:.6g} | RSI {rsi:.0f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.4f}){bal_str}")
 
+                max_hold = STRATEGY_PARAMS.get("max_hold_minutes", 0)
+                held_min = ((datetime.now() - datetime.fromisoformat(position["entry_time"])).total_seconds() / 60
+                            if position.get("entry_time") else 0)
+
                 if pnl_pct >= PROFIT_PCT or pnl_pct <= -STOP_PCT:
                     reason = "take_profit" if pnl_pct >= PROFIT_PCT else "stop_loss"
                     if close_position(pair, position, price, reason, dry_run):
+                        position = None
+                elif max_hold and held_min >= max_hold:
+                    print(f"  [{ts}] ⏱ {pair} held {held_min:.0f} min ≥ {max_hold} — closing")
+                    if close_position(pair, position, price, "time", dry_run):
                         position = None
 
             # ── LOOK FOR ENTRY ────────────────────────────

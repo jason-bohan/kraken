@@ -149,3 +149,59 @@ class PipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NewRuleTests(unittest.TestCase):
+    def test_time_exit_sells_at_close_after_max_bars(self):
+        cs = [candle(i * 60, 100, 101, 99, 100.5) for i in range(6)]
+        exits = lambda i, entry, sig: (entry * 0.9, entry * 1.2, 3)  # noqa: E731
+        trades, bars = bt.simulate(cs, [True] + [None] * 5, exits, bt.COST_PRESETS["none"])
+        self.assertEqual(trades[0].reason, "time")
+        self.assertEqual(bars, 3)
+        self.assertAlmostEqual(trades[0].net_return, 0.005)
+
+    def test_exit_signal_sells_next_open(self):
+        cs = [candle(0, 100, 100, 100, 100), candle(60, 100, 101, 99, 101),
+              candle(120, 102, 103, 101, 102), candle(180, 104, 105, 103, 104)]
+        none_exits = lambda i, entry, sig: (None, None)  # noqa: E731
+        trades, _ = bt.simulate(cs, [True, None, None, None], none_exits, bt.COST_PRESETS["none"],
+                                exit_signals=[False, True, False, False])
+        self.assertEqual(trades[0].reason, "signal")
+        self.assertAlmostEqual(trades[0].exit, 102)  # open of the candle after the exit signal
+
+    def test_hft_trend_filter_blocks_buys_below_trend(self):
+        params = {**strategies.HFT_DEFAULTS, "trend_period": 10, "rsi_oversold": 40}
+        snap = {"rsi": 20, "recent_high": 100, "ma": 95, "trend_ma": 100}
+        self.assertFalse(strategies.hft_entry(99, snap, "neutral", params)["enter"])
+        snap["trend_ma"] = 90
+        self.assertTrue(strategies.hft_entry(99, snap, "neutral", params)["enter"])
+
+    def test_hft_adapter_trend_ma_matches_sma(self):
+        cs = random_walk(800)
+        ad = bt.HftAdapter(cs, strategies.HFT_DEFAULTS)
+        closes = [c[4] for c in cs]
+        self.assertAlmostEqual(ad.trend_ma[240][500], strategies.sma(closes[:501], 240))
+
+    def test_trend_adapter_long_in_uptrend_flat_in_downtrend(self):
+        up = [candle(i * 86400, 100 + i, 101 + i, 99 + i, 100.5 + i) for i in range(250)]
+        down = [candle((250 + i) * 86400, 350 - 2 * i, 351 - 2 * i, 348 - 2 * i, 349 - 2 * i) for i in range(150)]
+        ad = bt.TrendAdapter(up + down, {})
+        res = bt.run_once(ad, {"fast": 20, "slow": 100, "atr_stop": 0.0}, bt.COST_PRESETS["none"])
+        trades = res["trades"]
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0].reason, "signal")
+        self.assertGreater(trades[0].net_return, 0.5)  # rode the uptrend, left early in the downtrend
+        self.assertGreater(res["metrics"]["total_return"], res["metrics"]["buy_hold"])
+
+    def test_summary_pools_coins(self):
+        rep = {"strategy": "x", "pairs": {
+            "A": {"metrics": {"total_return": 0.1, "buy_hold": 0.0, "max_drawdown": 0.1},
+                  "costs_doubled": {"total_return": 0.05}, "walk_forward": None},
+            "B": {"metrics": {"total_return": -0.1, "buy_hold": 0.2, "max_drawdown": 0.3},
+                  "costs_doubled": {"total_return": -0.2}, "walk_forward": None}}}
+        trades = [bt.Trade(0, 0, 1, 1, "x", r) for r in (0.02, -0.01, 0.03)]
+        with contextlib.redirect_stdout(io.StringIO()):
+            s = bt.print_summary(rep, trades)
+        self.assertEqual(s["trades"], 3)
+        self.assertAlmostEqual(s["avg_buy_hold"], 0.1)
+        self.assertAlmostEqual(s["expectancy"], 0.04 / 3)
