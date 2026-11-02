@@ -129,5 +129,44 @@ class PaperTests(unittest.TestCase):
         self.assertTrue(v.series)
 
 
+class DemoTests(unittest.TestCase):
+    """Prices rise for 200 days, then everything falls for the last 40: the demo should find the last buy."""
+
+    def setUp(self):
+        self.days = 240
+        self.turn = 200
+
+    def price(self, pair, i):
+        rate = {"XBTUSD": 0.004, "SOLUSD": 0.012, "ETHUSD": 0.008, "ADAUSD": 0.006}.get(pair, -0.002)
+        if i <= self.turn:
+            return 100 * (1 + rate) ** i
+        return 100 * (1 + rate) ** self.turn * 0.99 ** (i - self.turn)
+
+    def get_ohlc(self, pair, interval=1440):
+        start = NOW // DAY * DAY - self.days * DAY
+        return [[start + i * DAY, *[self.price(pair, i)] * 5, 1.0, 1] for i in range(self.days + 1)]
+
+    def get_ticker(self, pair):
+        return {"c": [str(self.price(pair, self.days)), "1"]}
+
+    def test_demo_finds_last_buy_and_never_touches_the_ledger(self):
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.object(pm, "LEDGER", Path(d) / "momentum_ledger.json"), \
+             mock.patch.object(pm.kc, "get_ohlc", side_effect=self.get_ohlc), \
+             mock.patch.object(pm.kc, "get_ticker", side_effect=self.get_ticker):
+            result = pm.demo(now=NOW)
+            self.assertFalse((Path(d) / "momentum_ledger.json").exists())
+        # Last buy day is a few days into the fall, when only the strongest coin still had a
+        # positive 28-day return.
+        self.assertEqual(result["picks"], ["SOLUSD"])
+        self.assertEqual([(t["side"], t["pair"]) for t in result["trades"]], [("buy", "SOLUSD")])
+        self.assertGreater(result["days_ago"], 1)          # recent days: everything falling, no buy
+        self.assertLess(result["value_today"], result["value_after_buy"])  # bought before the fall
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            pm.print_demo(result)
+        self.assertIn("NOT recorded", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

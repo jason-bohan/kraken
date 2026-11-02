@@ -10,6 +10,7 @@ committed to git so the record is permanent.
 Usage:
     python3 paper_momentum.py            # mark to market; rebalance if a week has passed
     python3 paper_momentum.py --status   # show the record without changing it
+    python3 paper_momentum.py --demo     # see the rules buy, on past prices (nothing recorded)
 
 Run it weekly (GitHub Actions does this: .github/workflows/paper-momentum.yml).
 Running more often is harmless: it only rebalances once 7 days have passed.
@@ -215,10 +216,78 @@ def print_status(ledger: dict) -> None:
         print(f"  Decision points: week 13 (early stop) and week 26 (decision) — see RESEARCH.md #7")
 
 
+# ─────────────────────────────────────────────
+# DEMO (never touches the real ledger)
+# ─────────────────────────────────────────────
+
+def demo(now: int | None = None, max_days_back: int = 600) -> dict | None:
+    """
+    Find the most recent past day on which the #7 rules would have bought,
+    run the same rebalance on a throwaway ledger at that day's Kraken closing
+    prices, and value it at today's prices. Nothing is saved.
+    """
+    now = now or now_ts()
+    history = {}
+    for p in UNIVERSE:
+        candles = kc.get_ohlc(p, interval=1440)
+        history[p] = [(int(c[0]), float(c[4])) for c in candles if int(c[0]) + DAY <= now]
+    btc_hist = history.get(BTC) or []
+    if not btc_hist:
+        raise SystemExit("Could not get BTC history from Kraken.")
+
+    for back in range(1, max_days_back):
+        day_close = btc_hist[-1][0] - (back - 1) * DAY   # candle open time of the day we decide on
+        upto = {p: [c for t, c in h if t <= day_close] for p, h in history.items()}
+        btc = upto[BTC]
+        if len(btc) < PARAMS["filter_sma"] + 1:
+            break
+        market_ok = strategies.market_filter_ok(btc, PARAMS["filter_sma"])
+        scores = {p: strategies.momentum_score(c, PARAMS["lookback"]) for p, c in upto.items() if c}
+        picks = strategies.momentum_picks(scores, PARAMS["top_k"], market_ok)
+        if not picks:
+            continue
+        then_prices = {p: c[-1] for p, c in upto.items() if c}
+        ledger = {"cash": START_CASH, "holdings": {}, "last_prices": dict(then_prices), "trades": []}
+        rebalance(ledger, picks, then_prices, day_close + DAY)
+        today = {p: last_price(p) for p in UNIVERSE}
+        start_value = value(ledger, then_prices)
+        end_value = value(ledger, today)
+        btc_change = today[BTC] / then_prices[BTC] - 1 if today.get(BTC) else None
+        return {"date": iso(day_close + DAY), "days_ago": back, "picks": picks, "trades": ledger["trades"],
+                "scores": sorted(((round(s, 4), p) for p, s in scores.items() if s is not None), reverse=True)[:6],
+                "btc_vs_avg": (btc[-1], strategies.sma(btc, PARAMS["filter_sma"])),
+                "value_after_buy": start_value, "value_today": end_value, "btc_change": btc_change,
+                "holdings_today": {p: (u, today.get(p)) for p, u in ledger["holdings"].items()}}
+    return None
+
+
+def print_demo(d: dict | None) -> None:
+    print("\n  ══ DEMO — same rules and code as the paper record, NOT recorded, no real orders ══")
+    if not d:
+        print("  The rules would not have bought on any day in the available history.")
+        return
+    close, avg = d["btc_vs_avg"]
+    print(f"  Most recent buy signal: {d['date']} ({d['days_ago']} day(s) ago)")
+    print(f"  BTC {close:,.0f} above its 100-day average {avg:,.0f}; top 28-day returns: "
+          + ", ".join(f"{p} {s*100:+.1f}%" for s, p in d["scores"]))
+    print(f"  Paper buys with $1,000 (fee 0.40% + slippage 0.05%):")
+    for t in d["trades"]:
+        print(f"    {t['side'].upper():4} {t['units']:.6g} {t['pair']} @ ${t['price']:,.6g}  (fee ${t['fee']:.2f})")
+    change = d["value_today"] / START_CASH - 1
+    btc = f"{d['btc_change']*100:+.2f}%" if d["btc_change"] is not None else "n/a"
+    print(f"  Worth after buying: ${d['value_after_buy']:,.2f} · worth today: ${d['value_today']:,.2f} "
+          f"({change*100:+.2f}%) · BTC over the same days: {btc}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--status", action="store_true", help="show the record without changing it")
+    ap.add_argument("--demo", action="store_true",
+                    help="show what the rules last bought, on a throwaway ledger (nothing is recorded)")
     args = ap.parse_args()
+    if args.demo:
+        print_demo(demo())
+        return
     if args.status:
         ledger = load()
         if not ledger:
