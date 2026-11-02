@@ -393,6 +393,30 @@ def backtests(arg: str = "", report_dir: Path | None = None) -> View:
                                          "Walk-fwd", "2x costs", "Verdict"], rows, note=note, series=series)
 
 
+def paper(_arg: str = "", ledger_path: Path | None = None) -> View:
+    """PAPR — the forward paper-trading record for momentum (RESEARCH.md #7)."""
+    path = ledger_path or ROOT / "paper" / "momentum_ledger.json"
+    if not path.exists():
+        return View("PAPR  Paper momentum", note="No paper record yet. Run: python3 paper_momentum.py")
+    import paper_momentum
+    ledger = json.loads(path.read_text())
+    s = paper_momentum.summary(ledger)
+    rows = [["Weeks running", f"{s['weeks']:.1f} of 26"],
+            ["Paper portfolio", (f"${s['value']:,.2f}  ({s['return']*100:+.2f}%)",
+                                 "up" if s["return"] > 0 else "down" if s["return"] < 0 else None)],
+            ["BTC buy & hold", f"${s['btc_buy_hold']:,.2f}  ({s['btc_return']*100:+.2f}%)"],
+            ["Ahead of BTC by", signed_pct(s["return"] - s["btc_return"])],
+            ["Holding", ", ".join(short_name(p) for p in s["holdings"]) or "cash"],
+            ["Paper trades", s["trades"]]]
+    d = s["last_decision"]
+    if d:
+        rows.append(["BTC filter", ("ON", "up") if d["market_ok"] else ("OFF — cash", "down")])
+        rows.append(["Top 28-day", ", ".join(f"{short_name(p)} {sc*100:+.0f}%" for sc, p in d["top_scores"][:4])])
+    series = [w["value"] for w in sorted(ledger["weeks"] + ledger.get("marks", []), key=lambda w: w["time"])]
+    return View("PAPR  Paper momentum (#7) · no real money", ["", ""], rows, series=series,
+                note=f"As of {s['as_of']}. Decision points: week 13 and week 26 (RESEARCH.md #7).")
+
+
 # ─────────────────────────────────────────────
 # REGISTRY
 # ─────────────────────────────────────────────
@@ -410,6 +434,7 @@ SCREENS = {
     "ORD":  (orders, 15, "Open orders on Kraken (API key)"),
     "SENT": (sentiment, 300, "Fear & Greed, funding and the bots' buy gate"),
     "BT":   (backtests, 60, "Latest backtest report, e.g. BT hft"),
+    "PAPR": (paper, 300, "Paper-trading record for momentum (idea #7)"),
 }
 
 

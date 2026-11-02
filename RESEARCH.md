@@ -28,6 +28,7 @@ Passing means "worth a dry run", not "proven".
 | 4 | 2026-11-02 | Trend-following on 4h candles | 2 years, 4h, 6 coins | **Fail.** −0.62% per trade over 368 trades; walk-forward −36% per coin. |
 | 5 | 2026-11-02 | **Swing** (`stock_swing_bot`): multi-timeframe RSI/MACD score, 1.5×ATR stop, +10% target | 180 days, 5m, 4 coins | **Fail.** 8.8% win rate, −1.08% per trade over 226 trades; walk-forward −23% per coin; worse than random timing. The ATR stop (~1–2%) is hit by noise long before the +10% target. |
 | 6 | 2026-11-02 | **Cross-coin momentum** (spec below) | 2.7 years, daily, 16 coins | **Fail (near miss).** Default settings: +86.8% vs BTC buy-and-hold +55.0% (Sharpe 0.68 vs 0.58), beats 92% of random picks, +40.5% with costs doubled, 304 trades. But walk-forward −41.9% vs BTC −17.1% on the same unseen periods: the best settings on past data (always top_k 2, weak/no market filter) did badly next. Max drawdown 58.5% vs 53.1% for BTC. |
+| 7 | from 2026-11-02 | **Momentum + BTC filter, forward paper trading** (spec below) | live Kraken prices, weekly, no money | _running_ |
 
 Note: the first trend runs reported "beats 100% of random". That was a bug in
 the random baseline (random entries reused the trend exit and churned to
@@ -115,3 +116,28 @@ not evidence): with no BTC filter, 0/9 combos beat BTC in both halves; with a
 50- or 100-day filter, 14/18 did; with a 200-day filter, 1/9. Most combos
 still lost money in the falling second half, just less than BTC. Testing this
 on the same data would be fitting to it; it can only be judged on new data.
+
+
+## #7 Momentum + BTC filter — forward paper trading (written before the first week)
+
+**Why forward only.** The #6b table suggested momentum works with a 50–100 day
+BTC filter. That pattern was found by looking at those results, so it can
+only be judged on data that did not exist yet.
+
+**Rules (fixed, no tuning):** the #6 defaults — 16-coin universe, rank by
+28-day return, hold the top 3 with a positive return at 1/3 each, all cash
+while BTC's daily close is below its 100-day average. Rebalance weekly, using
+completed daily candles from Kraken; fills at the current Kraken price with
+0.40% fee + 0.05% slippage per side. Paper capital $1,000 (only the
+percentage matters). Benchmark: BTC bought on the same first day and held.
+
+**Runs:** `paper_momentum.py`, weekly (GitHub Actions or by hand). The ledger
+`paper/momentum_ledger.json` is committed so the record can't be lost or
+quietly edited.
+
+**Decision points:**
+- **Week 13 (early stop):** stop if it trails BTC buy-and-hold by more than
+  10 percentage points, or is down more than 20%.
+- **Week 26 (decision):** consider small real money only if it is ahead of
+  BTC buy-and-hold **and** above its starting value. Six months is still a
+  small sample: a pass means "small, capped real test", not "proven".
