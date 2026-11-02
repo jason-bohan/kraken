@@ -224,6 +224,11 @@ def get_ticker(pair: str) -> dict:
     return next(iter(result.values()), {})
 
 
+def get_all_tickers() -> dict:
+    """Tickers for every pair in one call, keyed by Kraken's canonical pair name. {} on failure."""
+    return _public("/0/public/Ticker", timeout=10)
+
+
 def get_ohlc(pair: str, interval: int = 1) -> list:
     """
     OHLC candles (up to 720). interval in minutes: 1, 5, 15, 30, 60, 240, 1440, 10080, 21600.

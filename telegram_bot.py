@@ -209,7 +209,8 @@ def cmd_bots(chat_id: str):
     except subprocess.CalledProcessError as e:
         out = e.output
 
-    expected = ["bot_BTC", "bot_ETH", "bot_SOL", "bot_ADA", "bot_HFT", "telegram_bot"]
+    from bot_registry import BOTS
+    expected = list(BOTS)
     lines = ["*Bot Status*\n"]
 
     for bot in expected:

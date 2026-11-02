@@ -34,6 +34,7 @@ from kraken_connection import (
     cancel_order, pair_altname,
 )
 from position_store import all_bot_positions
+from bot_registry import BOTS
 from position_guardian import _fmt_price
 from learning_engine import LearningEngine
 from market_sentiment import get_market_sentiment, format_sentiment, should_buy as check_sentiment
@@ -47,14 +48,7 @@ LEARNER = LearningEngine()
 # Expected bot screen sessions: name -> (script args, log file, optional key profile).
 # A key profile is used only if KRAKEN_API_KEY_<PROFILE> is set in .env; separate
 # keys per process avoid "EAPI:Invalid nonce" (see .env.example).
-EXPECTED_BOTS = {
-    "bot_BTC":      (["stock_swing_bot.py", "BTC"], "logs/BTC_swing.log", "SWING_BTC"),
-    "bot_ETH":      (["stock_swing_bot.py", "ETH"], "logs/ETH_swing.log", "SWING_ETH"),
-    "bot_SOL":      (["stock_swing_bot.py", "SOL"], "logs/SOL_swing.log", "SWING_SOL"),
-    "bot_ADA":      (["stock_swing_bot.py", "ADA"], "logs/ADA_swing.log", "SWING_ADA"),
-    "bot_HFT":      (["dynamic_hft_bot.py"],        "logs/HFT.log",       "HFT"),
-    "telegram_bot": (["telegram_bot.py"],           "logs/telegram_bot.log", "TELEGRAM"),
-}
+EXPECTED_BOTS = {name: (b["args"], b["log"], b["profile"]) for name, b in BOTS.items()}
 
 # Bot name -> (learning engine bot_name, symbols it trades)
 BOT_LEARNING = {
