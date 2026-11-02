@@ -653,6 +653,40 @@ def get_order_status(txid: str) -> str | None:
     return info.get("status") if info else None
 
 
+def get_fill(txid: str, attempts: int = 3, delay: float = 1.0) -> dict | None:
+    """
+    Executed volume, average price and fee of an order:
+        {"status", "vol_exec", "avg_price", "cost", "fee"}
+    Retries briefly while a market order is still settling. Returns None if
+    the order could not be looked up.
+    """
+    info = None
+    for i in range(attempts):
+        info = query_orders([txid]).get(txid)
+        if info and info.get("status") in ("closed", "canceled", "expired"):
+            break
+        if i < attempts - 1:
+            time.sleep(delay)
+    if not info:
+        return None
+    vol_exec = float(info.get("vol_exec", 0) or 0)
+    cost = float(info.get("cost", 0) or 0)
+    avg_price = float(info.get("price", 0) or 0) or (cost / vol_exec if vol_exec else 0.0)
+    return {
+        "status": info.get("status"),
+        "vol_exec": vol_exec,
+        "avg_price": avg_price,
+        "cost": cost,
+        "fee": float(info.get("fee", 0) or 0),
+    }
+
+
+def pair_altname(pair: str) -> str:
+    """Normalise any pair name ("XXBTZUSD", "XBT/USD", "XBTUSD") to Kraken's altname."""
+    meta = resolve_pair_assets(pair)
+    return meta.get("altname", pair) if meta else pair
+
+
 def get_closed_orders(trades: bool = True) -> dict:
     """Closed/filled orders keyed by txid. {} on failure (logged)."""
     try:

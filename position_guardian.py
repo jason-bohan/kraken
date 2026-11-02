@@ -49,9 +49,11 @@ def place_exit_orders(
     entry_price: float,
     profit_pct: float,
     stop_pct: float,
+    userref: int = 0,
 ) -> dict:
     """
     Place a standalone stop-loss sell order on Kraken for downside protection.
+    userref tags the order with the owning bot's id.
 
     Returns dict: {"tp": None, "sl": txid_or_None, "tp_price": float, "sl_price": float}
     tp_price is stored so bots know the TP level for their loop checks.
@@ -69,7 +71,7 @@ def place_exit_orders(
         result["below_minimum"] = True
         return result
 
-    ok, r = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str)
+    ok, r = place_order(pair, "sell", "stop-loss", volume=volume, price=sl_price_str, userref=userref)
     if ok:
         txids = r.get("txid", [])
         result["sl"] = txids[0] if txids else None

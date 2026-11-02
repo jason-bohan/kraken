@@ -102,6 +102,15 @@ def get_market_sentiment() -> dict:
         "error": None,
     }
 
+    if not CMC_API_KEY:
+        # Without a key every call fails; this used to be silent and the bots
+        # always saw "Neutral (50)". Neutral defaults still apply (fail-open).
+        result["error"] = "CMC_API_KEY not set — using neutral defaults"
+        result["source"] = "default"
+        return result
+
+    got_data = False
+
     # Fetch Fear & Greed
     try:
         r = requests.get(
@@ -113,6 +122,9 @@ def get_market_sentiment() -> dict:
         if data.get("data"):
             result["fear_greed"] = int(data["data"]["value"])
             result["fear_greed_label"] = data["data"].get("value_classification", "Unknown")
+            got_data = True
+        else:
+            result["error"] = f"Fear&Greed: {data.get('status', {}).get('error_message', 'no data')}"
     except Exception as e:
         result["error"] = f"Fear&Greed fetch failed: {e}"
 
@@ -133,13 +145,21 @@ def get_market_sentiment() -> dict:
             result["market_cap_change_24h"] = round(
                 q.get("total_market_cap_yesterday_percentage_change", 0), 2
             )
+            got_data = True
+        else:
+            msg = f"Global metrics: {data.get('status', {}).get('error_message', 'no data')}"
+            result["error"] = f"{result['error']}; {msg}" if result["error"] else msg
     except Exception as e:
         if result["error"]:
             result["error"] += f"; Global metrics failed: {e}"
         else:
             result["error"] = f"Global metrics failed: {e}"
 
-    _save_cache(result)
+    if got_data:
+        _save_cache(result)  # never cache a failed lookup as if it were real data
+    else:
+        result["source"] = "default"
+        print(f"  ⚠️ Market sentiment unavailable ({result['error']}) — using neutral defaults")
     return result
 
 

@@ -22,3 +22,6 @@ sol_grid_state.json
 lazygit
 lazygit.tar.gz
 diff.txt
+
+# Saved bot positions (per machine)
+state/

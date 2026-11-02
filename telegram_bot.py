@@ -209,10 +209,7 @@ def cmd_bots(chat_id: str):
     except subprocess.CalledProcessError as e:
         out = e.output
 
-    expected = [
-        "bot_BTC", "bot_ETH", "bot_SOL", "bot_ADA", "bot_DOT",
-        "bot_DOGE", "bot_BTC_MOM", "bot_HFT", "bot_MOMENTUM", "telegram_bot",
-    ]
+    expected = ["bot_BTC", "bot_ETH", "bot_SOL", "bot_ADA", "bot_HFT", "telegram_bot"]
     lines = ["*Bot Status*\n"]
 
     for bot in expected:
@@ -231,10 +228,7 @@ BOT_INFO = {
     "eth":      ("stock_swing_bot", ["ETH"], "Swing trades ETH"),
     "sol":      ("stock_swing_bot", ["SOL"], "Swing trades SOL"),
     "ada":      ("stock_swing_bot", ["ADA"], "Swing trades ADA"),
-    "dot":      ("dot_swing_bot",   ["DOT"], "Swing trades DOT"),
-    "doge":     ("doge_swing_bot",  ["DOGE"], "Swing trades DOGE"),
-    "hft":      ("dynamic_hft_bot", None, "High-frequency scalper"),
-    "momentum": ("momentum_scanner_bot", None, "Momentum breakout scanner"),
+    "hft":      ("dynamic_hft_bot", None, "Volatile-pair dip buyer"),
 }
 
 
@@ -258,13 +252,6 @@ def cmd_botinfo(chat_id: str, bot_key: str):
         screen_out = e.output
 
     screen_name = f"bot_{bot_key.upper()}"
-    if bot_key == "momentum":
-        screen_name = "bot_MOMENTUM"
-    elif bot_key == "hft":
-        screen_name = "bot_HFT"
-    elif bot_key == "btc":
-        screen_name = "bot_BTC"
-    # etc — check generically
     status = "🟢 Running" if screen_name in screen_out else "🔴 DOWN"
 
     lines = [f"*{screen_name}* — {desc}", f"Status: {status}\n"]

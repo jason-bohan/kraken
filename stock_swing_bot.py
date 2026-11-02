@@ -14,11 +14,13 @@ import time
 import argparse
 import signal
 import sys
-import math
-from datetime import datetime, timedelta
-from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, get_open_orders, cancel_order
-from kraken_connection import calculate_order_size, get_order_status
+from datetime import datetime
+from kraken_connection import (
+    get_ticker, get_ohlc, get_balance, place_order, cancel_order,
+    get_order_status, get_fill, get_pair_base_balance, below_minimum,
+)
 from learning_engine import LearningEngine
+from position_store import PositionStore
 from market_sentiment import should_buy as check_sentiment, format_sentiment
 
 # ─────────────────────────────────────────────
@@ -130,7 +132,6 @@ ATR_PERIOD = 14
 MAX_POSITION_SIZE = 0.1  # Max 10% of portfolio
 RISK_PER_TRADE = 0.02    # 2% max risk
 MIN_RISK_REWARD = 2.0     # 1:2 minimum risk/reward
-TRAILING_STOP_PCT = 0.02   # 2% trailing stop
 
 # ⏱️ Timeframes for analysis
 TIMEFRAMES = {
@@ -144,27 +145,18 @@ TIMEFRAMES = {
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# 📈 Trading state (will be set dynamically)
-in_position = False
-entry_price = 0
-stop_loss = 0
-take_profit = 0
-trailing_stop = 0
-position_size = 0
-last_signal = None
+# 📈 Trading state (set in run())
+position = None          # open position dict, or None when flat (see POSITION MANAGEMENT)
 trade_history = []
 SYMBOL = ""
 PAIR = ""
-ASSET = ""
 CONFIG = {}
 BOT_NAME = "stock_swing_bot"
 LEARNER = LearningEngine()
+STORE = None             # PositionStore for state/stock_swing_bot_<SYMBOL>.json
+USERREF = 1              # tags this bot's orders on Kraken
+SL_RETRY_SECS = 300      # retry a missing stop-loss at most this often
 active_trade_id = None
-
-# 🎯 Order management
-stop_loss_order_id = None
-take_profit_order_id = None
-trailing_stop_order_id = None
 
 # ─────────────────────────────────────────────
 # TELEGRAM NOTIFICATIONS
@@ -259,32 +251,31 @@ def calculate_rsi(prices: list, period: int = 14) -> float:
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
+def _ema_series(values: list, period: int) -> list:
+    """EMA of values, seeded with the SMA of the first `period` values.
+    Returns one value per input from index period-1 onward."""
+    if len(values) < period:
+        return []
+    k = 2 / (period + 1)
+    ema = sum(values[:period]) / period
+    out = [ema]
+    for v in values[period:]:
+        ema = v * k + ema * (1 - k)
+        out.append(ema)
+    return out
+
+
 def calculate_macd(prices: list, fast: int = 12, slow: int = 26, signal: int = 9) -> dict:
-    """Calculate MACD indicator."""
-    if len(prices) < slow:
+    """MACD line (EMA fast - EMA slow), signal line (EMA of MACD) and histogram."""
+    if len(prices) < slow + signal:
         return {"macd": 0, "signal": 0, "histogram": 0}
-    
-    # Calculate EMAs
-    def ema(data: list, period: int) -> float:
-        multiplier = 2 / (period + 1)
-        ema_val = sum(data[-period:]) / period
-        for price in data[-period:]:
-            ema_val = (price * multiplier) + (ema_val * (1 - multiplier))
-        return ema_val
-    
-    fast_ema = ema(prices, fast)
-    slow_ema = ema(prices, slow)
-    macd_line = fast_ema - slow_ema
-    
-    # For signal line, we'd need historical MACD values - simplified here
-    signal_line = macd_line * 0.9  # Simplified
-    histogram = macd_line - signal_line
-    
-    return {
-        "macd": macd_line,
-        "signal": signal_line,
-        "histogram": histogram
-    }
+    fast_ema = _ema_series(prices, fast)[slow - fast:]   # align with slow EMA
+    slow_ema = _ema_series(prices, slow)
+    macd_series = [f - s for f, s in zip(fast_ema, slow_ema)]
+    signal_series = _ema_series(macd_series, signal)
+    macd_line, signal_line = macd_series[-1], signal_series[-1]
+    return {"macd": macd_line, "signal": signal_line, "histogram": macd_line - signal_line}
+
 
 def calculate_atr(highs: list, lows: list, closes: list, period: int = 14) -> float:
     """Calculate Average True Range for volatility."""
@@ -475,501 +466,316 @@ def generate_signal(analysis: dict, config: dict) -> dict:
     }
 
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
 # POSITION MANAGEMENT
 # ─────────────────────────────────────────────
+#
+# `position` is None when flat, otherwise a dict saved to
+# state/stock_swing_bot_<SYMBOL>.json on every change:
+#   entry_price, volume, fees, stop_loss, take_profit, sl_txid, trade_id, entry_time
+# A stop-loss order on Kraken protects it even while the bot is down.
 
 def calculate_position_size(entry_price: float, stop_loss_price: float, account_balance: float) -> float:
-    """Calculate optimal position size based on risk management."""
+    """Calculate position size from risk per trade, capped by MAX_POSITION_SIZE."""
     risk_amount = account_balance * RISK_PER_TRADE
     risk_per_share = abs(entry_price - stop_loss_price)
-    
+
     if risk_per_share == 0:
         return 0
-    
+
     max_shares = risk_amount / risk_per_share
-    max_position_value = account_balance * MAX_POSITION_SIZE
-    max_shares_by_value = max_position_value / entry_price
-    
-    # Take the more conservative limit
+    max_shares_by_value = account_balance * MAX_POSITION_SIZE / entry_price
     shares = min(max_shares, max_shares_by_value)
-    
+
     # Ensure minimum trade size
     if shares * entry_price < CONFIG["min_trade"]:
         shares = CONFIG["min_trade"] / entry_price
-    
+
     return shares
 
-def place_limit_orders(entry_price: float, position_shares: float, stop_loss_price: float, take_profit_price: float):
-    """Place standalone stop-loss for downside protection. Bot loop handles TP via market sell."""
-    global stop_loss_order_id, take_profit_order_id
 
-    try:
-        # Cancel any existing orders first
-        cancel_all_limit_orders()
+def _persist() -> None:
+    if STORE is None:
+        return
+    if position:
+        STORE.set(PAIR, position)
+    else:
+        STORE.remove(PAIR)
 
-        if stop_loss_price > 0 and position_shares > 0:
-            print(f"  🛡️ Placing SL protection @ ${stop_loss_price:.2f} | TP target @ ${take_profit_price:.2f} (bot loop)")
-            ok, info = place_order(
-                pair=PAIR,
-                side="sell",
-                order_type="stop-loss",
-                volume=round(position_shares, 8),
-                price=stop_loss_price,
-            )
 
-            if ok:
-                txids = info.get('txid', [])
-                stop_loss_order_id = txids[0] if txids else None
-                take_profit_order_id = None  # TP handled by bot loop, not a standing order
-                print(f"  ✅ SL protection placed: {stop_loss_order_id}")
-            else:
-                print(f"  ❌ SL order failed: {info}")
+def protect_position(dry_run: bool) -> None:
+    """Place the stop-loss on Kraken if the position has none (rate-limited)."""
+    if dry_run or not position or position.get("sl_txid") or position.get("dust"):
+        return
+    now = time.time()
+    if now < position.get("sl_retry_at", 0):
+        return
+    position["sl_retry_at"] = now + SL_RETRY_SECS
 
+    reason = below_minimum(PAIR, position["volume"], position["stop_loss"])
+    if reason:
+        print(f"  ⚠️ No stop-loss possible: {reason}")
+        position["dust"] = True
+        _persist()
+        return
+
+    ok, info = place_order(PAIR, "sell", "stop-loss", volume=position["volume"],
+                           price=position["stop_loss"], userref=USERREF)
+    if ok:
+        position["sl_txid"] = (info.get("txid") or [None])[0]
+        print(f"  🛡️ Stop-loss on Kraken @ ${position['stop_loss']:.6g} [{position['sl_txid']}]")
+    else:
+        print(f"  ❌ Stop-loss order failed (retry in {SL_RETRY_SECS // 60} min): {info}")
+    _persist()
+
+
+def check_sl_filled() -> bool:
+    """True only if our stop-loss order FILLED on Kraken. A cancelled one is cleared for re-placement."""
+    if not position or not position.get("sl_txid"):
+        return False
+    status = get_order_status(position["sl_txid"])
+    if status == "closed":
+        print(f"  🎯 Stop-loss filled on Kraken [{position['sl_txid']}]")
         return True
+    if status in ("canceled", "expired"):
+        print(f"  ⚠️ Stop-loss {position['sl_txid']} was {status} — will re-place")
+        position["sl_txid"] = None
+        position["sl_retry_at"] = 0
+        _persist()
+    return False
 
-    except Exception as e:
-        print(f"  ❌ Error placing limit orders: {e}")
-        return False
 
-def cancel_all_limit_orders():
-    """Cancel all existing limit orders."""
-    global stop_loss_order_id, take_profit_order_id, trailing_stop_order_id
-    
-    orders_to_cancel = [
-        ("Stop-loss", stop_loss_order_id),
-        ("Take-profit", take_profit_order_id),
-        ("Trailing stop", trailing_stop_order_id)
-    ]
-    
-    for order_name, order_id in orders_to_cancel:
-        if order_id:
-            try:
-                print(f"  🗑️ Canceling {order_name.lower()} order: {order_id}")
-                if cancel_order(order_id):
-                    print(f"  ✅ {order_name} order canceled")
-                else:
-                    print(f"  ❌ Failed to cancel {order_name.lower()}")
-            except Exception as e:
-                print(f"  ⚠️ Error canceling {order_name.lower()}: {e}")
-    
-    # Reset order IDs
-    stop_loss_order_id = None
-    take_profit_order_id = None
-    trailing_stop_order_id = None
+def release_stop_loss() -> str:
+    """
+    Cancel our stop-loss so the coins can be market-sold.
+    Returns "released", "filled" (it already executed) or "error" (retry later).
+    """
+    sl = position.get("sl_txid") if position else None
+    if not sl:
+        return "released"
+    status = get_order_status(sl)
+    if status == "closed":
+        return "filled"
+    if status in ("canceled", "expired") or cancel_order(sl):
+        position["sl_txid"] = None
+        return "released"
+    return "error"
 
-def check_order_status():
-    """Check if the standalone stop-loss or trailing stop has been filled."""
-    global stop_loss_order_id, take_profit_order_id, trailing_stop_order_id, in_position
-
-    try:
-        # Nothing to check if no orders placed
-        if not stop_loss_order_id and not trailing_stop_order_id:
-            return False
-
-        # Only a "closed" status means the order filled. A failed lookup
-        # (None) or a cancelled order must not be treated as an exit.
-        sl_status = get_order_status(stop_loss_order_id) if stop_loss_order_id else None
-        ts_status = get_order_status(trailing_stop_order_id) if trailing_stop_order_id else None
-
-        for name, status in (("Stop-loss", sl_status), ("Trailing stop", ts_status)):
-            if status in ("canceled", "expired"):
-                print(f"  ⚠️ {name} order was {status} without filling — position is unprotected")
-        if sl_status in ("canceled", "expired"):
-            stop_loss_order_id = None
-        if ts_status in ("canceled", "expired"):
-            trailing_stop_order_id = None
-
-        sl_fired = sl_status == "closed"
-        ts_fired = ts_status == "closed"
-
-        if sl_fired or ts_fired:
-            ticker = get_ticker(PAIR)
-            current_price = float(ticker.get("c", [0])[0]) if ticker else entry_price
-
-            exit_reason = "trailing_stop" if ts_fired else "stop_loss"
-            print(f"  🎯 {exit_reason.replace('_', ' ').title()} order filled!")
-
-            # Cancel any remaining orders
-            cancel_all_limit_orders()
-
-            # Reconcile state — position already closed by exchange, no new order needed
-            execute_sell(current_price, exit_reason, dry_run=False, skip_order=True)
-
-            return True
-
-        return False
-
-    except Exception as e:
-        print(f"  ⚠️ Error checking order status: {e}")
-        return False
-
-def update_trailing_stop_order(current_price: float):
-    """Update trailing stop loss order."""
-    global trailing_stop_order_id, trailing_stop
-    
-    if not in_position or trailing_stop == 0:
-        return
-    
-    # Calculate new trailing stop
-    new_trailing_stop = current_price * (1 - TRAILING_STOP_PCT)
-    
-    # Only update if trailing stop moved up significantly (at least 1%)
-    if trailing_stop_order_id and new_trailing_stop > trailing_stop * 1.01:
-        print(f"  📈 Updating trailing stop: ${trailing_stop:.2f} → ${new_trailing_stop:.2f}")
-        
-        try:
-            # Cancel old trailing stop
-            if cancel_order(trailing_stop_order_id):
-                print(f"  ✅ Old trailing stop canceled")
-                
-                # Place new trailing stop
-                trail_result, trail_info = place_order(
-                    pair=PAIR,
-                    side="sell",
-                    order_type="stop-loss",
-                    volume=position_size,
-                    price=new_trailing_stop,
-                    validate=False
-                )
-                
-                if trail_result:
-                    trailing_stop_order_id = trail_info.get('txid', [None])[0]
-                    trailing_stop = new_trailing_stop
-                    print(f"  ✅ New trailing stop placed: {trailing_stop_order_id}")
-                else:
-                    print(f"  ❌ Failed to place new trailing stop: {trail_info}")
-            
-        except Exception as e:
-            print(f"  ❌ Error updating trailing stop: {e}")
-
-def update_trailing_stop(current_price: float):
-    """Update trailing stop loss."""
-    global trailing_stop
-    
-    if not in_position or trailing_stop == 0:
-        return
-    
-    # Move trailing stop up if price increased
-    new_trailing_stop = current_price * (1 - TRAILING_STOP_PCT)
-    if new_trailing_stop > trailing_stop:
-        trailing_stop = new_trailing_stop
-        print(f"  📈 Trailing stop updated: ${trailing_stop:.2f}")
 
 def check_exit_conditions(current_price: float) -> str:
-    """Check if we should exit the position."""
-    global in_position, entry_price, stop_loss, take_profit, trailing_stop
-    
-    if not in_position:
+    """Return "stop_loss", "take_profit" or "hold"."""
+    if not position:
         return "hold"
-    
-    # Check stop loss
-    if current_price <= stop_loss:
+    if current_price <= position["stop_loss"]:
         return "stop_loss"
-    
-    # Check take profit
-    if current_price >= take_profit:
+    if current_price >= position["take_profit"]:
         return "take_profit"
-    
-    # Check trailing stop
-    if trailing_stop > 0 and current_price <= trailing_stop:
-        return "trailing_stop"
-    
     return "hold"
+
 
 # ─────────────────────────────────────────────
 # TRADING FUNCTIONS
 # ─────────────────────────────────────────────
 
-def get_buy_size(dry_run: bool) -> float:
-    """Calculate optimal buy size using USD or USDC balance."""
-    if dry_run:
-        return CONFIG["min_trade"] / 150.0  # Approximate stock price
-    
-    balances = get_balance()
-    available_usd = float(balances.get("ZUSD", 0))
-    available_usdc = float(balances.get("USDC", 0))
-    
-    # Use USD first, fallback to USDC if USD insufficient
-    if available_usd >= CONFIG["min_trade"]:
-        total_available = available_usd
-        funding_source = "USD"
-    elif available_usdc >= CONFIG["min_trade"]:
-        total_available = available_usdc
-        funding_source = "USDC"
-    else:
-        total_available = max(available_usd, available_usdc)
-        funding_source = "USD" if available_usd >= available_usdc else "USDC"
-    
-    print(f"  💰 Available: ${available_usd:.2f} USD, ${available_usdc:.2f} USDC")
-    print(f"  🏦 Using: ${total_available:.2f} {funding_source}")
-    
-    if total_available < CONFIG["min_trade"]:
-        print(f"  ❌ Insufficient {funding_source}: need ${CONFIG['min_trade']:.2f}, have ${total_available:.2f}")
-        return 0.0
-    
-    return CONFIG["min_trade"] / 150.0  # Will be calculated dynamically in real trading
+def _stop_and_target(entry: float, atr: float) -> tuple[float, float]:
+    stop = entry - atr * 1.5 if atr > 0 else entry * (1 - CONFIG["stop_loss"])
+    return stop, entry * (1 + CONFIG["profit_target"])
 
-def get_sell_size(dry_run: bool) -> float:
-    """How many shares to SELL from existing holdings."""
-    if dry_run:
-        return 10.0  # Simulate selling 10 shares
-    
-    balances = get_balance()
-    available = float(balances.get(ASSET, 0))
-    
-    if available <= 0:
-        return 0.0
-    
-    # Sell 50% of holdings
-    return available * 0.5
 
 def execute_buy(signal_info: dict, dry_run: bool) -> bool:
-    """Execute a buy order with proper risk management."""
-    global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal, active_trade_id
-    
-    try:
-        current_price = signal_info["price"]
-        
-        # Calculate position size
-        balances = get_balance()
-        available_usd = float(balances.get("ZUSD", 0))
-        available_usdc = float(balances.get("USDC", 0))
-        
-        # Use USD first, fallback to USDC if USD insufficient
-        if available_usd >= CONFIG["min_trade"]:
-            account_balance = available_usd
-            funding_source = "USD"
-            quote_currency = "ZUSD"
-        elif available_usdc >= CONFIG["min_trade"]:
-            account_balance = available_usdc
-            funding_source = "USDC"
-            quote_currency = "USDC"
-        else:
-            # Use whichever has more balance
-            if available_usd >= available_usdc:
-                account_balance = available_usd
-                funding_source = "USD"
-                quote_currency = "ZUSD"
-            else:
-                account_balance = available_usdc
-                funding_source = "USDC"
-                quote_currency = "USDC"
-        
-        print(f"  💰 Available: ${available_usd:.2f} USD, ${available_usdc:.2f} USDC")
-        print(f"  🏦 Using: ${account_balance:.2f} {funding_source}")
-        
-        # Set stop loss based on ATR or stock-specific percentage
-        atr = signal_info["analysis"].get("1h", {}).get("atr", 0)
-        if atr > 0:
-            stop_loss_price = current_price - (atr * 1.5)  # 1.5x ATR stop
-        else:
-            stop_loss_price = current_price * (1 - CONFIG["stop_loss"])
-        
-        position_shares = calculate_position_size(current_price, stop_loss_price, account_balance)
-        # Apply sentiment size multiplier if available
-        size_mult = signal_info.get("size_multiplier", 1.0)
-        if size_mult < 1.0:
-            position_shares = round(position_shares * size_mult, 8)
-            print(f"  🌍 Sentiment scaling: {size_mult}x → {position_shares}")
+    """Execute a buy with risk-based sizing, then protect it with a stop-loss."""
+    global position, active_trade_id
 
-        if position_shares <= 0:
-            print(f"  ❌ Invalid position size: {position_shares}")
-            return False
-        
-        # Calculate take profit using stock-specific target
-        take_profit_price = current_price * (1 + CONFIG["profit_target"])
-        
-        # Validate risk/reward
-        risk = current_price - stop_loss_price
-        reward = take_profit_price - current_price
-        risk_reward_ratio = reward / risk if risk > 0 else 0
-        
-        if risk_reward_ratio < MIN_RISK_REWARD:
-            print(f"  ❌ Poor risk/reward: {risk_reward_ratio:.2f} < {MIN_RISK_REWARD}")
-            return False
-        
-        # Check if we have enough balance
-        required_cost = position_shares * current_price
-        if required_cost > account_balance:
-            print(f"  ❌ Insufficient {funding_source}: need ${required_cost:.2f}, have ${account_balance:.2f}")
-            return False
-        
-        if dry_run:
-            print(f"  📊 [DRY] Buy Signal Analysis:")
-            print(f"     Entry: ${current_price:.2f}")
-            print(f"     Stop: ${stop_loss_price:.2f} ({CONFIG['stop_loss']*100:.1f}%)")
-            print(f"     Target: ${take_profit_price:.2f} ({CONFIG['profit_target']*100:.1f}%)")
-            print(f"     Shares: {position_shares:.2f}")
-            print(f"     Cost: ${required_cost:.2f} ({funding_source})")
-            print(f"     Risk/Reward: {risk_reward_ratio:.2f}")
-            print(f"     Confidence: {signal_info['confidence']:.2f}")
-            return True
-        
-        # Place order using the appropriate pair
-        if funding_source == "USDC":
-            order_pair = f"{SYMBOL}USDC"  # Use USDC pair if funding with USDC
-        else:
-            order_pair = PAIR  # Use default USD pair
-        
-        order_result, order_info = place_order(
-            pair=order_pair,
-            side="buy",
-            order_type="market",
-            volume=position_shares,
-            cost=required_cost,
-            validate=False,
-            userref=1
-        )
-        
-        if order_result:
-            # Update position state
-            in_position = True
-            entry_price = current_price
-            stop_loss = stop_loss_price
-            take_profit = take_profit_price
-            trailing_stop = 0  # Initialize trailing stop
-            position_size = position_shares
-            last_signal = "buy"
-            
-            print(f"  ✅ BUY EXECUTED: {position_shares:.2f} shares @ ${current_price:.2f}")
-            print(f"  💰 Cost: ${required_cost:.2f} ({funding_source})")
-            print(f"  🛡️ Stop Loss: ${stop_loss:.2f}")
-            print(f"  🎯 Take Profit: ${take_profit:.2f}")
-            print(f"  📊 Risk/Reward: {risk_reward_ratio:.2f}")
-            
-            # Place limit orders for stop-loss and take-profit
-            if not dry_run:
-                place_limit_orders(current_price, position_shares, stop_loss_price, take_profit_price)
-            
-            active_trade_id = LEARNER.record_entry(
-                bot_name=BOT_NAME,
-                symbol=SYMBOL,
-                side="buy",
-                entry_price=current_price,
-                position_size=position_shares,
-                confidence=float(signal_info.get("confidence", 0.0)),
-                features=extract_learning_features(signal_info, current_price),
-                config=CONFIG,
-            )
+    current_price = signal_info["price"]
+    available_usd = float(get_balance().get("ZUSD", 0))
+    print(f"  💰 Available: ${available_usd:.2f} USD")
 
-            # Send notification
-            msg = f"📈 *{SYMBOL} BUY EXECUTED*\n"
-            msg += f"Shares: {position_shares:.2f} @ ${current_price:.2f}\n"
-            msg += f"Cost: ${required_cost:.2f} ({funding_source})\n"
-            msg += f"Stop Loss: ${stop_loss:.2f}\n"
-            msg += f"Take Profit: ${take_profit:.2f}\n"
-            msg += f"Risk/Reward: {risk_reward_ratio:.2f}\n"
-            msg += f"Signal: {signal_info['reason']}"
-            tg(msg)
+    atr = signal_info.get("analysis", {}).get("1h", {}).get("atr", 0)
+    stop_loss_price, take_profit_price = _stop_and_target(current_price, atr)
 
-            return True
-        else:
-            print(f"  ❌ Buy order failed: {order_info}")
-            return False
-            
-    except Exception as e:
-        print(f"  ❌ Buy execution error: {e}")
+    position_shares = calculate_position_size(current_price, stop_loss_price, available_usd)
+    size_mult = signal_info.get("size_multiplier", 1.0)
+    if size_mult < 1.0:
+        position_shares = round(position_shares * size_mult, 8)
+        print(f"  🌍 Sentiment scaling: {size_mult}x → {position_shares}")
+    if position_shares <= 0:
+        print(f"  ❌ Invalid position size: {position_shares}")
         return False
 
-def execute_sell(current_price: float, reason: str, dry_run: bool, skip_order: bool = False) -> bool:
-    """Execute a sell order.
+    risk = current_price - stop_loss_price
+    reward = take_profit_price - current_price
+    risk_reward_ratio = reward / risk if risk > 0 else 0
+    if risk_reward_ratio < MIN_RISK_REWARD:
+        print(f"  ❌ Poor risk/reward: {risk_reward_ratio:.2f} < {MIN_RISK_REWARD}")
+        return False
 
-    skip_order=True skips placing a market sell (used when the exchange already
-    closed the position via a limit/stop order) but still reconciles local state
-    and records the outcome in the learning DB.
+    required_cost = position_shares * current_price
+    if required_cost > available_usd:
+        print(f"  ❌ Insufficient USD: need ${required_cost:.2f}, have ${available_usd:.2f}")
+        return False
+
+    if dry_run:
+        print(f"  📊 [DRY] Buy: {position_shares:.8g} @ ${current_price:.6g} (${required_cost:.2f}) | "
+              f"stop ${stop_loss_price:.6g} | target ${take_profit_price:.6g} | R:R {risk_reward_ratio:.2f} | "
+              f"confidence {signal_info['confidence']:.2f}")
+        position = {"entry_price": current_price, "volume": position_shares, "fees": 0.0,
+                    "stop_loss": stop_loss_price, "take_profit": take_profit_price, "sl_txid": None}
+        return True
+
+    ok, info = place_order(pair=PAIR, side="buy", order_type="market",
+                           volume=position_shares, userref=USERREF)
+    if not ok:
+        print(f"  ❌ Buy order failed: {info}")
+        return False
+
+    # Use the real fill (price, volume, fee), not the ticker we saw before ordering.
+    txid = (info.get("txid") or [None])[0]
+    fill = get_fill(txid) if txid else None
+    entry, volume, fee = current_price, position_shares, 0.0
+    if fill and fill["vol_exec"] > 0:
+        entry, volume, fee = fill["avg_price"], fill["vol_exec"], fill["fee"]
+    else:
+        print(f"  ⚠️ Could not read fill for {txid}; using requested size/price")
+    stop_loss_price, take_profit_price = _stop_and_target(entry, atr)
+
+    active_trade_id = LEARNER.record_entry(
+        bot_name=BOT_NAME, symbol=SYMBOL, side="buy", entry_price=entry,
+        position_size=volume, confidence=float(signal_info.get("confidence", 0.0)),
+        features=extract_learning_features(signal_info, entry), config=CONFIG,
+    )
+    position = {
+        "entry_price": entry, "volume": volume, "fees": fee,
+        "stop_loss": stop_loss_price, "take_profit": take_profit_price,
+        "sl_txid": None, "trade_id": active_trade_id, "order_txid": txid,
+        "entry_time": datetime.now().isoformat(timespec="seconds"),
+    }
+    _persist()
+    protect_position(dry_run)
+
+    print(f"  ✅ BUY EXECUTED: {volume:.8g} @ ${entry:.6g} (${entry*volume:.2f}, fee ${fee:.4f})")
+    print(f"  🛡️ Stop ${stop_loss_price:.6g} | 🎯 Target ${take_profit_price:.6g} | R:R {risk_reward_ratio:.2f}")
+    tg(f"📈 *{SYMBOL} BUY* {volume:.8g} @ ${entry:.6g} (${entry*volume:.2f})\n"
+       f"Stop ${stop_loss_price:.6g} | Target ${take_profit_price:.6g}\nSignal: {signal_info['reason']}")
+    return True
+
+
+def execute_sell(current_price: float, reason: str, dry_run: bool, exchange_filled: bool = False) -> bool:
     """
-    global in_position, entry_price, stop_loss, take_profit, trailing_stop, position_size, last_signal, trade_history, active_trade_id
-
-    try:
-        if not in_position:
-            return False
-
-        if dry_run:
-            pnl_pct = (current_price - entry_price) / entry_price * 100
-            print(f"  📊 [DRY] Sell Signal:")
-            print(f"     Exit: ${current_price:.2f}")
-            print(f"     Entry: ${entry_price:.2f}")
-            print(f"     P&L: {pnl_pct:+.2f}%")
-            print(f"     Reason: {reason}")
-            return True
-
-        if skip_order:
-            order_result = True
-            order_info = "exchange-managed exit"
-        else:
-            # Place sell order
-            order_result, order_info = place_order(
-                pair=PAIR,
-                side="sell",
-                order_type="market",
-                volume=position_size,
-                cost=position_size * current_price,
-                validate=False,
-                userref=1
-            )
-        
-        if order_result:
-            # Calculate P&L
-            pnl_amount = (current_price - entry_price) * position_size
-            pnl_pct = (current_price - entry_price) / entry_price * 100
-            
-            # Record trade
-            trade = {
-                "entry_price": entry_price,
-                "exit_price": current_price,
-                "shares": position_size,
-                "pnl_amount": pnl_amount,
-                "pnl_pct": pnl_pct,
-                "reason": reason,
-                "entry_time": datetime.now(),
-                "duration": "N/A"
-            }
-            trade_history.append(trade)
-            
-            print(f"  ✅ SELL EXECUTED: {position_size:.2f} shares @ ${current_price:.2f}")
-            print(f"  💰 P&L: ${pnl_amount:+.2f} ({pnl_pct:+.2f}%)")
-            print(f"  📝 Reason: {reason}")
-            
-            # Cancel all limit orders
-            if not dry_run:
-                cancel_all_limit_orders()
-            
-            if active_trade_id:
-                LEARNER.record_exit(
-                    trade_id=active_trade_id,
-                    exit_price=current_price,
-                    pnl_amount=pnl_amount,
-                    pnl_pct=pnl_pct / 100,
-                    exit_reason=reason,
-                )
-                active_trade_id = None
-
-            # Send notification
-            msg = f"📈 *{SYMBOL} SELL EXECUTED*\n"
-            msg += f"Shares: {position_size:.2f} @ ${current_price:.2f}\n"
-            msg += f"P&L: ${pnl_amount:+.2f} ({pnl_pct:+.2f}%)\n"
-            msg += f"Reason: {reason}"
-            tg(msg)
-
-            # Reset position state
-            in_position = False
-            entry_price = 0
-            stop_loss = 0
-            take_profit = 0
-            trailing_stop = 0
-            position_size = 0
-            last_signal = "sell"
-            
-            return True
-        else:
-            print(f"  ❌ Sell order failed: {order_info}")
-            return False
-            
-    except Exception as e:
-        print(f"  ❌ Sell execution error: {e}")
+    Close the position. exchange_filled=True when Kraken's stop-loss already sold it.
+    Records net P&L (after fees). Returns False if the position is still open.
+    """
+    global position, active_trade_id
+    if not position:
         return False
 
-# ─────────────────────────────────────────────
+    entry, volume = position["entry_price"], position["volume"]
+    fees = position.get("fees", 0.0)
+    exit_price = current_price
+
+    if dry_run:
+        pnl_pct = (current_price - entry) / entry * 100
+        print(f"  📊 [DRY] Sell ({reason}) @ ${current_price:.6g} | entry ${entry:.6g} | P&L {pnl_pct:+.2f}%")
+        trade_history.append({"pnl_amount": (current_price - entry) * volume, "pnl_pct": pnl_pct})
+        position = None
+        return True
+
+    if not exchange_filled:
+        released = release_stop_loss()
+        if released == "filled":
+            exchange_filled = True
+        elif released == "error":
+            print(f"  ⚠️ Could not cancel stop-loss; will retry")
+            return False
+
+    if exchange_filled:
+        fill = get_fill(position["sl_txid"]) if position.get("sl_txid") else None
+        if fill and fill["vol_exec"] > 0:
+            exit_price, volume = fill["avg_price"], fill["vol_exec"]
+            fees += fill["fee"]
+    else:
+        held = get_pair_base_balance(PAIR)
+        sell_volume = min(volume, held) if held > 0 else volume
+        ok, info = place_order(pair=PAIR, side="sell", order_type="market",
+                               volume=sell_volume, userref=USERREF)
+        if not ok and info.get("below_minimum"):
+            print(f"  🧹 {sell_volume} {SYMBOL} is below Kraken's minimum — dropping position as dust")
+            reason = "dust"
+        elif not ok:
+            print(f"  ❌ Sell order failed: {info}")
+            position["sl_retry_at"] = 0
+            protect_position(dry_run)  # put protection back before retrying
+            return False
+        else:
+            txid = (info.get("txid") or [None])[0]
+            fill = get_fill(txid) if txid else None
+            if fill and fill["vol_exec"] > 0:
+                exit_price, volume = fill["avg_price"], fill["vol_exec"]
+                fees += fill["fee"]
+
+    pnl_amount = (exit_price - entry) * volume - fees
+    pnl_pct = pnl_amount / (entry * volume) * 100 if entry and volume else 0.0
+    trade_history.append({"pnl_amount": pnl_amount, "pnl_pct": pnl_pct})
+
+    trade_id = position.get("trade_id") or active_trade_id
+    if trade_id:
+        LEARNER.record_exit(trade_id=trade_id, exit_price=exit_price, pnl_amount=pnl_amount,
+                            pnl_pct=pnl_pct / 100, exit_reason=reason)
+    active_trade_id = None
+
+    print(f"  ✅ SELL ({reason}): {volume:.8g} @ ${exit_price:.6g} | net P&L ${pnl_amount:+.2f} ({pnl_pct:+.2f}%)")
+    tg(f"📈 *{SYMBOL} SELL* ({reason}) @ ${exit_price:.6g}\nNet P&L: ${pnl_amount:+.2f} ({pnl_pct:+.2f}%)")
+    position = None
+    _persist()
+    return True
+
+
+def restore_position(dry_run: bool) -> None:
+    """
+    After a restart, reload the saved position and reconcile it with Kraken.
+    Holdings this bot did not buy are left alone (bot_monitor_cron protects them).
+    """
+    global position, active_trade_id
+    if dry_run:
+        return
+    stored = STORE.get(PAIR)
+    held = get_pair_base_balance(PAIR)
+
+    if not stored:
+        orphaned = LEARNER.close_orphaned_trades(BOT_NAME, SYMBOL)
+        if orphaned:
+            print(f"  Closed {orphaned} orphaned trade row(s) — no saved position")
+        if held > 0:
+            print(f"  ℹ️ Holding {held:.8g} {SYMBOL} that this bot did not open — not managing it")
+        return
+
+    position = stored
+    active_trade_id = stored.get("trade_id")
+    status = get_order_status(stored["sl_txid"]) if stored.get("sl_txid") else None
+
+    if status == "closed":
+        print(f"  ♻️ Stop-loss filled while the bot was down")
+        execute_sell(stored["stop_loss"], "stop_loss", dry_run, exchange_filled=True)
+        return
+    if status in ("canceled", "expired"):
+        position["sl_txid"] = None
+
+    if held < stored["volume"] * 0.5:
+        print(f"  ♻️ Saved position no longer held ({held:.8g} {SYMBOL}) — recording as closed externally")
+        if position.get("sl_txid") and status in ("open", "pending"):
+            cancel_order(position["sl_txid"])
+        ticker = get_ticker(PAIR)
+        price = float(ticker.get("c", [stored["entry_price"]])[0]) if ticker else stored["entry_price"]
+        position["sl_txid"] = None
+        execute_sell(price, "closed_externally", dry_run, exchange_filled=True)
+        return
+
+    position["volume"] = min(stored["volume"], held)
+    position["sl_retry_at"] = 0
+    _persist()
+    print(f"  ♻️ Restored position: {position['volume']:.8g} {SYMBOL} @ ${position['entry_price']:.6g} "
+          f"| stop ${position['stop_loss']:.6g} | target ${position['take_profit']:.6g}")
+    protect_position(dry_run)
+
 # MAIN TRADING LOOP
 # ─────────────────────────────────────────────
 
@@ -1011,199 +817,122 @@ def is_stock_or_etf(symbol: str) -> bool:
     return stock_like
 
 def run(symbol: str, dry_run: bool = False, manual_entry: bool = False):
-    """Main trading loop."""
-    global SYMBOL, PAIR, ASSET, CONFIG, active_trade_id
-    
-    # Set global variables for this symbol
+    """Main trading loop. One process trades one symbol."""
+    global SYMBOL, PAIR, CONFIG, STORE
+
     SYMBOL = symbol.upper()
-    
-    # Use the new pair format logic
     PAIR = get_pair_format(SYMBOL)
-    
-    # Set asset name for balance checking
-    if SYMBOL == "BTC":
-        ASSET = "XXBT"
-    elif SYMBOL == "ETH":
-        ASSET = "XETH"
-    else:
-        ASSET = SYMBOL
-    
+    STORE = PositionStore(f"{BOT_NAME}_{SYMBOL}")
     CONFIG = load_learning_config(SYMBOL, get_stock_config(SYMBOL))
 
-    # Recover learning state after restart/crash
     try:
-        balances = get_balance()
-        asset_balance = float(balances.get(ASSET, 0))
-        if asset_balance > 0:
-            recovered_id = LEARNER.recover_open_trade(BOT_NAME, SYMBOL)
-            if recovered_id:
-                active_trade_id = recovered_id
-                print(f"  Recovered open trade id={recovered_id} for {SYMBOL}")
-            else:
-                print(f"  Position detected but no open trade row found — entry was not logged")
-        else:
-            orphaned = LEARNER.close_orphaned_trades(BOT_NAME, SYMBOL)
-            if orphaned:
-                print(f"  Closed {orphaned} orphaned trade row(s) — no live position at startup")
+        restore_position(dry_run)
     except Exception as e:
-        print(f"  Warning: could not check learning state at startup: {e}")
+        print(f"  ⚠️ Could not restore saved position at startup: {e}")
 
     mode = "🔵 DRY RUN" if dry_run else "🟢 LIVE"
     entry_mode = "🖱️ MANUAL" if manual_entry else "🤖 AUTO"
-    asset_type = "📈 Stock/ETF" if is_stock_or_etf(SYMBOL) else "🪙 Crypto"
-    
     print("=" * 60)
-    print(f"  {asset_type} {SYMBOL} Swing Trading Bot {mode} {entry_mode}")
+    print(f"  🪙 {SYMBOL} Swing Trading Bot {mode} {entry_mode}")
     print(f"  Pair: {PAIR}")
-    print(f"  Risk per trade: {RISK_PER_TRADE*100:.1f}%")
-    print(f"  Min risk/reward: {MIN_RISK_REWARD}:1")
-    print(f"  Profit target: {CONFIG['profit_target']*100:.1f}%")
-    print(f"  Stop loss: {CONFIG['stop_loss']*100:.1f}%")
+    print(f"  Risk per trade: {RISK_PER_TRADE*100:.1f}% | Min risk/reward: {MIN_RISK_REWARD}:1")
+    print(f"  Profit target: {CONFIG['profit_target']*100:.1f}% | Stop loss: {CONFIG['stop_loss']*100:.1f}% (or 1.5x ATR)")
     print(f"  RSI thresholds: {CONFIG['rsi_oversold']}/{CONFIG['rsi_overbought']}")
     if manual_entry:
         print(f"  🎮 Manual entry mode - Press ENTER to trade")
     print("=" * 60)
-    
-    tg(f"{asset_type} *{SYMBOL} Bot started* ({mode} {entry_mode})")
-    
+    tg(f"🪙 *{SYMBOL} Bot started* ({mode} {entry_mode})")
+
     cycle = 0
-    
-    try:
-        while True:
+    while True:
+        try:
             cycle += 1
             ts = datetime.now().strftime("%H:%M:%S")
             print(f"\n[{ts}] Cycle {cycle}")
-            
-            # Get current price
+
             ticker = get_ticker(PAIR)
             if not ticker:
                 print("  ⚠️ No ticker data")
                 time.sleep(30)
                 continue
-            
             current_price = float(ticker.get("c", [0])[0])
-            print(f"  💰 Current Price: ${current_price:.2f}")
-            
-            # Check exit conditions if in position
-            if in_position:
-                # Check if SL fired on Kraken
-                if check_order_status():
-                    time.sleep(60)  # Wait after exit
+            print(f"  💰 Current Price: ${current_price:.6g}")
+
+            if position:
+                # Stop-loss executed on Kraken?
+                if not dry_run and check_sl_filled():
+                    execute_sell(current_price, "stop_loss", dry_run, exchange_filled=True)
+                    time.sleep(60)
                     continue
 
-                # Check TP/SL/trailing in bot loop (TP has no standing order)
+                protect_position(dry_run)
+
                 exit_signal = check_exit_conditions(current_price)
                 if exit_signal != "hold":
-                    print(f"  🎯 Exit signal: {exit_signal} @ ${current_price:.2f}")
-                    cancel_all_limit_orders()  # Cancel SL before market sell
+                    print(f"  🎯 Exit signal: {exit_signal} @ ${current_price:.6g}")
                     execute_sell(current_price, exit_signal, dry_run)
                     time.sleep(60)
                     continue
 
-                # Update trailing stop order if price increased
-                update_trailing_stop_order(current_price)
+                pnl_pct = (current_price - position["entry_price"]) / position["entry_price"] * 100
+                print(f"  📊 Position: {position['volume']:.8g} @ ${position['entry_price']:.6g} ({pnl_pct:+.2f}%)")
+                print(f"  🛡️ Stop: ${position['stop_loss']:.6g} | 🎯 Target: ${position['take_profit']:.6g}"
+                      + (f" | SL order {position['sl_txid']}" if position.get("sl_txid") else ""))
 
-                print(f"  📊 Position: {position_size:.2f} shares @ ${entry_price:.2f}")
-                print(f"  🛡️ Stop: ${stop_loss:.2f} | 🎯 Target: ${take_profit:.2f}")
-                if trailing_stop > 0:
-                    print(f"  📈 Trailing: ${trailing_stop:.2f}")
+            elif manual_entry:
+                print(f"  🎮 Manual Entry: Press ENTER to buy {SYMBOL} at ${current_price:.6g}, or 'q' to quit")
+                try:
+                    user_input = input("  > ").strip().lower()
+                except (KeyboardInterrupt, EOFError):
+                    print("\n  👋 Exiting manual mode...")
+                    break
+                if user_input == "q":
+                    break
+                if user_input in ("", "buy", "b", "enter"):
+                    analysis = multi_timeframe_analysis(SYMBOL)
+                    manual_signal = {"signal": "buy", "confidence": 1.0, "reason": "Manual entry",
+                                     "price": current_price, "analysis": analysis}
+                    print("  ✅ Manual buy executed" if execute_buy(manual_signal, dry_run) else "  ❌ Manual buy failed")
 
-                # Show active orders
-                if stop_loss_order_id:
-                    print(f"  📋 Active: 🛡️ SL {stop_loss_order_id}")
             else:
-                # Manual entry prompt
-                if manual_entry:
-                    print(f"  🎮 Manual Entry: Press ENTER to buy {SYMBOL} at ${current_price:.2f}, or 'q' to quit")
-                    try:
-                        user_input = input("  > ").strip().lower()
-                        if user_input == 'q':
-                            print("  👋 Exiting manual mode...")
-                            break
-                        elif user_input == '' or user_input.lower() in ['buy', 'b', 'enter']:
-                            # Create manual signal
-                            manual_signal = {
-                                "signal": "buy",
-                                "confidence": 1.0,
-                                "reason": "Manual entry",
-                                "price": current_price,
-                                "analysis": {}
-                            }
-                            
-                            print(f"  🎯 Executing MANUAL BUY at ${current_price:.2f}")
-                            if execute_buy(manual_signal, dry_run):
-                                print("  ✅ Manual buy executed")
-                            else:
-                                print("  ❌ Manual buy failed")
-                        else:
-                            print(f"  ⏭️ Skipping - input: '{user_input}'")
-                    except KeyboardInterrupt:
-                        print("\n  👋 Interrupted by user")
-                        break
-                    except EOFError:
-                        print("\n  👋 End of input")
-                        break
-            
-            # Auto trading signals (only if not in manual mode)
-            if not manual_entry and not in_position:
-                # Generate trading signal
                 analysis = multi_timeframe_analysis(SYMBOL)
-                signal = generate_signal(analysis, CONFIG)
-                
-                print(f"  🎯 Signal: {signal['signal'].upper()} (confidence: {signal['confidence']:.2f})")
-                print(f"  📝 Reason: {signal['reason']}")
-                
-                # Execute trades based on signal
-                if signal['signal'] == 'buy' and signal['confidence'] >= CONFIG['min_confidence']:
+                signal_info = generate_signal(analysis, CONFIG)
+                print(f"  🎯 Signal: {signal_info['signal'].upper()} (confidence: {signal_info['confidence']:.2f})")
+                print(f"  📝 Reason: {signal_info['reason']}")
+
+                if signal_info["signal"] == "buy" and signal_info["confidence"] >= CONFIG["min_confidence"]:
                     sentiment = check_sentiment()
                     print(f"  🌍 {format_sentiment()}")
                     if not sentiment["allow"]:
                         print(f"  🚫 {sentiment['reason']}")
                     else:
-                        signal["size_multiplier"] = sentiment["size_multiplier"]
-                        if execute_buy(signal, dry_run):
-                            print("  ✅ Buy order placed")
-                        else:
-                            print("  ❌ Buy order failed")
-                elif signal['signal'] == 'sell':
-                    print("  ⚠️ Sell signal but no position")
-            elif not manual_entry:
-                # Show analysis even in manual mode for reference
-                analysis = multi_timeframe_analysis(SYMBOL)
-                signal = generate_signal(analysis, CONFIG)
-                
-                print(f"  🎯 Auto Signal: {signal['signal'].upper()} (confidence: {signal['confidence']:.2f})")
-                print(f"  📝 Reason: {signal['reason']}")
-            
-            # Show performance summary
-            if trade_history and cycle % 10 == 0:
-                winning_trades = [t for t in trade_history if t['pnl_amount'] > 0]
-                win_rate = len(winning_trades) / len(trade_history) * 100
-                total_pnl = sum(t['pnl_amount'] for t in trade_history)
-                
-                print(f"  📊 Performance: {win_rate:.1f}% win rate, ${total_pnl:+.2f} total P&L")
-            
-            if not manual_entry:
-                time.sleep(30)  # Wait 30 seconds between checks (auto mode)
-            else:
-                time.sleep(5)   # Shorter wait in manual mode for responsiveness
-            
-    except KeyboardInterrupt:
-        print(f"\n👋 Bot stopped by user")
-        tg(f"👋 *{SYMBOL} Bot stopped*")
-    except Exception as e:
-        print(f"\n❌ Bot error: {e}")
-        tg(f"❌ *{SYMBOL} Bot error*: {e}")
+                        signal_info["size_multiplier"] = sentiment["size_multiplier"]
+                        execute_buy(signal_info, dry_run)
 
-# ─────────────────────────────────────────────
+            if trade_history and cycle % 10 == 0:
+                wins = [t for t in trade_history if t["pnl_amount"] > 0]
+                total_pnl = sum(t["pnl_amount"] for t in trade_history)
+                print(f"  📊 Session: {len(wins)}/{len(trade_history)} wins, ${total_pnl:+.2f} net P&L")
+
+            time.sleep(5 if manual_entry else 30)
+
+        except KeyboardInterrupt:
+            print(f"\n👋 Bot stopped by user")
+            tg(f"👋 *{SYMBOL} Bot stopped*")
+            break
+        except Exception as e:
+            # One bad cycle (API hiccup, bad data) must not kill the bot.
+            print(f"  ❌ Cycle error: {e}")
+            time.sleep(30)
+
+
 # SIGNAL HANDLING
 # ─────────────────────────────────────────────
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
-    global in_position
-    if in_position:
-        print(f"\n⚠️ WARNING: Still in position!")
+    if position:
+        print(f"\n⚠️ Still in position — the stop-loss on Kraken stays active and the position is saved for restart.")
     print(f"\n👋 Shutting down {SYMBOL} bot...")
     sys.exit(0)
 
