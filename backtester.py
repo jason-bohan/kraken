@@ -73,6 +73,7 @@ class Trade:
     exit: float
     reason: str
     net_return: float
+    bars: int = 0          # candles held
 
 
 def simulate(candles: list, signals: list, exits, costs: Costs, start: int = 0, end: int | None = None,
@@ -94,7 +95,7 @@ def simulate(candles: list, signals: list, exits, costs: Costs, start: int = 0, 
     def close(t, price, reason):
         exit_eff = price * (1 - costs.slippage)
         net = (exit_eff * (1 - costs.fee)) / (pos[1] * (1 + costs.fee)) - 1
-        trades.append(Trade(pos[0], t, pos[1], exit_eff, reason, net))
+        trades.append(Trade(pos[0], t, pos[1], exit_eff, reason, net, pos[5]))
 
     for i in range(max(start, 1), end):
         t, o, h, lo, c = candles[i][0], candles[i][1], candles[i][2], candles[i][3], candles[i][4]
@@ -141,6 +142,10 @@ def metrics(trades: list, candles: list, bars_in: int, start: int = 0, end: int 
         peak = max(peak, equity)
         max_dd = max(max_dd, 1 - equity / peak)
     first_open, last_close = candles[start][1], candles[end - 1][4]
+    peak_px, bh_dd = first_open, 0.0
+    for c in candles[start:end]:
+        peak_px = max(peak_px, c[2])
+        bh_dd = max(bh_dd, 1 - c[3] / peak_px)
     gross_win, gross_loss = sum(wins), -sum(losses)
     return {
         "trades": len(rets),
@@ -153,28 +158,39 @@ def metrics(trades: list, candles: list, bars_in: int, start: int = 0, end: int 
         "max_drawdown": max_dd,
         "exposure": bars_in / max(1, end - start),
         "buy_hold": last_close / first_open - 1 if first_open else 0.0,
+        "buy_hold_max_drawdown": bh_dd,
     }
 
 
-def random_baseline(adapter, params: dict, signals: list, costs: Costs, runs: int, seed: int = 7) -> list:
+def random_baseline(adapter, trades: list, costs: Costs, runs: int, seed: int = 7) -> list:
     """
-    Total returns of `runs` simulations that buy at random times (once the
-    indicators have warmed up), as often as the strategy signals, with the
-    strategy's own exit rules.
+    Random-timing test: in each run, place the same number of trades with the
+    same holding times as the strategy, at random non-overlapping moments
+    after the indicator warm-up, and pay the same costs. Returns each run's
+    total return. If the strategy doesn't beat most of these, its timing adds
+    nothing beyond being in the market that often.
     """
     candles = adapter.candles
-    start = adapter.warmup
-    n_sig = sum(1 for s in signals[start:] if s)
-    p = n_sig / max(1, len(candles) - start)
-    exits = adapter.exits(params)
-    exit_sig = adapter.exit_signals(params)
+    start, n = adapter.warmup, len(candles)
+    durations = [max(1, t.bars) for t in trades]
+    free = (n - start) - sum(durations)
+    if not durations or free < 0:
+        return []
     rng = random.Random(seed)
     totals = []
     for _ in range(runs):
-        rnd = [adapter.random_signal(i) if i >= start and rng.random() < p else None
-               for i in range(len(candles))]
-        trades, bars = simulate(candles, rnd, exits, costs, start, exit_signals=exit_sig)
-        totals.append(metrics(trades, candles, bars, start)["total_return"])
+        d = durations[:]
+        rng.shuffle(d)
+        cuts = sorted(rng.randint(0, free) for _ in d)  # where each trade starts, as gaps
+        pos, prev, equity = start, 0, 1.0
+        for cut, dur in zip(cuts, d):
+            pos += cut - prev
+            prev = cut
+            entry = candles[pos][1] * (1 + costs.slippage)
+            exit_ = candles[pos + dur - 1][4] * (1 - costs.slippage)
+            equity *= (exit_ * (1 - costs.fee)) / (entry * (1 + costs.fee))
+            pos += dur
+        totals.append(equity - 1)
     return totals
 
 
@@ -248,8 +264,6 @@ class HftAdapter:
     def exit_signals(self, params: dict):
         return None
 
-    def random_signal(self, i: int):
-        return True
 
     def breakeven(self, params: dict, costs: Costs) -> float | None:
         p = {**self.base, **params}
@@ -307,8 +321,6 @@ class SwingAdapter:
                 last_atr = s["analysis"]["1h"]["atr"]
             self.atr_at[i] = last_atr
 
-    def random_signal(self, i: int):
-        return {"atr": self.atr_at[i]}
 
     def signals(self, params: dict) -> list:
         p = {**self.base, **params}
@@ -378,8 +390,6 @@ class TrendAdapter:
         k = float({**self.base, **params}["atr_stop"])
         return lambda i, entry, sig: (entry - k * self.atr[i] if k and self.atr[i] else None, None)
 
-    def random_signal(self, i: int):
-        return True
 
     def breakeven(self, params: dict, costs: Costs) -> float | None:
         return None
@@ -444,8 +454,8 @@ def verdict(m: dict, rand_pct: float | None, wf: dict | None, stressed: dict) ->
     if m["expectancy"] <= 0:
         return "Loses money after costs."
     if rand_pct is not None and rand_pct < 0.90:
-        return (f"Profitable here, but {100 - rand_pct*100:.0f}% of random-entry runs with the same exits did "
-                f"as well — no evidence the entry signal adds an edge.")
+        return (f"Profitable here, but {100 - rand_pct*100:.0f}% of random-timing runs did as well — "
+                f"no evidence the timing adds an edge.")
     if wf and wf["out_of_sample"]["trades"] and wf["out_of_sample"]["total_return"] <= 0:
         return "Only profitable with settings picked in hindsight (walk-forward loses)."
     if stressed["expectancy"] <= 0:
@@ -469,13 +479,13 @@ def print_report(pair: str, adapter, params: dict, costs: Costs, res: dict, rand
           f"avg loss {pct(m['avg_loss'])} | profit factor {pf}")
     print(f"  Net return {pct(m['total_return'])} | per trade {pct(m['expectancy'])} | "
           f"max drawdown {m['max_drawdown']*100:.1f}% | time in market {m['exposure']*100:.0f}%")
-    print(f"  Buy & hold same period: {pct(m['buy_hold'])}")
+    print(f"  Buy & hold same period: {pct(m['buy_hold'])} (max drawdown {m['buy_hold_max_drawdown']*100:.1f}%)")
     be = adapter.breakeven(params, costs)
     if be is not None:
         print(f"  Break-even win rate after costs: {be*100:.1f}% (actual {m['win_rate']*100:.1f}%)")
     if rand:
-        print(f"  Random entries (same exits, {len(rand)} runs): median {pct(statistics.median(rand))} — "
-              f"strategy beats {rand_pct*100:.0f}% of them")
+        print(f"  Random timing (same trade count & holding times, {len(rand)} runs): median "
+              f"{pct(statistics.median(rand))} — strategy beats {rand_pct*100:.0f}% of them")
     print(f"  Costs doubled: net {pct(stressed['total_return'])}, per trade {pct(stressed['expectancy'])}")
     if wf:
         o = wf["out_of_sample"]
@@ -565,7 +575,7 @@ def main():
 
         res = run_once(adapter, params, costs)
         stressed = run_once(adapter, params, costs.scaled(2))["metrics"]
-        rand = (random_baseline(adapter, params, res["signals"], costs, args.random_runs)
+        rand = (random_baseline(adapter, res["trades"], costs, args.random_runs)
                 if args.random_runs and res["metrics"]["trades"] else None)
         rand_pct = percentile_of(res["metrics"]["total_return"], rand) if rand else None
         wf = walk_forward(adapter, costs, args.folds) if args.folds >= 2 else None
@@ -605,6 +615,8 @@ def print_summary(report: dict, trades: list) -> dict:
         "avg_return": avg([p["metrics"]["total_return"] for p in pairs]),
         "avg_buy_hold": avg([p["metrics"]["buy_hold"] for p in pairs]),
         "avg_max_drawdown": avg([p["metrics"]["max_drawdown"] for p in pairs]),
+        "avg_buy_hold_drawdown": avg([p["metrics"].get("buy_hold_max_drawdown", 0) for p in pairs]),
+        "avg_random_percentile": avg([p["random_percentile"] for p in pairs if p.get("random_percentile") is not None]),
         "avg_walk_forward": avg([w["total_return"] for w in wf]) if wf else None,
         "walk_forward_trades": sum(w["trades"] for w in wf),
         "avg_costs_doubled": avg([p["costs_doubled"]["total_return"] for p in pairs]),
@@ -612,8 +624,10 @@ def print_summary(report: dict, trades: list) -> dict:
     print(f"\n  ══ ALL {summary['pairs']} COINS · {report['strategy']} ══")
     print(f"  Trades {summary['trades']} | win rate {summary['win_rate']*100:.1f}% | "
           f"avg per trade {pct(summary['expectancy'])} (after costs)")
-    print(f"  Avg net return per coin {pct(summary['avg_return'])} vs buy & hold {pct(summary['avg_buy_hold'])} | "
-          f"avg max drawdown {summary['avg_max_drawdown']*100:.1f}%")
+    print(f"  Avg net return per coin {pct(summary['avg_return'])} vs buy & hold {pct(summary['avg_buy_hold'])}")
+    print(f"  Avg max drawdown {summary['avg_max_drawdown']*100:.1f}% vs buy & hold "
+          f"{summary['avg_buy_hold_drawdown']*100:.1f}% | beats random timing on avg "
+          f"{summary['avg_random_percentile']*100:.0f}% of runs")
     if summary["avg_walk_forward"] is not None:
         print(f"  Walk-forward on unseen data: avg {pct(summary['avg_walk_forward'])} per coin "
               f"over {summary['walk_forward_trades']} trades")

@@ -11,6 +11,7 @@ import io
 import math
 import os
 import random
+import statistics
 import sys
 import tempfile
 import unittest
@@ -128,7 +129,7 @@ class PipelineTests(unittest.TestCase):
         params = {k: strategies.HFT_DEFAULTS[k] for k in ad.grid}
         res = bt.run_once(ad, params, bt.COST_PRESETS["taker"])
         self.assertGreater(res["metrics"]["trades"], 0)
-        rand = bt.random_baseline(ad, params, res["signals"], bt.COST_PRESETS["taker"], runs=20)
+        rand = bt.random_baseline(ad, res["trades"], bt.COST_PRESETS["taker"], runs=20)
         self.assertEqual(len(rand), 20)
         wf = bt.walk_forward(ad, bt.COST_PRESETS["taker"], folds=3)
         self.assertEqual(len(wf["folds"]), 2)
@@ -205,3 +206,30 @@ class NewRuleTests(unittest.TestCase):
         self.assertEqual(s["trades"], 3)
         self.assertAlmostEqual(s["avg_buy_hold"], 0.1)
         self.assertAlmostEqual(s["expectancy"], 0.04 / 3)
+
+
+class RandomBaselineTests(unittest.TestCase):
+    def test_flat_market_random_runs_only_pay_costs(self):
+        cs = [candle(i * 60, 100, 100, 100, 100) for i in range(500)]
+        ad = bt.HftAdapter(cs, strategies.HFT_DEFAULTS)
+        trades = [bt.Trade(0, 0, 1, 1, "x", 0.0, bars=10) for _ in range(5)]
+        costs = bt.Costs(fee=0.004, slippage=0.0)
+        rand = bt.random_baseline(ad, trades, costs, runs=30)
+        per_trade = 0.996 / 1.004
+        for r in rand:
+            self.assertAlmostEqual(r, per_trade ** 5 - 1)
+
+    def test_signal_exit_strategy_is_not_compared_with_churning_randoms(self):
+        """Regression: random entries used to reuse the trend exit rule and churn to about -99%."""
+        cs = random_walk(1200, seed=11, step_secs=86400)
+        ad = bt.TrendAdapter(cs, {})
+        res = bt.run_once(ad, {"fast": 20, "slow": 100, "atr_stop": 0.0}, bt.COST_PRESETS["taker"])
+        rand = bt.random_baseline(ad, res["trades"], bt.COST_PRESETS["taker"], runs=100)
+        self.assertGreater(statistics.median(rand), -0.5)
+        held = sum(t.bars for t in res["trades"])
+        self.assertGreater(held, 0)
+
+    def test_buy_hold_drawdown(self):
+        cs = [candle(0, 100, 100, 100, 100), candle(60, 100, 120, 100, 110), candle(120, 110, 110, 90, 95)]
+        m = bt.metrics([], cs, 0)
+        self.assertAlmostEqual(m["buy_hold_max_drawdown"], 0.25)
