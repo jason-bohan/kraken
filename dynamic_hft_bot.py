@@ -37,6 +37,7 @@ from kraken_connection import (
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
 from position_store import PositionStore
+import strategies
 from learning_engine import LearningEngine
 from market_sentiment import should_buy as check_sentiment
 import requests as req
@@ -71,6 +72,14 @@ RESERVE_USD      = 5.0          # always keep $5 in reserve
 SL_RETRY_SECS    = 300          # retry a missing stop-loss at most this often
 DRY_START_BAL    = 50.0         # default fake starting balance for dry run
 DEBUG_PAIRS      = False        # set True to print all pair scores during scan
+
+# Entry/exit parameters as used by strategies.hft_entry (also what backtester.py tests)
+STRATEGY_PARAMS = {
+    **strategies.HFT_DEFAULTS,
+    "rsi_period": RSI_PERIOD, "rsi_oversold": RSI_OVERSOLD, "rsi_overbought": RSI_OVERBOUGHT,
+    "dip_min": DIP_MIN, "dip_max": DIP_MAX, "min_confidence": MIN_CONFIDENCE,
+    "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT,
+}
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT    = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -301,57 +310,22 @@ def get_top_pairs(n: int = TOP_N) -> list:
 
 
 # ─────────────────────────────────────────────
-# INDICATORS
+# INDICATORS (maths lives in strategies.py, shared with backtester.py)
 # ─────────────────────────────────────────────
-def calculate_rsi(closes: list, period: int = 14) -> float:
-    """RSI from closing prices. NOTE: To debug: print(closes[-period:])"""
-    if len(closes) < period + 1:
-        return 50.0
-
-    gains, losses = [], []
-    for i in range(1, period + 1):
-        delta = closes[-period + i] - closes[-period + i - 1]
-        if delta >= 0:
-            gains.append(delta); losses.append(0)
-        else:
-            gains.append(0); losses.append(abs(delta))
-
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-
-    if avg_loss == 0:
-        return 100.0
-
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-
 def get_pair_data(pair: str) -> tuple:
-    """
-    Returns (price, rsi, recent_high) for any pair.
-    NOTE: To rediscover OHLC fields: print(get_ohlc(pair, 1)[0])
-    Candle: [time, open, high, low, close, vwap, volume, count]
-    """
+    """Returns (price, rsi, recent_high, ma20) for a pair from 1-minute candles."""
     ticker = get_ticker(pair)
     if not ticker:
         return None, None, None, None
-
     try:
         price = float(ticker.get("a", [0])[0])
-    except:
+    except (TypeError, ValueError):
         return None, None, None, None
 
-    candles = get_ohlc(pair, interval=1)  # 1-min candles for HFT
-    if not candles or len(candles) < RSI_PERIOD + 5:
+    snap = strategies.hft_snapshot(get_ohlc(pair, interval=1), STRATEGY_PARAMS)
+    if not snap:
         return price, 50.0, price, price
-
-    closes      = [float(c[4]) for c in candles]
-    highs       = [float(c[2]) for c in candles]
-    rsi         = calculate_rsi(closes, RSI_PERIOD)
-    recent_high = max(highs[-30:])
-    ma20        = sum(closes[-20:]) / min(20, len(closes))
-
-    return price, rsi, recent_high, ma20
+    return price, snap["rsi"], snap["recent_high"], snap["ma"]
 
 
 # ─────────────────────────────────────────────
@@ -571,6 +545,24 @@ def restore_positions() -> dict:
     return restored
 
 
+def try_entry(pair: str, price: float, rsi: float, dip: float, ma20: float,
+              decision: dict, dry_run: bool) -> dict | None:
+    """Apply the sentiment gate and budget, then open a position. Returns it or None."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    sentiment = check_sentiment()
+    if not sentiment["allow"]:
+        print(f"  [{ts}] 🚫 {pair} signal blocked: {sentiment['reason']}")
+        return None
+    volume = round(get_trade_size(pair, price, dry_run) * sentiment["size_multiplier"], 8)
+    if volume <= 0:
+        print(f"  [{ts}] ⚠️ {pair} signal but no budget left")
+        return None
+    reason = decision["reason"]
+    print(f"  [{ts}] 🎯 {pair} ENTRY: {reason} | Buying {volume} @ ${price:.6g} (${volume*price:.2f})")
+    return open_position(pair, volume, price, decision["confidence"],
+                         {"rsi": rsi, "dip": dip, "price": price, "ma20": ma20}, reason, dry_run)
+
+
 # ─────────────────────────────────────────────
 # PER-PAIR TRADING THREAD
 # ─────────────────────────────────────────────
@@ -615,13 +607,11 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event, position: 
 
             # ── LOOK FOR ENTRY ────────────────────────────
             elif not stop_event.is_set():
-                rsi_signal = rsi <= RSI_OVERSOLD
-                dip_signal = DIP_MIN <= dip <= DIP_MAX
-                not_overbought = rsi < RSI_OVERBOUGHT
-
-                # Trend filter: active in bear market, disabled in bull/neutral
                 with market_regime_lock:
                     regime = market_regime
+                decision = strategies.hft_entry(
+                    price, {"rsi": rsi, "recent_high": recent_high, "ma": ma20}, regime, STRATEGY_PARAMS,
+                )
                 uptrend = (price > ma20) if regime == "bear" else True
 
                 # Don't buy what we already hold (other bot or manual holding)
@@ -632,27 +622,8 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event, position: 
                 print(f"  [{ts}] {pair:<18} ${price:.6g} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | "
                       f"Trend {'UP' if uptrend else 'DOWN'} [{regime}]{held_str}{bal_str}")
 
-                confidence = min(1.0, (RSI_OVERSOLD - rsi) / RSI_OVERSOLD + dip)
-
-                if (rsi_signal or dip_signal) and not_overbought and uptrend and not already_held:
-                    if confidence < MIN_CONFIDENCE:
-                        print(f"  [{ts}] 🚫 {pair} skipped: confidence {confidence:.3f} < {MIN_CONFIDENCE}")
-                    else:
-                        sentiment = check_sentiment()
-                        if not sentiment["allow"]:
-                            print(f"  [{ts}] 🚫 {pair} signal blocked: {sentiment['reason']}")
-                        else:
-                            volume = round(get_trade_size(pair, price, dry_run) * sentiment["size_multiplier"], 8)
-                            if volume <= 0:
-                                print(f"  [{ts}] ⚠️ {pair} signal but no budget left")
-                            else:
-                                reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
-                                print(f"  [{ts}] 🎯 {pair} ENTRY: {reason} | Buying {volume} @ ${price:.6g} (${volume*price:.2f})")
-                                position = open_position(
-                                    pair, volume, price, confidence,
-                                    {"rsi": rsi, "dip": dip, "price": price, "ma20": ma20},
-                                    reason, dry_run,
-                                )
+                if decision["enter"] and not already_held:
+                    position = try_entry(pair, price, rsi, dip, ma20, decision, dry_run)
 
             time.sleep(CHECK_SECS)
 

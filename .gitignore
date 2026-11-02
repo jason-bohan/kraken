@@ -25,3 +25,6 @@ diff.txt
 
 # Saved bot positions (per machine)
 state/
+
+# Downloaded candles and backtest reports
+data/

@@ -19,6 +19,7 @@ from kraken_connection import (
     get_ticker, get_ohlc, get_balance, place_order, cancel_order,
     get_order_status, get_fill, get_pair_base_balance, below_minimum,
 )
+import strategies
 from learning_engine import LearningEngine
 from position_store import PositionStore
 from market_sentiment import should_buy as check_sentiment, format_sentiment
@@ -120,26 +121,11 @@ def get_stock_config(symbol: str) -> dict:
         "volatility_threshold": 0.05
     }
 
-# 📊 Technical Analysis Parameters
-RSI_PERIOD = 14
-MACD_FAST = 12
-MACD_SLOW = 26
-MACD_SIGNAL = 9
-VOLUME_MA_PERIOD = 20
-ATR_PERIOD = 14
-
 # 🎯 Trading Parameters
 MAX_POSITION_SIZE = 0.1  # Max 10% of portfolio
 RISK_PER_TRADE = 0.02    # 2% max risk
 MIN_RISK_REWARD = 2.0     # 1:2 minimum risk/reward
 
-# ⏱️ Timeframes for analysis
-TIMEFRAMES = {
-    "5m": 5,
-    "15m": 15,
-    "1h": 60,
-    "4h": 240
-}
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -221,249 +207,26 @@ def load_learning_config(symbol: str, base_config: dict) -> dict:
 
 
 # ─────────────────────────────────────────────
-# TECHNICAL ANALYSIS FUNCTIONS
+# TECHNICAL ANALYSIS (maths lives in strategies.py, shared with backtester.py)
 # ─────────────────────────────────────────────
 
-def calculate_rsi(prices: list, period: int = 14) -> float:
-    """Calculate RSI indicator."""
-    if len(prices) < period + 1:
-        return 50.0
-    
-    gains, losses = [], []
-    for i in range(1, len(prices)):
-        delta = prices[i] - prices[i-1]
-        if delta >= 0:
-            gains.append(delta)
-            losses.append(0)
-        else:
-            gains.append(0)
-            losses.append(abs(delta))
-    
-    if len(gains) < period:
-        return 50.0
-    
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
-    
-    if avg_loss == 0:
-        return 100.0
-    
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+calculate_rsi = strategies.rsi
+calculate_macd = strategies.macd
+generate_signal = strategies.swing_signal
 
-def _ema_series(values: list, period: int) -> list:
-    """EMA of values, seeded with the SMA of the first `period` values.
-    Returns one value per input from index period-1 onward."""
-    if len(values) < period:
-        return []
-    k = 2 / (period + 1)
-    ema = sum(values[:period]) / period
-    out = [ema]
-    for v in values[period:]:
-        ema = v * k + ema * (1 - k)
-        out.append(ema)
-    return out
-
-
-def calculate_macd(prices: list, fast: int = 12, slow: int = 26, signal: int = 9) -> dict:
-    """MACD line (EMA fast - EMA slow), signal line (EMA of MACD) and histogram."""
-    if len(prices) < slow + signal:
-        return {"macd": 0, "signal": 0, "histogram": 0}
-    fast_ema = _ema_series(prices, fast)[slow - fast:]   # align with slow EMA
-    slow_ema = _ema_series(prices, slow)
-    macd_series = [f - s for f, s in zip(fast_ema, slow_ema)]
-    signal_series = _ema_series(macd_series, signal)
-    macd_line, signal_line = macd_series[-1], signal_series[-1]
-    return {"macd": macd_line, "signal": signal_line, "histogram": macd_line - signal_line}
-
-
-def calculate_atr(highs: list, lows: list, closes: list, period: int = 14) -> float:
-    """Calculate Average True Range for volatility."""
-    if len(highs) < period + 1:
-        return 0.0
-    
-    tr_values = []
-    for i in range(1, len(highs)):
-        high_low = highs[i] - lows[i]
-        high_close = abs(highs[i] - closes[i-1])
-        low_close = abs(lows[i] - closes[i-1])
-        tr = max(high_low, high_close, low_close)
-        tr_values.append(tr)
-    
-    if len(tr_values) < period:
-        return sum(tr_values) / len(tr_values) if tr_values else 0.0
-    
-    return sum(tr_values[-period:]) / period
-
-def find_support_resistance(prices: list, lookback: int = 20) -> dict:
-    """Find key support and resistance levels."""
-    if len(prices) < lookback * 2:
-        return {"support": 0, "resistance": 0}
-    
-    recent_prices = prices[-lookback:]
-    support = min(recent_prices)
-    resistance = max(recent_prices)
-    
-    return {
-        "support": support,
-        "resistance": resistance,
-        "mid_range": (support + resistance) / 2
-    }
-
-def analyze_volume(candles: list) -> dict:
-    """Analyze volume patterns."""
-    if len(candles) < VOLUME_MA_PERIOD:
-        return {"volume_ratio": 1.0, "trend": "neutral"}
-    
-    volumes = [float(c[5]) for c in candles]  # Volume is at index 5
-    current_volume = volumes[-1]
-    avg_volume = sum(volumes[-VOLUME_MA_PERIOD:-1]) / (VOLUME_MA_PERIOD - 1)
-    
-    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
-    
-    # Determine volume trend
-    if volume_ratio > 1.5:
-        trend = "high"
-    elif volume_ratio > 1.2:
-        trend = "above_average"
-    elif volume_ratio < 0.8:
-        trend = "low"
-    else:
-        trend = "average"
-    
-    return {
-        "volume_ratio": volume_ratio,
-        "trend": trend,
-        "current": current_volume,
-        "average": avg_volume
-    }
 
 def multi_timeframe_analysis(symbol: str) -> dict:
-    """Analyze multiple timeframes for confluence."""
+    """Fetch candles for each timeframe and compute indicators."""
     analysis = {}
-    
-    for timeframe_name, timeframe_minutes in TIMEFRAMES.items():
+    for tf_name, tf_minutes in strategies.SWING_TIMEFRAMES.items():
         try:
-            candles = get_ohlc(PAIR, interval=timeframe_minutes)
-            if not candles or len(candles) < 50:
-                continue
-            
-            closes = [float(c[4]) for c in candles]
-            highs = [float(c[2]) for c in candles]
-            lows = [float(c[3]) for c in candles]
-            
-            current_price = closes[-1]
-            
-            # Technical indicators
-            rsi = calculate_rsi(closes, RSI_PERIOD)
-            macd = calculate_macd(closes, MACD_FAST, MACD_SLOW, MACD_SIGNAL)
-            atr = calculate_atr(highs, lows, closes, ATR_PERIOD)
-            sr = find_support_resistance(closes)
-            volume = analyze_volume(candles)
-            
-            # Trend determination
-            price_change = (current_price - closes[-20]) / closes[-20] if len(closes) > 20 else 0
-            
-            analysis[timeframe_name] = {
-                "price": current_price,
-                "rsi": rsi,
-                "macd": macd,
-                "atr": atr,
-                "support": sr["support"],
-                "resistance": sr["resistance"],
-                "volume": volume,
-                "trend": "bullish" if price_change > 0.02 else "bearish" if price_change < -0.02 else "sideways",
-                "price_change_20": price_change
-            }
-            
+            result = strategies.analyze_timeframe(get_ohlc(PAIR, interval=tf_minutes))
+            if result:
+                analysis[tf_name] = result
         except Exception as e:
-            print(f"  ⚠️ Error analyzing {timeframe_name}: {e}")
-            continue
-    
+            print(f"  ⚠️ Error analyzing {tf_name}: {e}")
     return analysis
 
-def generate_signal(analysis: dict, config: dict) -> dict:
-    """Generate trading signal based on multi-timeframe confluence."""
-    if not analysis:
-        return {"signal": "hold", "confidence": 0, "reason": "No data"}
-    
-    # Count bullish/bearish signals across timeframes
-    bullish_signals = 0
-    bearish_signals = 0
-    total_weight = 0
-    weighted_score = 0
-    
-    signal_details = []
-    
-    # Higher timeframes have more weight
-    timeframe_weights = {"5m": 1, "15m": 2, "1h": 3, "4h": 4}
-    
-    for tf, data in analysis.items():
-        weight = timeframe_weights.get(tf, 1)
-        total_weight += weight
-        
-        # RSI signals (using stock-specific thresholds)
-        if data["rsi"] < config["rsi_oversold"]:
-            bullish_signals += weight
-            weighted_score += weight * 2
-            signal_details.append(f"{tf}: RSI oversold ({data['rsi']:.1f})")
-        elif data["rsi"] > config["rsi_overbought"]:
-            bearish_signals += weight
-            weighted_score -= weight * 2
-            signal_details.append(f"{tf}: RSI overbought ({data['rsi']:.1f})")
-        
-        # MACD signals
-        if data["macd"]["histogram"] > 0:
-            bullish_signals += weight
-            weighted_score += weight
-            signal_details.append(f"{tf}: MACD bullish")
-        elif data["macd"]["histogram"] < 0:
-            bearish_signals += weight
-            weighted_score -= weight
-            signal_details.append(f"{tf}: MACD bearish")
-        
-        # Trend signals
-        if data["trend"] == "bullish":
-            bullish_signals += weight * 0.5
-            weighted_score += weight * 0.5
-        elif data["trend"] == "bearish":
-            bearish_signals += weight * 0.5
-            weighted_score -= weight * 0.5
-        
-        # Volume confirmation
-        if data["volume"]["trend"] in ["high", "above_average"]:
-            if bullish_signals > bearish_signals:
-                weighted_score += weight * 0.3
-            elif bearish_signals > bullish_signals:
-                weighted_score -= weight * 0.3
-    
-    # Determine final signal
-    confidence = abs(weighted_score) / (total_weight * 2) if total_weight > 0 else 0
-    
-    if weighted_score > total_weight * 0.3:  # Strong bullish
-        signal = "buy"
-    elif weighted_score < -total_weight * 0.3:  # Strong bearish
-        signal = "sell"
-    else:
-        signal = "hold"
-    
-    # Additional filters using stock-specific config
-    current_price = analysis.get("1h", {}).get("price", 0)
-    
-    # Avoid trading in overly volatile markets
-    if signal != "hold":
-        atr_1h = analysis.get("1h", {}).get("atr", 0)
-        if atr_1h > 0 and atr_1h / current_price > config["volatility_threshold"]:
-            confidence *= 0.7
-            signal_details.append("High volatility warning")
-    
-    return {
-        "signal": signal,
-        "confidence": confidence,
-        "reason": "; ".join(signal_details[:4]),  # Top 4 reasons
-        "price": current_price,
-        "analysis": analysis
-    }
 
 # ─────────────────────────────────────────────
 # ─────────────────────────────────────────────
@@ -578,8 +341,7 @@ def check_exit_conditions(current_price: float) -> str:
 # ─────────────────────────────────────────────
 
 def _stop_and_target(entry: float, atr: float) -> tuple[float, float]:
-    stop = entry - atr * 1.5 if atr > 0 else entry * (1 - CONFIG["stop_loss"])
-    return stop, entry * (1 + CONFIG["profit_target"])
+    return strategies.swing_stop_and_target(entry, atr, CONFIG)
 
 
 def execute_buy(signal_info: dict, dry_run: bool) -> bool:
