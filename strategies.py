@@ -281,3 +281,34 @@ def breakeven_win_rate(profit_pct: float, stop_pct: float, round_trip_cost: floa
         p * (profit - cost) = (1 - p) * (stop + cost)  →  p = (stop + cost) / (profit + stop)
     """
     return (stop_pct + round_trip_cost) / (profit_pct + stop_pct)
+
+
+# ─────────────────────────────────────────────
+# CROSS-COIN MOMENTUM (backtest candidate — see RESEARCH.md #6)
+# ─────────────────────────────────────────────
+
+MOMENTUM_DEFAULTS = {"lookback": 28, "top_k": 3, "filter_sma": 100, "rebalance_days": 7}
+
+
+def momentum_score(closes: list, lookback: int) -> float | None:
+    """Return over the last `lookback` closes (None if not enough history)."""
+    if len(closes) <= lookback or not closes[-lookback - 1]:
+        return None
+    return closes[-1] / closes[-lookback - 1] - 1
+
+
+def market_filter_ok(btc_closes: list, filter_sma: int) -> bool:
+    """True when BTC closes above its `filter_sma`-day average (or the filter is off)."""
+    if not filter_sma:
+        return True
+    if len(btc_closes) < filter_sma:
+        return False
+    return btc_closes[-1] > sma(btc_closes, filter_sma)
+
+
+def momentum_picks(scores: dict, top_k: int, market_ok: bool) -> list:
+    """The top_k coins by score, only those with a positive score; [] when the market filter is off."""
+    if not market_ok:
+        return []
+    ranked = sorted(((s, c) for c, s in scores.items() if s is not None and s > 0), reverse=True)
+    return [c for _, c in ranked[:top_k]]
