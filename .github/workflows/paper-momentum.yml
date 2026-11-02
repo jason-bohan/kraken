@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: "17 1 * * 1"   # Mondays 01:17 UTC, after Sunday's daily candle closes
   workflow_dispatch:
+    inputs:
+      demo:
+        description: "Demo only: show what the rules last bought (nothing recorded or committed)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -25,9 +30,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: Demo (nothing recorded)
+        if: ${{ inputs.demo }}
+        run: python paper_momentum.py --demo
       - name: Paper rebalance
+        if: ${{ !inputs.demo }}
         run: python paper_momentum.py
       - name: Commit ledger
+        if: ${{ !inputs.demo }}
         run: |
           git config user.name "paper-momentum bot"
           git config user.email "actions@users.noreply.github.com"
