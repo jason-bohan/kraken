@@ -96,3 +96,22 @@ Momentum counts as **robust enough to paper-trade** only if all hold:
    walk-forward's unseen periods.
 
 Otherwise: stop testing momentum and fall back to plain DCA + trend filter.
+
+### #6b result (2026-11-02): **not robust** — 2 of 3 checks
+
+Common window 893 days; BTC buy-and-hold +12.0% (Sharpe 0.33): +72.6% in the
+first half, −34.8% in the second.
+
+1. Beat BTC on Sharpe: **26/36 — pass** (needed 24).
+2. Beat BTC in both halves: **15/36 — fail** (needed 18).
+3. Default settings on the walk-forward's unseen periods: **+58.8% vs BTC
+   −17.1% — pass.** (The walk-forward itself lost because tuning kept picking
+   2-coin, little-or-no-filter settings; the untuned defaults did well.)
+
+Per the pre-registered rule, momentum stops here and is not traded.
+
+Pattern seen in the table (noted *after* the run, so it is a new hypothesis,
+not evidence): with no BTC filter, 0/9 combos beat BTC in both halves; with a
+50- or 100-day filter, 14/18 did; with a 200-day filter, 1/9. Most combos
+still lost money in the falling second half, just less than BTC. Testing this
+on the same data would be fitting to it; it can only be judged on new data.
