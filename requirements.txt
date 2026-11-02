@@ -1,0 +1,5 @@
+# Runtime dependencies (Python 3.10+)
+requests>=2.32,<3
+urllib3>=2,<3
+python-dotenv>=1.0,<2
+textual>=8.0,<9   # only needed for goobtrademaster.py (terminal dashboard)

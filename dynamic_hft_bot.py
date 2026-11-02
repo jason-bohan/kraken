@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
 Dynamic HFT Bot — Kraken
-Automatically finds the top 5 most volatile pairs across ALL of Kraken
-every 15 minutes and trades them aggressively.
+Finds the TOP_N most volatile liquid USD pairs across Kraken every 15 minutes
+and trades each one in its own thread.
 
-Strategy per pair:
-  - Buy on RSI < 35 OR 10-20% dip from recent high
-  - Sell at +3% profit
-  - Stop at -10% loss
-  - Max $2 per trade, $10 total exposure across all pairs
+Strategy per pair (see SETTINGS for current values):
+  - Buy on RSI < RSI_OVERSOLD or a DIP_MIN–DIP_MAX dip from the 30-min high
+  - Take profit at +PROFIT_PCT, stop at -STOP_PCT (standalone stop-loss on Kraken)
+  - MAX_USD_PER_PAIR per trade, MAX_TOTAL_USD across all pairs
+
+Open positions are saved to state/dynamic_hft_bot.json and restored on
+restart. A pair that leaves the top list keeps its thread until its position
+is closed.
 
 Usage:
     python3 dynamic_hft_bot.py              # live
@@ -30,15 +33,19 @@ import threading
 from datetime import datetime
 from kraken_connection import (
     get_balance, get_ticker, get_ohlc, place_order, calculate_order_size,
-    get_pair_base_balance,
+    get_pair_base_balance, get_fill, get_order_status, cancel_order,
 )
 from position_guardian import place_exit_orders, check_exit_orders, cancel_remaining_exit
+from position_store import PositionStore
+import strategies
 from learning_engine import LearningEngine
-from market_sentiment import should_buy as check_sentiment, format_sentiment
+from market_sentiment import should_buy as check_sentiment
 import requests as req
 
 BOT_NAME = "dynamic_hft_bot"
 LEARNER  = LearningEngine()
+STORE    = PositionStore(BOT_NAME)
+USERREF  = 8                    # tags this bot's orders on Kraken
 
 BASE_URL = "https://api.kraken.com"
 
@@ -62,8 +69,21 @@ MIN_VOLUME_USD   = 1_000_000   # skip pairs with < $1M 24h volume (bull/neutral)
 MIN_VOLUME_BEAR  = 10_000_000  # $10M volume filter in bear market (cuts illiquid coins)
 MIN_VOLATILITY   = 0.05         # skip pairs with < 5% 24h swing
 RESERVE_USD      = 5.0          # always keep $5 in reserve
+SL_RETRY_SECS    = 300          # retry a missing stop-loss at most this often
 DRY_START_BAL    = 50.0         # default fake starting balance for dry run
 DEBUG_PAIRS      = False        # set True to print all pair scores during scan
+
+TREND_PERIOD     = 0            # >0: only buy above the SMA of this many 1m closes (≤ 720)
+MAX_HOLD_MINUTES = 0            # >0: sell at market after this long if neither level was hit
+
+# Entry/exit parameters as used by strategies.hft_entry (also what backtester.py tests)
+STRATEGY_PARAMS = {
+    **strategies.HFT_DEFAULTS,
+    "rsi_period": RSI_PERIOD, "rsi_oversold": RSI_OVERSOLD, "rsi_overbought": RSI_OVERBOUGHT,
+    "dip_min": DIP_MIN, "dip_max": DIP_MAX, "min_confidence": MIN_CONFIDENCE,
+    "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT,
+    "trend_period": TREND_PERIOD, "max_hold_minutes": MAX_HOLD_MINUTES,
+}
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT    = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -71,13 +91,9 @@ TELEGRAM_CHAT    = os.getenv("TELEGRAM_CHAT_ID", "")
 # ─────────────────────────────────────────────
 # SHARED STATE
 # ─────────────────────────────────────────────
-positions        = {}             # { pair: { entry_price, volume, cost } }
+positions        = {}             # { pair: position dict } — live view of open positions
 positions_lock   = threading.Lock()
-active_trade_ids = {}             # { pair: learning DB trade id }
-trade_ids_lock   = threading.Lock()
-deployed_usd   = 0.0
-deployed_lock  = threading.Lock()
-active_threads = {}
+active_threads   = {}
 
 # Dry run virtual balance — protected by its own lock
 dry_balance     = DRY_START_BAL
@@ -298,57 +314,22 @@ def get_top_pairs(n: int = TOP_N) -> list:
 
 
 # ─────────────────────────────────────────────
-# INDICATORS
+# INDICATORS (maths lives in strategies.py, shared with backtester.py)
 # ─────────────────────────────────────────────
-def calculate_rsi(closes: list, period: int = 14) -> float:
-    """RSI from closing prices. NOTE: To debug: print(closes[-period:])"""
-    if len(closes) < period + 1:
-        return 50.0
-
-    gains, losses = [], []
-    for i in range(1, period + 1):
-        delta = closes[-period + i] - closes[-period + i - 1]
-        if delta >= 0:
-            gains.append(delta); losses.append(0)
-        else:
-            gains.append(0); losses.append(abs(delta))
-
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-
-    if avg_loss == 0:
-        return 100.0
-
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-
 def get_pair_data(pair: str) -> tuple:
-    """
-    Returns (price, rsi, recent_high) for any pair.
-    NOTE: To rediscover OHLC fields: print(get_ohlc(pair, 1)[0])
-    Candle: [time, open, high, low, close, vwap, volume, count]
-    """
+    """Returns (price, rsi, recent_high, ma20) for a pair from 1-minute candles."""
     ticker = get_ticker(pair)
     if not ticker:
         return None, None, None, None
-
     try:
         price = float(ticker.get("a", [0])[0])
-    except:
+    except (TypeError, ValueError):
         return None, None, None, None
 
-    candles = get_ohlc(pair, interval=1)  # 1-min candles for HFT
-    if not candles or len(candles) < RSI_PERIOD + 5:
+    snap = strategies.hft_snapshot(get_ohlc(pair, interval=1), STRATEGY_PARAMS)
+    if not snap:
         return price, 50.0, price, price
-
-    closes      = [float(c[4]) for c in candles]
-    highs       = [float(c[2]) for c in candles]
-    rsi         = calculate_rsi(closes, RSI_PERIOD)
-    recent_high = max(highs[-30:])
-    ma20        = sum(closes[-20:]) / min(20, len(closes))
-
-    return price, rsi, recent_high, ma20
+    return price, snap["rsi"], snap["recent_high"], snap["ma"]
 
 
 # ─────────────────────────────────────────────
@@ -365,8 +346,7 @@ def get_trade_size(pair: str, price: float, dry_run: bool) -> float:
         balances  = get_balance()
         usd_avail = max(0, float(balances.get("ZUSD", 0)) - RESERVE_USD)
 
-    with deployed_lock:
-        remaining = MAX_TOTAL_USD - deployed_usd
+    remaining = MAX_TOTAL_USD - deployed_total()
 
     trade_usd = min(usd_avail, remaining, MAX_USD_PER_PAIR)
 
@@ -380,22 +360,230 @@ def get_trade_size(pair: str, price: float, dry_run: bool) -> float:
     return info["volume"]
 
 
+
+
+def deployed_total() -> float:
+    """USD currently committed to open positions (at entry price)."""
+    with positions_lock:
+        return sum(p["entry_price"] * p["volume"] for p in positions.values())
+
+
+# ─────────────────────────────────────────────
+# POSITION LIFECYCLE
+# ─────────────────────────────────────────────
+def _save(pair: str, position: dict, dry_run: bool) -> None:
+    with positions_lock:
+        positions[pair] = position
+    if not dry_run:
+        STORE.set(pair, position)
+
+
+def _forget(pair: str, dry_run: bool) -> None:
+    with positions_lock:
+        positions.pop(pair, None)
+    if not dry_run:
+        STORE.remove(pair)
+
+
+def open_position(pair: str, volume: float, price: float, confidence: float,
+                  features: dict, reason: str, dry_run: bool) -> dict | None:
+    """Buy, protect with a stop-loss, record and persist. Returns the position or None."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    if dry_run:
+        if not dry_buy(pair, volume, price):
+            print(f"  [DRY] ⚠️ Insufficient virtual balance")
+            return None
+        position = {"entry_price": price, "volume": volume, "fees": 0.0,
+                    "entry_time": datetime.now().isoformat(timespec="seconds")}
+        _save(pair, position, dry_run)
+        print(f"  [DRY] Bought {volume} {pair} @ ${price:.4f} | Balance: ${dry_balance:.2f}")
+        return position
+
+    ok, result = place_order(pair, "buy", "market", volume, userref=USERREF)
+    if not ok:
+        print(f"  ❌ Buy failed: {result}")
+        return None
+
+    # Use the actual fill, not the ticker price we saw before ordering.
+    txid = (result.get("txid") or [None])[0]
+    fill = get_fill(txid) if txid else None
+    if fill and fill["vol_exec"] > 0:
+        volume, price, fee = fill["vol_exec"], fill["avg_price"], fill["fee"]
+    else:
+        fee = 0.0
+        print(f"  [{ts}] ⚠️ {pair}: could not read fill for {txid}; using requested volume/price")
+
+    exit_orders = place_exit_orders(pair, volume, price, PROFIT_PCT, STOP_PCT, userref=USERREF)
+    trade_id = LEARNER.record_entry(
+        bot_name=BOT_NAME, symbol=pair, side="buy", entry_price=price,
+        position_size=volume, confidence=confidence, features=features,
+        config={"rsi_oversold": RSI_OVERSOLD, "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT},
+    )
+    position = {
+        "entry_price": price, "volume": volume, "fees": fee,
+        "exit_orders": exit_orders, "trade_id": trade_id,
+        "entry_time": datetime.now().isoformat(timespec="seconds"),
+        "order_txid": txid,
+    }
+    _save(pair, position, dry_run)
+    tg(f"🛒 *{pair}* buy {volume:.8g} @ ${price:.6g} | {reason}")
+    return position
+
+
+def close_position(pair: str, position: dict, price: float, reason: str,
+                   dry_run: bool, exchange_filled: bool = False) -> bool:
+    """
+    Sell (unless the exchange already did), record net P&L and forget the position.
+    Returns False if the position is still open (sell failed); the caller retries.
+    """
+    ts = datetime.now().strftime("%H:%M:%S")
+    entry, volume = position["entry_price"], position["volume"]
+    fees = position.get("fees", 0.0)
+
+    if dry_run:
+        pnl = dry_sell(pair, volume, price, entry)
+        print(f"  [DRY] {reason}: sold {volume} {pair} | P&L: ${pnl:+.4f} | Balance: ${dry_balance:.2f}")
+        _forget(pair, dry_run)
+        return True
+
+    exit_price = price
+    eo = position.get("exit_orders") or {}
+    if exchange_filled:
+        fill = get_fill(eo["sl"]) if eo.get("sl") else None
+        if fill and fill["vol_exec"] > 0:
+            exit_price, volume = fill["avg_price"], fill["vol_exec"]
+            fees += fill["fee"]
+    else:
+        cancel_remaining_exit(eo)  # raises if open orders can't be read → retried next cycle
+        held = get_pair_base_balance(pair)
+        sell_volume = min(volume, held) if held > 0 else volume
+        ok, result = place_order(pair, "sell", "market", sell_volume, userref=USERREF)
+        if not ok and result.get("below_minimum"):
+            # Too small to sell on Kraken: stop managing it instead of retrying forever.
+            print(f"  [{ts}] 🧹 {pair}: {sell_volume} is below Kraken's minimum — dropping as dust")
+            reason = "dust"
+        elif not ok:
+            print(f"  ❌ {pair} sell failed: {result}")
+            # The SL was cancelled above; put protection back before retrying.
+            position["exit_orders"] = place_exit_orders(pair, volume, entry, PROFIT_PCT, STOP_PCT, userref=USERREF)
+            _save(pair, position, dry_run)
+            return False
+        else:
+            txid = (result.get("txid") or [None])[0]
+            fill = get_fill(txid) if txid else None
+            if fill and fill["vol_exec"] > 0:
+                exit_price, volume = fill["avg_price"], fill["vol_exec"]
+                fees += fill["fee"]
+
+    pnl_usd = (exit_price - entry) * volume - fees
+    pnl_pct = pnl_usd / (entry * volume) if entry and volume else 0.0
+    if position.get("trade_id"):
+        LEARNER.record_exit(position["trade_id"], exit_price, pnl_usd, pnl_pct, reason)
+    _forget(pair, dry_run)
+    icon = "💰" if pnl_usd > 0 else "🛑"
+    print(f"  [{ts}] {icon} {pair} closed ({reason}) @ ${exit_price:.6g} | net {pnl_pct*100:+.2f}% (${pnl_usd:+.4f})")
+    tg(f"{icon} *{pair}* {reason} {pnl_pct*100:+.2f}% (${pnl_usd:+.4f} net)")
+    return True
+
+
+def ensure_protected(pair: str, position: dict, dry_run: bool) -> None:
+    """Re-place a missing stop-loss (failed, cancelled elsewhere, or restored), rate-limited."""
+    if dry_run:
+        return
+    eo = position.get("exit_orders") or {}
+    if eo.get("sl") or eo.get("below_minimum"):
+        return
+    now = time.time()
+    if now < position.get("sl_retry_at", 0):
+        return
+    position["sl_retry_at"] = now + SL_RETRY_SECS
+    print(f"  🛡️ {pair}: no stop-loss on Kraken — placing one")
+    position["exit_orders"] = place_exit_orders(
+        pair, position["volume"], position["entry_price"], PROFIT_PCT, STOP_PCT, userref=USERREF,
+    )
+    _save(pair, position, dry_run)
+
+
+def restore_positions() -> dict:
+    """
+    Reload saved positions after a restart and reconcile them with Kraken:
+      - stop-loss filled while we were down → record the exit
+      - coins no longer held → record as closed externally
+      - otherwise keep managing it (volume capped at what is held)
+    """
+    stored = STORE.all()
+    if not stored:
+        return {}
+    balances = get_balance()
+    restored = {}
+    for pair, pos in stored.items():
+        eo = pos.get("exit_orders") or {}
+        status = get_order_status(eo["sl"]) if eo.get("sl") else None
+        if status == "closed":
+            print(f"  ♻️ {pair}: stop-loss filled while the bot was down")
+            close_position(pair, pos, eo.get("sl_price", pos["entry_price"]), "stop_loss", False, exchange_filled=True)
+            continue
+        if status in ("canceled", "expired"):
+            eo["sl"] = None
+            pos["exit_orders"] = eo
+
+        if not balances:
+            print(f"  ⚠️ {pair}: balance unavailable — restoring saved position as-is")
+            restored[pair] = pos
+            continue
+        held = get_pair_base_balance(pair, balances=balances)
+        if held < pos["volume"] * 0.5:
+            print(f"  ♻️ {pair}: saved position no longer held ({held}) — recording as closed externally")
+            if eo.get("sl") and status in ("open", "pending"):
+                cancel_order(eo["sl"])  # its coins are gone; don't leave a stray stop-loss
+            ticker = get_ticker(pair)
+            price = float(ticker.get("c", [pos["entry_price"]])[0]) if ticker else pos["entry_price"]
+            close_position(pair, pos, price, "closed_externally", False, exchange_filled=True)
+            continue
+        pos["volume"] = min(pos["volume"], held)
+        restored[pair] = pos
+        print(f"  ♻️ Restored {pair}: {pos['volume']:.8g} @ ${pos['entry_price']:.6g}")
+    with positions_lock:
+        positions.update(restored)
+    for pair, pos in restored.items():
+        STORE.set(pair, pos)
+    return restored
+
+
+def try_entry(pair: str, price: float, rsi: float, dip: float, ma20: float,
+              decision: dict, dry_run: bool) -> dict | None:
+    """Apply the sentiment gate and budget, then open a position. Returns it or None."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    sentiment = check_sentiment()
+    if not sentiment["allow"]:
+        print(f"  [{ts}] 🚫 {pair} signal blocked: {sentiment['reason']}")
+        return None
+    volume = round(get_trade_size(pair, price, dry_run) * sentiment["size_multiplier"], 8)
+    if volume <= 0:
+        print(f"  [{ts}] ⚠️ {pair} signal but no budget left")
+        return None
+    reason = decision["reason"]
+    print(f"  [{ts}] 🎯 {pair} ENTRY: {reason} | Buying {volume} @ ${price:.6g} (${volume*price:.2f})")
+    return open_position(pair, volume, price, decision["confidence"],
+                         {"rsi": rsi, "dip": dip, "price": price, "ma20": ma20}, reason, dry_run)
+
+
 # ─────────────────────────────────────────────
 # PER-PAIR TRADING THREAD
 # ─────────────────────────────────────────────
-def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
-    """Runs in its own thread. Monitors one pair and trades it."""
-    global deployed_usd
+def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event, position: dict | None = None):
+    """
+    Runs in its own thread. Monitors one pair and trades it.
+    When stop_event is set the thread stops looking for entries, but keeps
+    managing an open position until it is closed.
+    """
     ts = datetime.now().strftime("%H:%M:%S")
-    print(f"  [{ts}] 🚀 Starting thread for {pair}")
+    print(f"  [{ts}] 🚀 Starting thread for {pair}" + (" (restored position)" if position else ""))
 
-    position = None
-
-    while not stop_event.is_set():
+    while not (stop_event.is_set() and position is None):
         try:
             ts = datetime.now().strftime("%H:%M:%S")
             price, rsi, recent_high, ma20 = get_pair_data(pair)
-
             if price is None:
                 time.sleep(CHECK_SECS)
                 continue
@@ -404,178 +592,51 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
 
             # ── MANAGE POSITION ──────────────────────────
             if position:
-                # Check if Kraken already closed via server-side orders
-                if not dry_run and position.get("exit_orders") and check_exit_orders(position["exit_orders"]):
-                    # Server-side bracket filled — record the exit in learning DB
-                    entry = position["entry_price"]
-                    volume = position["volume"]
-                    exit_pnl_pct = (price - entry) / entry if entry else 0
-                    exit_pnl_usd = (price - entry) * volume
-                    exit_reason = "take_profit" if price >= entry else "stop_loss"
-                    with trade_ids_lock:
-                        tid = active_trade_ids.pop(pair, None)
-                    if tid:
-                        LEARNER.record_exit(tid, price, exit_pnl_usd, exit_pnl_pct, exit_reason)
-                    print(f"  [{ts}] 🎯 {pair} bracket filled ({exit_reason}) {exit_pnl_pct*100:+.2f}%")
-                    with deployed_lock:
-                        deployed_usd = max(0, deployed_usd - (entry * volume))
-                    with positions_lock:
-                        positions.pop(pair, None)
+                if not dry_run and check_exit_orders(position.get("exit_orders")):
+                    close_position(pair, position, price, "stop_loss", dry_run, exchange_filled=True)
                     position = None
                     continue
 
-                entry       = position["entry_price"]
-                volume      = position["volume"]
-                pnl_pct     = (price - entry) / entry
-                pnl_usd     = (price - entry) * volume
+                ensure_protected(pair, position, dry_run)
 
-                # Show running dry balance next to P&L
-                bal_str = ""
-                if dry_run:
-                    with dry_balance_lock:
-                        bal_str = f" | 💰 Bal: ${dry_balance:.2f}"
+                entry   = position["entry_price"]
+                pnl_pct = (price - entry) / entry
+                pnl_usd = (price - entry) * position["volume"]
+                bal_str = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
+                print(f"  [{ts}] {pair:<18} ${price:.6g} | RSI {rsi:.0f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.4f}){bal_str}")
 
-                print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | PnL {pnl_pct*100:+.2f}% (${pnl_usd:+.4f}){bal_str}")
+                max_hold = STRATEGY_PARAMS.get("max_hold_minutes", 0)
+                held_min = ((datetime.now() - datetime.fromisoformat(position["entry_time"])).total_seconds() / 60
+                            if position.get("entry_time") else 0)
 
-                # Take profit
-                if pnl_pct >= PROFIT_PCT:
-                    print(f"  [{ts}] 💰 {pair} +{pnl_pct*100:.2f}% | Selling @ ${price:.4f}")
-                    if dry_run:
-                        actual_pnl = dry_sell(pair, volume, price, entry)
-                        with dry_balance_lock:
-                            new_bal = dry_balance
-                        print(f"  [DRY] Sold {volume} {pair} | P&L: ${actual_pnl:+.4f} | Balance: ${new_bal:.2f}")
-                    else:
-                        # Cancel SL before market sell to free coins
-                        if position.get("exit_orders"):
-                            cancel_remaining_exit(position["exit_orders"])
-                        ok, result = place_order(pair, "sell", "market", volume, userref=8)
-                        if not ok:
-                            print(f"  ❌ Sell failed: {result}")
-                            time.sleep(CHECK_SECS)
-                            continue
-                        tg(f"💰 *{pair}* +{pnl_pct*100:.2f}% (${pnl_usd:+.4f})")
-                        with trade_ids_lock:
-                            tid = active_trade_ids.pop(pair, None)
-                        if tid:
-                            LEARNER.record_exit(tid, price, pnl_usd, pnl_pct, "take_profit")
-
-                    with deployed_lock:
-                        deployed_usd = max(0, deployed_usd - (entry * volume))
-                    position = None
-                    with positions_lock:
-                        positions.pop(pair, None)
-
-                # Stop loss
-                elif pnl_pct <= -STOP_PCT:
-                    print(f"  [{ts}] 🛑 {pair} {pnl_pct*100:.2f}% STOP | Selling @ ${price:.4f}")
-                    if dry_run:
-                        actual_pnl = dry_sell(pair, volume, price, entry)
-                        with dry_balance_lock:
-                            new_bal = dry_balance
-                        print(f"  [DRY] Stop sold {volume} {pair} | P&L: ${actual_pnl:+.4f} | Balance: ${new_bal:.2f}")
-                    else:
-                        # Cancel SL before market sell (SL may not have fired yet at this price)
-                        if position.get("exit_orders"):
-                            cancel_remaining_exit(position["exit_orders"])
-                        ok, result = place_order(pair, "sell", "market", volume, userref=8)
-                        if not ok:
-                            print(f"  ❌ Stop sell failed: {result}")
-                            time.sleep(CHECK_SECS)
-                            continue
-                        tg(f"🛑 *{pair}* stop {pnl_pct*100:.2f}% (${pnl_usd:+.4f})")
-                        with trade_ids_lock:
-                            tid = active_trade_ids.pop(pair, None)
-                        if tid:
-                            LEARNER.record_exit(tid, price, pnl_usd, pnl_pct, "stop_loss")
-
-                    with deployed_lock:
-                        deployed_usd = max(0, deployed_usd - (entry * volume))
-                    position = None
-                    with positions_lock:
-                        positions.pop(pair, None)
+                if pnl_pct >= PROFIT_PCT or pnl_pct <= -STOP_PCT:
+                    reason = "take_profit" if pnl_pct >= PROFIT_PCT else "stop_loss"
+                    if close_position(pair, position, price, reason, dry_run):
+                        position = None
+                elif max_hold and held_min >= max_hold:
+                    print(f"  [{ts}] ⏱ {pair} held {held_min:.0f} min ≥ {max_hold} — closing")
+                    if close_position(pair, position, price, "time", dry_run):
+                        position = None
 
             # ── LOOK FOR ENTRY ────────────────────────────
-            else:
-                rsi_signal = rsi <= RSI_OVERSOLD
-                dip_signal = DIP_MIN <= dip <= DIP_MAX
-                not_overbought = rsi < RSI_OVERBOUGHT  # block entry if RSI is too pumped
-
-                # Trend filter: active in bear market, disabled in bull/neutral
+            elif not stop_event.is_set():
                 with market_regime_lock:
                     regime = market_regime
+                decision = strategies.hft_entry(
+                    price, {"rsi": rsi, "recent_high": recent_high, "ma": ma20}, regime, STRATEGY_PARAMS,
+                )
                 uptrend = (price > ma20) if regime == "bear" else True
 
-                # Holdings check: don't buy if we already hold this asset
-                balances_snapshot = get_balance() if not dry_run else {}
-                already_held = not dry_run and get_pair_base_balance(pair, balances=balances_snapshot) * price > 5.0
+                # Don't buy what we already hold (other bot or manual holding)
+                already_held = not dry_run and get_pair_base_balance(pair, balances=get_balance()) * price > 5.0
 
                 bal_str   = f" | 💰 Bal: ${dry_balance:.2f}" if dry_run else ""
-                trend_str = "UP" if uptrend else "DOWN"
                 held_str  = " HELD" if already_held else ""
-                print(f"  [{ts}] {pair:<18} ${price:.4f} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | Trend {trend_str} [{regime}]{held_str}{bal_str}")
+                print(f"  [{ts}] {pair:<18} ${price:.6g} | RSI {rsi:.0f} | Dip {dip*100:.1f}% | "
+                      f"Trend {'UP' if uptrend else 'DOWN'} [{regime}]{held_str}{bal_str}")
 
-                confidence = min(1.0, (RSI_OVERSOLD - rsi) / RSI_OVERSOLD + dip)
-
-                if (rsi_signal or dip_signal) and not_overbought and uptrend and not already_held:
-                    if confidence < MIN_CONFIDENCE:
-                        print(f"  [{ts}] 🚫 {pair} skipped: confidence {confidence:.3f} < {MIN_CONFIDENCE}")
-                        continue
-
-                    # Check market sentiment before buying
-                    sentiment = check_sentiment()
-                    if not sentiment["allow"]:
-                        print(f"  [{ts}] 🚫 {pair} signal blocked: {sentiment['reason']}")
-                        continue
-
-                    reason = f"RSI {rsi:.0f} + dip -{dip*100:.1f}%"
-
-                    volume = get_trade_size(pair, price, dry_run)
-                    # Apply sentiment size multiplier
-                    volume = round(volume * sentiment["size_multiplier"], 8)
-                    if volume <= 0:
-                        print(f"  [{ts}] ⚠️ {pair} signal but no budget left")
-                    else:
-                        cost = volume * price
-                        print(f"  [{ts}] 🎯 {pair} ENTRY: {reason} | Buying {volume} @ ${price:.4f} (${cost:.2f})")
-
-                        if dry_run:
-                            ok = dry_buy(pair, volume, price)
-                            if ok:
-                                position = {"entry_price": price, "volume": volume}
-                                with positions_lock:
-                                    positions[pair] = position
-                                with deployed_lock:
-                                    deployed_usd += cost
-                                with dry_balance_lock:
-                                    new_bal = dry_balance
-                                print(f"  [DRY] Bought {volume} {pair} @ ${price:.4f} | Balance: ${new_bal:.2f}")
-                            else:
-                                print(f"  [DRY] ⚠️ Insufficient virtual balance")
-                        else:
-                            ok, result = place_order(pair, "buy", "market", volume, userref=8)
-                            if ok:
-                                eo = place_exit_orders(pair, volume, price, PROFIT_PCT, STOP_PCT)
-                                position = {"entry_price": price, "volume": volume, "exit_orders": eo}
-                                with positions_lock:
-                                    positions[pair] = position
-                                with deployed_lock:
-                                    deployed_usd += cost
-                                tg(f"🛒 *{pair}* buy @ ${price:.4f} | {reason}")
-                                trade_id = LEARNER.record_entry(
-                                    bot_name=BOT_NAME,
-                                    symbol=pair,
-                                    side="buy",
-                                    entry_price=price,
-                                    position_size=volume,
-                                    confidence=confidence,
-                                    features={"rsi": rsi, "dip": dip, "price": price, "ma20": ma20},
-                                    config={"rsi_oversold": RSI_OVERSOLD, "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT},
-                                )
-                                with trade_ids_lock:
-                                    active_trade_ids[pair] = trade_id
-                            else:
-                                print(f"  ❌ Buy failed: {result}")
+                if decision["enter"] and not already_held:
+                    position = try_entry(pair, price, rsi, dip, ma20, decision, dry_run)
 
             time.sleep(CHECK_SECS)
 
@@ -589,8 +650,17 @@ def trade_pair(pair: str, dry_run: bool, stop_event: threading.Event):
 # ─────────────────────────────────────────────
 # MAIN LOOP
 # ─────────────────────────────────────────────
+def _start_thread(pair: str, dry_run: bool, stop_events: dict, position: dict | None = None):
+    stop_event = threading.Event()
+    stop_events[pair] = stop_event
+    t = threading.Thread(target=trade_pair, args=(pair, dry_run, stop_event, position),
+                         daemon=True, name=f"thread-{pair}")
+    t.start()
+    active_threads[pair] = t
+
+
 def run(dry_run: bool = False, sim_balance: float = DRY_START_BAL):
-    global dry_balance, dry_start_bal
+    global dry_balance, dry_start_bal, market_regime
 
     if dry_run:
         dry_balance   = sim_balance
@@ -611,16 +681,17 @@ def run(dry_run: bool = False, sim_balance: float = DRY_START_BAL):
     tg(f"🤖 *Dynamic HFT Bot started* ({mode}) — {TOP_N} pairs, ${MAX_TOTAL_USD} max")
 
     stop_events = {}
-    scan_cycle  = 0
+    if not dry_run:
+        for pair, pos in restore_positions().items():
+            _start_thread(pair, dry_run, stop_events, pos)
 
+    scan_cycle = 0
     while True:
         try:
             scan_cycle += 1
             ts = datetime.now().strftime("%H:%M:%S")
             print(f"\n[{ts}] 🔍 Scan #{scan_cycle} — finding top {TOP_N} volatile pairs...")
 
-            # Update market regime
-            global market_regime
             new_regime = get_market_regime()
             with market_regime_lock:
                 prev_regime = market_regime
@@ -631,67 +702,51 @@ def run(dry_run: bool = False, sim_balance: float = DRY_START_BAL):
             else:
                 print(f"  [{ts}] 📊 Market regime: {new_regime.upper()}")
 
+            # Clean up threads that finished (dropped pairs whose position closed)
+            for pair in [p for p, t in active_threads.items() if not t.is_alive()]:
+                del active_threads[pair]
+                stop_events.pop(pair, None)
+
             new_pairs = get_top_pairs(TOP_N)
             if not new_pairs:
                 print(f"  ⚠️ Could not fetch pairs, retrying in 60s")
                 time.sleep(60)
                 continue
 
+            with positions_lock:
+                held_pairs = set(positions)
             current_pairs = set(active_threads.keys())
             pairs_to_add  = set(new_pairs) - current_pairs
             pairs_to_drop = current_pairs - set(new_pairs)
 
             for pair in pairs_to_drop:
-                print(f"  [{ts}] ⏹ Dropping {pair} from rotation")
-                if pair in stop_events:
+                if pair in stop_events and not stop_events[pair].is_set():
+                    note = " (keeps managing its open position)" if pair in held_pairs else ""
+                    print(f"  [{ts}] ⏹ Dropping {pair} from rotation{note}")
                     stop_events[pair].set()
-                if pair in active_threads:
-                    active_threads[pair].join(timeout=5)
-                    del active_threads[pair]
-                if pair in stop_events:
-                    del stop_events[pair]
 
             for pair in pairs_to_add:
                 print(f"  [{ts}] ▶️ Adding {pair} to rotation")
-                stop_event = threading.Event()
-                stop_events[pair] = stop_event
-                t = threading.Thread(
-                    target=trade_pair,
-                    args=(pair, dry_run, stop_event),
-                    daemon=True,
-                    name=f"thread-{pair}"
-                )
-                t.start()
-                active_threads[pair] = t
+                _start_thread(pair, dry_run, stop_events)
 
             if not pairs_to_add and not pairs_to_drop:
                 print(f"  ✅ Same top {TOP_N} pairs — no rotation needed")
 
-            # Portfolio summary
-            with deployed_lock:
-                dep = deployed_usd
-            with positions_lock:
-                pos_count = len(positions)
-
+            dep = deployed_total()
             if dry_run:
-                with dry_balance_lock:
-                    bal = dry_balance
-                total_pnl = bal - dry_start_bal
-                print(f"\n  📊 Positions: {pos_count} | Deployed: ${dep:.2f} | 💰 Balance: ${bal:.2f} | P&L: ${total_pnl:+.2f}")
+                print(f"\n  📊 Positions: {len(held_pairs)} | Deployed: ${dep:.2f} | "
+                      f"💰 Balance: ${dry_balance:.2f} | P&L: ${dry_balance - dry_start_bal:+.2f}")
                 print_dry_summary()
             else:
-                balances = get_balance()
-                usd_bal  = float(balances.get("ZUSD", 0))
-                print(f"\n  📊 Positions: {pos_count} | Deployed: ${dep:.2f} | USD balance: ${usd_bal:.2f}")
+                usd_bal = float(get_balance().get("ZUSD", 0))
+                print(f"\n  📊 Positions: {len(held_pairs)} | Deployed: ${dep:.2f} | USD balance: ${usd_bal:.2f}")
 
             time.sleep(RESCAN_SECS)
 
         except KeyboardInterrupt:
-            print("\n\n👋 Shutting down all threads...")
-            for pair, event in stop_events.items():
+            print("\n\n👋 Shutting down (open positions stay protected by their stop-losses)...")
+            for event in stop_events.values():
                 event.set()
-            for pair, thread in active_threads.items():
-                thread.join(timeout=5)
             if dry_run:
                 print_dry_summary()
             tg("🛑 *Dynamic HFT Bot stopped*")
@@ -708,4 +763,3 @@ if __name__ == "__main__":
                         help=f"Starting virtual balance for dry run (default: ${DRY_START_BAL})")
     args = parser.parse_args()
     run(dry_run=args.dry, sim_balance=args.sim_balance)
-

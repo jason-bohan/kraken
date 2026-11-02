@@ -1,3 +1,30 @@
+# Secrets — never commit
 .env
-.env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
+*.pyc
+venv/
+.venv/
+
+# Runtime output and state (machine-specific)
+logs/
+*.log
+learning.db
+*.db-journal
+.sentiment_cache.json
+.onchain_cache.json
+sol_grid_state.json
+
+# Tools and scratch files
+lazygit
+lazygit.tar.gz
+diff.txt
+
+# Saved bot positions (per machine)
+state/
+
+# Downloaded candles and backtest reports
+data/

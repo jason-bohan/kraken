@@ -17,8 +17,10 @@ from typing import Any
 class LearningEngine:
     """Persist trade observations and derive conservative parameter updates."""
 
-    def __init__(self, db_path: str = "learning.db"):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: str | None = None):
+        # Default next to this file, not the current directory: a bot started
+        # from elsewhere (cron, screen) used to create a separate empty DB.
+        self.db_path = Path(db_path) if db_path else Path(__file__).resolve().parent / "learning.db"
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:

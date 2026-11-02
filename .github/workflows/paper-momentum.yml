@@ -1,0 +1,36 @@
+# Weekly forward paper trading for RESEARCH.md idea #7.
+# Uses only Kraken's public price API (no keys, no orders) and commits the
+# updated ledger so the record is permanent. GitHub only runs (and lists) this
+# workflow once it is on the repository's default branch.
+name: Paper momentum (weekly)
+
+on:
+  schedule:
+    - cron: "17 1 * * 1"   # Mondays 01:17 UTC, after Sunday's daily candle closes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paper-momentum
+  cancel-in-progress: false
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Paper rebalance
+        run: python paper_momentum.py
+      - name: Commit ledger
+        run: |
+          git config user.name "paper-momentum bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add paper/momentum_ledger.json
+          git diff --cached --quiet || git commit -m "Paper momentum: weekly update"
+          git push

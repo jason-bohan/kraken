@@ -1,757 +1,260 @@
 #!/usr/bin/env python3
 """
-GooB Trade Master — Kraken Trading Dashboard
+GooB Terminal — a read-only trading terminal for the Kraken bots.
+
+Four panels, one command line. Type a function code and press Enter to load
+it into the selected panel:
+
+    MKT   markets          POS   bot positions     BAL   balances
+    MOVR  top movers       PNL   realized results  ORD   open orders
+    CHRT  chart (CHRT SOL) BOTS  bot health        SENT  sentiment gate
+    BT    backtests        LOG   bot log (LOG HFT) HELP  all codes
+
+    F1–F4   select a panel (or prefix a code: "3 CHRT ETH")
+    Ctrl+R  refresh everything     Ctrl+Q  quit
+
+The terminal only reads: it never places or cancels orders and never starts
+bots (bot_monitor_cron.py does that). Screens refresh on their own.
 
 Usage:
     python3 goobtrademaster.py
-
-Keys:
-    R     — refresh data now
-    Q     — quit (stops all running bots cleanly)
 """
 
+import json
 import os
 import sys
-import queue
-import subprocess
-import threading
-from collections import deque
-from datetime import datetime
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 
+from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, ScrollableContainer
-from textual.screen import ModalScreen
-from textual.widgets import Header, Footer, Static, RichLog, Button, Label, Rule
-from textual.reactive import reactive
+from textual.binding import Binding
+from textual.containers import Grid, Vertical
+from textual.widgets import DataTable, Footer, Input, Sparkline, Static
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kraken_connection import get_balance, get_ticker
+import terminal_data as td  # noqa: E402
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LAYOUT_FILE = Path(__file__).resolve().parent / "data" / "terminal_layout.json"
+DEFAULT_LAYOUT = [("MKT", ""), ("POS", ""), ("PNL", ""), ("SENT", "")]
 
-# ─── Bot registry ─────────────────────────────────────────────────────────────
-
-BOTS = [
-    {
-        "id":        "btc_momentum",
-        "name":      "BTC Momentum",
-        "script":    "btc_momentum_bot.py",
-        "live_args": ["--monitor"],
-        "dry_args":  ["--dry"],
-        "pair":      "XBTUSD",
-        "desc":      "10% target / 5% stop  |  RSI + volume momentum",
-    },
-    {
-        "id":        "btc_swing",
-        "name":      "BTC Swing",
-        "script":    "btc_swing_bot.py",
-        "live_args": [],
-        "dry_args":  ["--dry"],
-        "pair":      "XBTUSD",
-        "desc":      "8% target / 4% stop   |  dip + RSI entries",
-    },
-    {
-        "id":        "eth_swing",
-        "name":      "ETH Swing",
-        "script":    "eth_swing_bot.py",
-        "live_args": [],
-        "dry_args":  ["--dry"],
-        "pair":      "ETHUSD",
-        "desc":      "10% target / 5% stop  |  dip + RSI entries",
-    },
-    {
-        "id":        "sol_swing",
-        "name":      "SOL Swing",
-        "script":    "sol_swing_bot.py",
-        "live_args": [],
-        "dry_args":  ["--dry"],
-        "pair":      "SOLUSD",
-        "desc":      "10% target / 5% stop  |  dip + RSI entries",
-    },
-    {
-        "id":        "dynamic_hft",
-        "name":      "Dynamic HFT",
-        "script":    "dynamic_hft_bot.py",
-        "live_args": [],
-        "dry_args":  ["--dry"],
-        "pair":      "XBTUSD",
-        "desc":      "8% target / 4% stop   |  top volatile pairs across all of Kraken",
-    },
-    {
-        "id":        "correlation",
-        "name":      "Correlation",
-        "script":    "correlation_bot.py",
-        "live_args": [],
-        "dry_args":  ["--dry"],
-        "pair":      "XBTUSD",
-        "desc":      "8% target / 4% stop   |  buys when 2+ coins oversold simultaneously",
-    },
-    {
-        "id":        "cheap_futures",
-        "name":      "Cheap Futures",
-        "script":    "cheap_futures_bot.py",
-        "live_args": ["--scan"],
-        "dry_args":  ["--scan", "--dry"],
-        "pair":      "SOLUSD",
-        "desc":      "15% target / 3% stop  |  SOL/ADA/DOGE volatility scanner",
-    },
-]
-
-# ─── Bot process management ───────────────────────────────────────────────────
-
-class BotProcess:
-    """Wraps a running bot subprocess and drains its stdout into a queue."""
-
-    def __init__(self, bot_id: str, proc: subprocess.Popen, mode: str):
-        self.bot_id    = bot_id
-        self.proc      = proc
-        self.mode      = mode
-        self.started   = datetime.now().strftime("%H:%M:%S")
-        self.last_line = ""
-        self.last_seen = ""
-        self._q: queue.Queue    = queue.Queue(maxsize=200)
-        self._history: deque    = deque(maxlen=500)
-        self._history_lock      = threading.Lock()
-        t = threading.Thread(target=self._drain, daemon=True)
-        t.start()
-
-    def _drain(self):
-        for line in self.proc.stdout:
-            stripped = line.rstrip()
-            if stripped:
-                self.last_line = stripped
-                self.last_seen = datetime.now().strftime("%H:%M:%S")
-                with self._history_lock:
-                    self._history.append(stripped)
-                try:
-                    self._q.put_nowait(stripped)
-                except queue.Full:
-                    try:
-                        self._q.get_nowait()
-                        self._q.put_nowait(stripped)
-                    except queue.Empty:
-                        pass
-
-    def get_history(self) -> list:
-        with self._history_lock:
-            return list(self._history)
-
-    def history_len(self) -> int:
-        with self._history_lock:
-            return len(self._history)
-
-    def running(self) -> bool:
-        return self.proc.poll() is None
-
-    def pop_output(self) -> list:
-        lines = []
-        try:
-            while True:
-                lines.append(self._q.get_nowait())
-        except queue.Empty:
-            pass
-        return lines
-
-    def stop(self):
-        if self.running():
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
+AMBER = "#ffb000"
+TONES = {"up": "bold #3ddc84", "down": "bold #ff5f5f", "warn": "#ffd479", "dim": "#7a6233"}
 
 
-# bot_id -> BotProcess | None
-_procs = {b["id"]: None for b in BOTS}
+def cell(value) -> Text:
+    if isinstance(value, tuple):
+        text, tone = value
+        return Text(str(text), style=TONES.get(tone, ""))
+    return Text("" if value is None else str(value))
 
 
-def start_bot(bot_id: str, dry: bool = False) -> bool:
-    if _procs[bot_id] and _procs[bot_id].running():
-        return False
-    bot  = next(b for b in BOTS if b["id"] == bot_id)
-    args = bot["dry_args"] if dry else bot["live_args"]
-    cmd  = [sys.executable, "-u", os.path.join(SCRIPT_DIR, bot["script"])] + args
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        cwd=SCRIPT_DIR, text=True, bufsize=1,
-    )
-    _procs[bot_id] = BotProcess(bot_id, proc, "dry" if dry else "live")
-    return True
+class Panel(Vertical):
+    """One of the four screens. Shows a View from terminal_data."""
 
-
-def stop_bot(bot_id: str) -> bool:
-    bp = _procs[bot_id]
-    if not bp or not bp.running():
-        return False
-    bp.stop()
-    _procs[bot_id] = None
-    return True
-
-
-def bot_running(bot_id: str) -> bool:
-    bp = _procs[bot_id]
-    return bool(bp and bp.running())
-
-
-# ─── Widgets ──────────────────────────────────────────────────────────────────
-
-class BotCard(Static):
-    """Card showing one bot's status and controls."""
-
-    def __init__(self, bot: dict, **kwargs):
-        super().__init__(**kwargs)
-        self.bot    = bot
-        self.bot_id = bot["id"]
+    def __init__(self, index: int, code: str, arg: str = ""):
+        super().__init__(id=f"panel{index}")
+        self.index = index
+        self.code = code
+        self.arg = arg
+        self.busy = False
+        self.loaded_at = 0.0
 
     def compose(self) -> ComposeResult:
-        bid = self.bot_id
-        yield Label("[bold]" + self.bot["name"] + "[/bold]  [dim]" + self.bot["desc"] + "[/dim]")
-        yield Label("  Stopped", id="status_" + bid)
-        yield Label("", id="heartbeat_" + bid, classes="heartbeat")
-        with Horizontal(classes="btn-row"):
-            yield Button("Live",    id="live_" + bid, variant="success")
-            yield Button("Dry Run", id="dry_"  + bid, variant="primary")
-            yield Button("Stop",    id="stop_" + bid, variant="error")
-            yield Button("Logs",    id="logs_" + bid, variant="default")
-
-    def refresh_status(self):
-        bp      = _procs[self.bot_id]
-        status  = self.query_one("#status_"    + self.bot_id, Label)
-        heartbeat = self.query_one("#heartbeat_" + self.bot_id, Label)
-        if bp and bp.running():
-            if bp.mode == "live":
-                status.update("[green]  LIVE  since " + bp.started + "[/green]")
-            else:
-                status.update("[cyan]  DRY RUN  since " + bp.started + "[/cyan]")
-            if bp.last_line:
-                # Strip emoji/whitespace clutter, cap length
-                clean = bp.last_line.strip().lstrip("  ").replace("  ", " ")
-                heartbeat.update(
-                    "[dim]" + bp.last_seen + "  " + clean[:65] + "[/dim]"
-                )
-        else:
-            status.update("  Stopped")
-            heartbeat.update("")
-
-
-class MarketPanel(Static):
-    """Live BTC market data."""
-
-    def compose(self) -> ComposeResult:
-        yield Label("[bold]MARKET[/bold]")
-        yield Rule()
-        yield Label("Fetching...", id="mkt_btc")
-
-    def refresh_data(self):
-        try:
-            t = get_ticker("XBTUSD")
-            if t:
-                price    = float(t["c"][0])
-                open_24h = float(t["o"])
-                chg      = (price - open_24h) / open_24h * 100
-                color    = "green" if chg >= 0 else "red"
-                sign     = "+" if chg >= 0 else ""
-                ask      = float(t["a"][0])
-                bid_p    = float(t["b"][0])
-                spread   = ask - bid_p
-                self.query_one("#mkt_btc", Label).update(
-                    "BTC  [bold]$" + f"{price:,.2f}" + "[/bold]  "
-                    "[" + color + "]" + sign + f"{chg:.2f}%" + " 24h[/" + color + "]  "
-                    "[dim]spread $" + f"{spread:.2f}" + "[/dim]"
-                )
-            else:
-                self.query_one("#mkt_btc", Label).update("[red]No ticker data[/red]")
-        except Exception as e:
-            self.query_one("#mkt_btc", Label).update("[red]" + str(e) + "[/red]")
-
-
-class BalancesPanel(Static):
-    """Account balances — dynamically shows everything you actually hold."""
-
-    # Known Kraken asset key → (display name, USD pair for price lookup)
-    # Anything not listed here will be shown with its raw key and no USD price
-    _KNOWN = {
-        "ZUSD":  ("USD",   None),
-        "XXBT":  ("BTC",   "XBTUSD"),
-        "XETH":  ("ETH",   "ETHUSD"),
-        "SOL":   ("SOL",   "SOLUSD"),
-        "XDG":   ("DOGE",  "XDGUSD"),
-        "XDOGE": ("DOGE",  "XDGUSD"),
-        "DOT":   ("DOT",   "DOTUSD"),
-        "XXRP":  ("XRP",   "XRPUSD"),
-        "ADA":   ("ADA",   "ADAUSD"),
-        "LINK":  ("LINK",  "LINKUSD"),
-        "AVAX":  ("AVAX",  "AVAXUSD"),
-        "MATIC": ("MATIC", "MATICUSD"),
-        "ATOM":  ("ATOM",  "ATOMUSD"),
-        "WAR":   ("WAR",   "WARUSD"),
-        "XPL":   ("XPL",   "XPLUSD"),
-        "BTCZ":  ("BTCZ",  "BTCZUSD"),
-        "SOXS":  ("SOXS",  "SOXSUSD"),
-        "UNI":   ("UNI",   "UNIUSD"),
-        "AAVE":  ("AAVE",  "AAVEUSD"),
-    }
-
-    def compose(self) -> ComposeResult:
-        yield Label("[bold]BALANCES[/bold]")
-        yield Rule()
-        yield Label("Fetching...", id="bal_data")
-
-    def refresh_data(self):
-        try:
-            balances = get_balance()
-            if not balances:
-                self.query_one("#bal_data", Label).update("[red]Auth error — check .env[/red]")
-                return
-
-            lines       = []
-            total_usd   = 0.0
-            price_cache = {}
-
-            # Sort: USD first, then by USD value descending
-            def get_usd_val(item):
-                key, amt_str = item
-                amt = float(amt_str)
-                if amt < 1e-8:
-                    return -1
-                if key == "ZUSD":
-                    return amt + 1e9  # always first
-                known = self._KNOWN.get(key)
-                if not known or not known[1]:
-                    return 0
-                pair = known[1]
-                if pair not in price_cache:
-                    try:
-                        tk = get_ticker(pair)
-                        price_cache[pair] = float(tk["c"][0]) if tk else 0.0
-                    except Exception:
-                        price_cache[pair] = 0.0
-                return float(amt_str) * price_cache[pair]
-
-            sorted_balances = sorted(balances.items(), key=get_usd_val, reverse=True)
-
-            for key, amt_str in sorted_balances:
-                amt = float(amt_str)
-                if amt < 1e-8:
-                    continue
-
-                known = self._KNOWN.get(key)
-                display = known[0] if known else key
-                pair    = known[1] if known else None
-
-                if pair is None and key != "ZUSD":
-                    # Unknown asset — show without USD value
-                    lines.append(display.ljust(6) + f"{amt:.6g}")
-                    continue
-
-                if key == "ZUSD":
-                    total_usd += amt
-                    lines.append("USD   [bold]$" + f"{amt:,.2f}" + "[/bold]")
-                    continue
-
-                if pair not in price_cache:
-                    try:
-                        tk = get_ticker(pair)
-                        price_cache[pair] = float(tk["c"][0]) if tk else 0.0
-                    except Exception:
-                        price_cache[pair] = 0.0
-
-                price   = price_cache[pair]
-                usd_val = amt * price
-                total_usd += usd_val
-
-                lines.append(
-                    display.ljust(6) + f"{amt:.6g}" +
-                    "  [dim]approx $" + f"{usd_val:,.2f}" + "[/dim]"
-                )
-
-            lines.append("")
-            color = "green" if total_usd > 0 else "white"
-            lines.append("[bold][" + color + "]Total  $" + f"{total_usd:,.2f}" + "[/" + color + "][/bold]")
-            self.query_one("#bal_data", Label).update("\n".join(lines))
-
-        except Exception as e:
-            self.query_one("#bal_data", Label).update("[red]" + str(e) + "[/red]")
-
-
-class PnlPanel(Static):
-    """Realized P&L from Kraken trade history."""
-
-    def compose(self) -> ComposeResult:
-        yield Label("[bold]P&L  (recent trades)[/bold]")
-        yield Rule()
-        yield Label("Fetching...", id="pnl_data")
-
-    def refresh_data(self):
-        try:
-            from kraken_connection import get_trade_history
-            trades = get_trade_history(count=50)
-            if not trades:
-                self.query_one("#pnl_data", Label).update("[dim]No trade history[/dim]")
-                return
-
-            open_buys = {}
-            realized  = []
-
-            for t in sorted(trades, key=lambda x: x["time"]):
-                pair = t["pair"]
-                if t["type"] == "buy":
-                    open_buys.setdefault(pair, []).append(t)
-                elif t["type"] == "sell" and open_buys.get(pair):
-                    buy = open_buys[pair].pop(0)
-                    pnl = t["cost"] - t["fee"] - buy["cost"] - buy["fee"]
-                    realized.append((pair, pnl, t["time"]))
-
-            if not realized:
-                self.query_one("#pnl_data", Label).update("[dim]No completed round-trips yet[/dim]")
-                return
-
-            total = sum(p for _, p, _ in realized)
-            wins  = sum(1 for _, p, _ in realized if p > 0)
-            lines = []
-
-            for pair, pnl, ts in reversed(realized[-8:]):
-                color = "green" if pnl >= 0 else "red"
-                sign  = "+" if pnl >= 0 else ""
-                dt    = datetime.fromtimestamp(ts).strftime("%m/%d %H:%M")
-                lines.append(
-                    "[" + color + "]" + sign + "$" + f"{pnl:.2f}" + "[/" + color + "]"
-                    "  " + pair + "  [dim]" + dt + "[/dim]"
-                )
-
-            lines.append("")
-            color_t = "green" if total >= 0 else "red"
-            sign_t  = "+" if total >= 0 else ""
-            lines.append(
-                "[bold][" + color_t + "]" + sign_t + "$" + f"{total:.2f}" +
-                " total[/" + color_t + "]  [dim]" +
-                str(wins) + "/" + str(len(realized)) + " wins[/dim][/bold]"
-            )
-            self.query_one("#pnl_data", Label).update("\n".join(lines))
-
-        except Exception as e:
-            self.query_one("#pnl_data", Label).update("[red]" + str(e) + "[/red]")
-
-
-# ─── Bot log modal ────────────────────────────────────────────────────────────
-
-class BotLogScreen(ModalScreen):
-    """Full-screen modal showing a bot's raw stdout — streaming live."""
-
-    BINDINGS = [
-        ("escape", "dismiss",  "Close"),
-        ("c",      "copy_log", "Copy to clipboard"),
-    ]
-
-    def __init__(self, bot: dict, **kwargs):
-        super().__init__(**kwargs)
-        self.bot             = bot
-        self._history_offset = 0
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="log_modal"):
-            yield Label(
-                "[bold]" + self.bot["name"] + "[/bold]  —  live output"
-                "   [dim]ESC close  |  C copy[/dim]"
-            )
-            yield Rule()
-            yield RichLog(id="bot_log_view", highlight=True, markup=False,
-                          wrap=True, auto_scroll=True)
+        yield Static("", classes="ptitle")
+        yield Sparkline([], classes="spark")
+        yield DataTable(zebra_stripes=True, cursor_type="row", show_cursor=False)
+        yield Static("", classes="note")
 
     def on_mount(self) -> None:
-        log = self.query_one("#bot_log_view", RichLog)
-        bp  = _procs[self.bot["id"]]
-        if bp:
-            for line in bp.get_history():
-                log.write(line)
-            self._history_offset = bp.history_len()
-        else:
-            log.write("  Bot is not running — start it from the main screen first.")
-        self.set_interval(0.5, self._poll)
+        self.query_one(".spark").display = False
+        self.set_title("loading…")
 
-    def _poll(self) -> None:
-        bp = _procs[self.bot["id"]]
-        if not bp:
-            return
-        history = bp.get_history()
-        new_lines = history[self._history_offset:]
-        if new_lines:
-            log = self.query_one("#bot_log_view", RichLog)
-            for line in new_lines:
-                log.write(line)
-            self._history_offset = len(history)
+    def set_title(self, status: str = "") -> None:
+        label = f" {self.index}  {self.code}{(' ' + self.arg) if self.arg else ''}"
+        self.query_one(".ptitle", Static).update(
+            Text.assemble((label, "bold"), ("   " + status, "#7a6233")))
 
-    def action_copy_log(self) -> None:
-        bp = _procs[self.bot["id"]]
-        lines = bp.get_history() if bp else []
-        if not lines:
-            self.notify("Nothing to copy", severity="warning")
-            return
-        text = "\n".join(lines)
-        try:
-            proc = subprocess.Popen(
-                ["xclip", "-selection", "clipboard"],
-                stdin=subprocess.PIPE
-            )
-            proc.communicate(input=text.encode())
-            self.notify(str(len(lines)) + " lines copied to clipboard")
-        except Exception as e:
-            self.notify("Copy failed: " + str(e), severity="error")
+    def show(self, view: td.View) -> None:
+        self.busy = False
+        self.loaded_at = time.time()
+        title = Text(f" {self.index}  ", style="bold")
+        title.append(view.title, style="bold")
+        title.append(f"   {datetime.now().strftime('%H:%M:%S')}", style="#7a6233")
+        self.query_one(".ptitle", Static).update(title)
+
+        spark = self.query_one(".spark", Sparkline)
+        spark.display = bool(view.series)
+        if view.series:
+            spark.data = view.series
+
+        table = self.query_one(DataTable)
+        table.clear(columns=True)
+        if view.columns:
+            table.add_columns(*[Text(c, style="bold") for c in view.columns])
+            table.add_rows([[cell(v) for v in row] for row in view.rows])
+        self.query_one(".note", Static).update(Text(view.note, style="#a07c2a"))
+
+    def on_click(self) -> None:
+        self.app.select_panel(self.index)
 
 
-class QuitScreen(ModalScreen):
-    """Ask whether to stop bots or keep them running on exit."""
-
-    BINDINGS = [("escape", "dismiss", "Cancel")]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="quit_modal"):
-            yield Label("[bold]Quit GooB Trade Master?[/bold]")
-            yield Rule()
-            yield Label("What should happen to running bots?")
-            yield Label("")
-            with Horizontal(classes="btn-row"):
-                yield Button("Stop All & Quit",   id="quit_stop",  variant="error")
-                yield Button("Keep Running & Quit", id="quit_keep", variant="success")
-                yield Button("Cancel",             id="quit_cancel", variant="default")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "quit_stop":
-            self.dismiss("stop")
-        elif event.button.id == "quit_keep":
-            self.dismiss("keep")
-        else:
-            self.dismiss(None)
-
-
-# ─── App ──────────────────────────────────────────────────────────────────────
-
-class GooB(App):
-
-    TITLE = "GooB Trade Master"
-
+class GoobTerminal(App):
+    TITLE = "GooB Terminal"
+    CSS = f"""
+    Screen {{ background: #000000; color: {AMBER}; }}
+    #topbar {{ height: 1; background: {AMBER}; color: #000000; text-style: bold; }}
+    #cmd {{ height: 3; background: #000000; color: {AMBER}; border: tall #5a3e00; }}
+    #cmd:focus {{ border: tall {AMBER}; }}
+    #grid {{ grid-size: 2 2; grid-gutter: 0; }}
+    Panel {{ border: round #4a3300; background: #000000; }}
+    Panel.-active {{ border: heavy {AMBER}; }}
+    .ptitle {{ height: 1; background: #1f1500; color: {AMBER}; }}
+    Panel.-active .ptitle {{ background: #3a2700; }}
+    .spark {{ height: 5; margin: 0 1; }}
+    .spark > .sparkline--max-color {{ color: {AMBER}; }}
+    .spark > .sparkline--min-color {{ color: #5a3e00; }}
+    DataTable {{ background: #000000; color: {AMBER}; height: 1fr; scrollbar-size-vertical: 1; }}
+    DataTable > .datatable--header {{ background: #1f1500; color: {AMBER}; }}
+    DataTable > .datatable--even-row {{ background: #0d0900; }}
+    .note {{ height: auto; max-height: 2; color: #a07c2a; padding: 0 1; }}
+    Footer {{ background: #1f1500; }}
+    """
     BINDINGS = [
-        ("r", "refresh", "Refresh"),
-        ("q", "quit",    "Quit"),
+        Binding("f1", "select_panel(1)", "Panel 1"),
+        Binding("f2", "select_panel(2)", "Panel 2"),
+        Binding("f3", "select_panel(3)", "Panel 3"),
+        Binding("f4", "select_panel(4)", "Panel 4"),
+        Binding("ctrl+r", "refresh_all", "Refresh"),
+        Binding("escape", "clear_cmd", "Clear", show=False),
+        Binding("ctrl+q", "quit", "Quit"),
     ]
 
-    CSS = """
-    Screen {
-        layout: vertical;
-        background: $surface;
-    }
+    def __init__(self, layout: list | None = None, save_layout: bool = True):
+        super().__init__()
+        self.layout_codes = layout or self._load_layout()
+        self.save_layout_enabled = save_layout
+        self.active = 1
+        self.status_msg = "Type HELP and press Enter for all function codes"
 
-    #top_row {
-        layout: horizontal;
-        height: 1fr;
-    }
+    # ── layout ──────────────────────────────────────────
+    @staticmethod
+    def _load_layout() -> list:
+        try:
+            saved = json.loads(LAYOUT_FILE.read_text())
+            if len(saved) == 4 and all(code in td.SCREENS for code, _ in saved):
+                return [tuple(x) for x in saved]
+        except (OSError, ValueError, TypeError):
+            pass
+        return list(DEFAULT_LAYOUT)
 
-    #left_col {
-        width: 55;
-        padding: 0 1;
-        border-right: solid $primary-darken-2;
-    }
+    def _save_layout(self) -> None:
+        if not self.save_layout_enabled:
+            return
+        try:
+            LAYOUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+            LAYOUT_FILE.write_text(json.dumps([[p.code, p.arg] for p in self.panels]))
+        except OSError:
+            pass
 
-    #bot_scroll {
-        height: 1fr;
-    }
+    @property
+    def panels(self) -> list:
+        return [self.query_one(f"#panel{i}", Panel) for i in range(1, 5)]
 
-    #right_col {
-        width: 1fr;
-        layout: vertical;
-        padding: 0 1;
-    }
-
-    BotCard {
-        border: solid $primary-darken-3;
-        padding: 0 1 1 1;
-        margin-bottom: 1;
-        height: auto;
-    }
-
-    .heartbeat {
-        color: $text-muted;
-        height: 1;
-        overflow: hidden;
-    }
-
-    .btn-row {
-        height: 3;
-        margin-top: 1;
-    }
-
-    Button {
-        min-width: 10;
-        margin-right: 1;
-    }
-
-    ScrollBar {
-        width: 1;
-    }
-
-    ScrollBar > .scrollbar--vertical-bar {
-        color: $primary-darken-2;
-    }
-
-    BotLogScreen {
-        align: center middle;
-    }
-
-    QuitScreen {
-        align: center middle;
-    }
-
-    #quit_modal {
-        width: 60;
-        height: auto;
-        background: $surface;
-        border: thick $error;
-        padding: 2 4;
-    }
-
-    #quit_modal Label {
-        width: 100%;
-        text-align: center;
-    }
-
-    .btn-row {
-        width: 100%;
-        height: auto;
-        align: center middle;
-        margin-top: 1;
-    }
-
-    .btn-row Button {
-        margin: 0 1;
-    }
-
-    #log_modal {
-        width: 92%;
-        height: 88%;
-        background: $surface;
-        border: thick $primary;
-        padding: 1 2;
-    }
-
-    #bot_log_view {
-        height: 1fr;
-    }
-
-    MarketPanel {
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    BalancesPanel {
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    PnlPanel {
-        height: 1fr;
-    }
-
-    #log {
-        height: 9;
-        border-top: solid $primary-darken-2;
-        padding: 0 1;
-        background: $surface-darken-1;
-    }
-    """
-
+    # ── UI ──────────────────────────────────────────────
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
-        with Horizontal(id="top_row"):
-            with Vertical(id="left_col"):
-                yield Label("[bold]BOTS[/bold]")
-                yield Rule()
-                with ScrollableContainer(id="bot_scroll"):
-                    for bot in BOTS:
-                        yield BotCard(bot, id="card_" + bot["id"])
-            with Vertical(id="right_col"):
-                yield MarketPanel(id="market_panel")
-                yield BalancesPanel(id="bal_panel")
-                yield PnlPanel(id="pnl_panel")
-        yield RichLog(id="log", highlight=True, markup=True, wrap=True)
+        yield Static("", id="topbar")
+        yield Input(placeholder="Function code, e.g.  MKT · POS · CHRT SOL · 3 BT · HELP", id="cmd")
+        with Grid(id="grid"):
+            for i, (code, arg) in enumerate(self.layout_codes, start=1):
+                yield Panel(i, code, arg)
         yield Footer()
 
     def on_mount(self) -> None:
-        self._log("GooB Trade Master ready")
-        self.refresh_all()
-        self.set_interval(15, self.refresh_all)
+        self.select_panel(1)
+        for p in self.panels:
+            self.load_panel(p)
+        self.set_interval(1, self._tick)
+        self.query_one("#cmd", Input).focus()
 
-    def _log(self, msg: str):
-        ts = datetime.now().strftime("%H:%M:%S")
-        self.query_one("#log", RichLog).write("[dim]" + ts + "[/dim]  " + msg)
+    def _tick(self) -> None:
+        now = datetime.now()
+        utc = datetime.now(timezone.utc).strftime("%H:%M UTC")
+        bar = Text.assemble(
+            (" GOOB TERMINAL ", "bold reverse"), ("  ", ""),
+            (now.strftime("%a %d %b  %H:%M:%S"), "bold"), (f"  ({utc})", ""),
+            (f"   │  panel {self.active}  │  ", ""), (self.status_msg, ""))
+        self.query_one("#topbar", Static).update(bar)
+        for p in self.panels:
+            refresh = td.SCREENS[p.code][1]
+            if refresh and not p.busy and time.time() - p.loaded_at >= refresh:
+                self.load_panel(p)
 
-    # Lines containing these keywords bubble up to the log; everything else
-    # is silently consumed and shown only in the card heartbeat.
-    LOG_KEYWORDS = {
-        "buy", "sell", "order", "profit", "stop loss", "target",
-        "signal", "momentum", "pump", "position", "error", "failed",
-        "exception", "cancelled", "filled",
-    }
+    # ── data loading (in a thread: network calls never freeze the UI) ──
+    def load_panel(self, panel: Panel) -> None:
+        if panel.busy:
+            return
+        panel.busy = True
+        panel.set_title("loading…")
+        fn = td.SCREENS[panel.code][0]
+        code, arg = panel.code, panel.arg
 
-    def refresh_all(self):
-        self.query_one("#market_panel", MarketPanel).refresh_data()
-        self.query_one("#bal_panel",    BalancesPanel).refresh_data()
-        self.query_one("#pnl_panel",    PnlPanel).refresh_data()
-        for bot in BOTS:
-            card = self.query_one("#card_" + bot["id"], BotCard)
-            bp   = _procs[bot["id"]]
-            if bp:
-                for line in bp.pop_output():
-                    lower = line.lower()
-                    if any(kw in lower for kw in self.LOG_KEYWORDS):
-                        self._log("[dim]" + bot["name"] + ":[/dim] " + line.strip())
-            card.refresh_status()
+        def job():
+            try:
+                view = fn(arg) if arg else fn()
+            except Exception as e:  # show the problem in the panel instead of crashing
+                view = td.View(f"{code}  error", note=f"{type(e).__name__}: {e}")
+            if (panel.code, panel.arg) == (code, arg):
+                self.call_from_thread(panel.show, view)
+            else:
+                panel.busy = False
 
-    def action_refresh(self):
-        self._log("Manual refresh")
-        self.refresh_all()
+        self.run_worker(job, thread=True, exit_on_error=False)
 
-    def action_quit(self):
-        for bot in BOTS:
-            stop_bot(bot["id"])
-        self.exit()
+    # ── commands ───────────────────────────────────────
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.execute_code(event.value)
+        event.input.value = ""
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        bid_str = event.button.id
+    def execute_code(self, text: str) -> None:
+        parts = text.strip().split()
+        if not parts:
+            return
+        target = self.active
+        if parts[0] in ("1", "2", "3", "4"):
+            target = int(parts.pop(0))
+        if not parts:
+            self.select_panel(target)
+            return
+        code, arg = parts[0].upper(), " ".join(parts[1:])
+        if code not in td.SCREENS:
+            self.status_msg = f"Unknown code {code!r} — type HELP"
+            return
+        panel = self.query_one(f"#panel{target}", Panel)
+        panel.code, panel.arg, panel.busy = code, arg, False
+        self.select_panel(target)
+        self.load_panel(panel)
+        self.status_msg = f"{code} → panel {target}"
+        self._save_layout()
 
-        for bot in BOTS:
-            bid = bot["id"]
+    def select_panel(self, index: int) -> None:
+        self.active = index
+        for p in self.panels:
+            p.set_class(p.index == index, "-active")
 
-            if bid_str == "live_" + bid:
-                if bot_running(bid):
-                    self._log("[yellow]" + bot["name"] + " already running[/yellow]")
-                else:
-                    start_bot(bid, dry=False)
-                    self._log("[green]" + bot["name"] + " started  LIVE[/green]")
-                    self.query_one("#card_" + bid, BotCard).refresh_status()
-                return
+    def action_select_panel(self, index: int) -> None:
+        self.select_panel(index)
+        self.query_one("#cmd", Input).focus()
 
-            if bid_str == "dry_" + bid:
-                if bot_running(bid):
-                    self._log("[yellow]" + bot["name"] + " running — stop first[/yellow]")
-                else:
-                    start_bot(bid, dry=True)
-                    self._log("[cyan]" + bot["name"] + " started  DRY RUN[/cyan]")
-                    self.query_one("#card_" + bid, BotCard).refresh_status()
-                return
+    def action_refresh_all(self) -> None:
+        for p in self.panels:
+            self.load_panel(p)
+        self.status_msg = "Refreshing all panels"
 
-            if bid_str == "stop_" + bid:
-                if stop_bot(bid):
-                    self._log("[red]" + bot["name"] + " stopped[/red]")
-                else:
-                    self._log("[dim]" + bot["name"] + " wasn't running[/dim]")
-                self.query_one("#card_" + bid, BotCard).refresh_status()
-                return
-
-            if bid_str == "logs_" + bid:
-                self.push_screen(BotLogScreen(bot))
-                return
+    def action_clear_cmd(self) -> None:
+        self.query_one("#cmd", Input).value = ""
 
 
 if __name__ == "__main__":
-    GooB().run()
+    GoobTerminal().run()

@@ -2,31 +2,39 @@
 """
 bot_monitor_cron.py — Scheduled health check and parameter tuning.
 
-Run via cron every 30 minutes:
-    */30 * * * * cd /home/jasonbohan2/kraken && /home/jasonbohan2/kraken/venv/bin/python bot_monitor_cron.py >> logs/monitor_cron.log 2>&1
+Run via cron every 30 minutes, with the venv's python (bots are restarted
+with the same interpreter that runs this script):
+    */30 * * * * cd /path/to/kraken && venv/bin/python bot_monitor_cron.py >> logs/monitor_cron.log 2>&1
 
 What it does:
   1. Health check: restart any crashed bot screen sessions
-  2. Learning: run tune_config() for bots with enough closed trades
-  3. Protection: scan for unprotected positions and add OTO brackets
+  2. Learning: report win rate / P&L from the learning DB
+  3. Protection: stop-losses (and take-profit sells) for holdings NO bot manages.
+     Pairs listed in a bot's state/*.json file are left to that bot.
   4. Report: print summary (and optionally Telegram)
 """
 
 import os
+import shlex
 import subprocess
+import sys
 import time
 from datetime import datetime
 
 # Ensure we run from the project directory (needed for cron)
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(PROJECT_DIR)
+os.makedirs("logs", exist_ok=True)
 
 from dotenv import load_dotenv
 load_dotenv()
 
 from kraken_connection import (
     get_balance, get_ticker, get_open_orders, place_order, get_min_order_info,
-    cancel_order,
+    cancel_order, pair_altname,
 )
+from position_store import all_bot_positions
+from bot_registry import BOTS
 from position_guardian import _fmt_price
 from learning_engine import LearningEngine
 from market_sentiment import get_market_sentiment, format_sentiment, should_buy as check_sentiment
@@ -37,19 +45,10 @@ from market_sentiment import get_market_sentiment, format_sentiment, should_buy 
 
 LEARNER = LearningEngine()
 
-# Expected bot screen sessions and their launch commands
-EXPECTED_BOTS = {
-    "bot_BTC":     "python stock_swing_bot.py BTC >> logs/BTC_swing.log 2>&1",
-    "bot_ETH":     "python stock_swing_bot.py ETH >> logs/ETH_swing.log 2>&1",
-    "bot_SOL":     "python stock_swing_bot.py SOL >> logs/SOL_swing.log 2>&1",
-    "bot_ADA":     "python stock_swing_bot.py ADA >> logs/ADA_swing.log 2>&1",
-    "bot_DOT":     "python dot_swing_bot.py >> logs/DOT_swing.log 2>&1",
-    "bot_DOGE":    "python doge_swing_bot.py --monitor >> logs/DOGE_swing.log 2>&1",
-    "bot_BTC_MOM": "python btc_swing_bot.py >> logs/BTC_momentum.log 2>&1",
-    "bot_HFT":     "python dynamic_hft_bot.py >> logs/HFT.log 2>&1",
-    "telegram_bot": "python telegram_bot.py >> logs/telegram_bot.log 2>&1",
-    "bot_MOMENTUM": "python momentum_scanner_bot.py >> logs/MOMENTUM_scanner.log 2>&1",
-}
+# Expected bot screen sessions: name -> (script args, log file, optional key profile).
+# A key profile is used only if KRAKEN_API_KEY_<PROFILE> is set in .env; separate
+# keys per process avoid "EAPI:Invalid nonce" (see .env.example).
+EXPECTED_BOTS = {name: (b["args"], b["log"], b["profile"]) for name, b in BOTS.items()}
 
 # Bot name -> (learning engine bot_name, symbols it trades)
 BOT_LEARNING = {
@@ -59,6 +58,24 @@ BOT_LEARNING = {
     "bot_ADA":     ("stock_swing_bot", ["ADA"]),
     "bot_HFT":     ("dynamic_hft_bot", None),  # None = check all symbols in DB
 }
+
+
+def bot_command(args: list[str], log_path: str, profile: str | None) -> str:
+    """Shell command to start a bot with this interpreter, appending to its log."""
+    env = ""
+    if profile and os.getenv(f"KRAKEN_API_KEY_{profile}"):
+        env = f"KRAKEN_KEY_PROFILE={profile} "
+    cmd = " ".join(shlex.quote(a) for a in [sys.executable, "-u", *args])
+    return f"{env}{cmd} >> {shlex.quote(log_path)} 2>&1"
+
+
+def bot_owned_pairs() -> set[str]:
+    """Altnames of every pair a bot is currently managing (from state/*.json)."""
+    owned = set()
+    for positions in all_bot_positions().values():
+        for pair in positions:
+            owned.add(pair_altname(pair))
+    return owned
 
 # Asset -> pair mapping for protection scan
 ASSET_TO_PAIR = {
@@ -131,14 +148,14 @@ def health_check() -> list[str]:
     running = get_running_screens()
     restarted = []
 
-    for name, cmd in EXPECTED_BOTS.items():
+    for name, (args, log_path, profile) in EXPECTED_BOTS.items():
         if name in running:
             continue
 
         print(f"  [{ts()}] RESTART: {name} is not running — relaunching")
         subprocess.run(
-            ["screen", "-dmS", name, "bash", "-c", cmd],
-            cwd="/home/jasonbohan2/kraken",
+            ["screen", "-dmS", name, "bash", "-c", bot_command(args, log_path, profile)],
+            cwd=PROJECT_DIR,
         )
         restarted.append(name)
 
@@ -206,6 +223,9 @@ def protect_positions() -> list[str]:
 
     balances = get_balance()
     open_orders = get_open_orders()
+    owned = bot_owned_pairs()
+    if owned:
+        print(f"  [{ts()}] Managed by bots (skipped): {', '.join(sorted(owned))}")
 
     # Categorize existing sell orders by pair
     pair_orders: dict[str, list[dict]] = {}  # pair -> [{"txid", "descr", "type"}, ...]
@@ -213,6 +233,8 @@ def protect_positions() -> list[str]:
         descr = order.get("descr", {})
         if descr.get("type") == "sell":
             pair = descr.get("pair", "")
+            if pair_altname(pair) in owned:
+                continue
             order_type = descr.get("ordertype", "")
             close_str = descr.get("close", "")
             entry = {"txid": txid, "descr": descr, "order_type": order_type,
@@ -293,6 +315,8 @@ def protect_positions() -> list[str]:
         if descr.get("type") != "sell" or descr.get("ordertype") != "stop-loss":
             continue
         pair = descr.get("pair", "")
+        if pair_altname(pair) in owned:
+            continue  # the bot handles its own take-profit
         sl_price = float(descr.get("price", 0))
         vol = float(order.get("vol", 0))
         if sl_price <= 0 or vol <= 0:
@@ -329,7 +353,7 @@ def protect_positions() -> list[str]:
             continue
 
         pair = ASSET_TO_PAIR.get(asset)
-        if not pair or pair in protected_pairs_set:
+        if not pair or pair in protected_pairs_set or pair_altname(pair) in owned:
             continue
 
         ticker = get_ticker(pair)
@@ -396,7 +420,12 @@ def main():
 
     # 3. Protection
     print(f"\n  [Protection]")
-    protected_notes = protect_positions()
+    try:
+        protected_notes = protect_positions()
+    except Exception as e:
+        # e.g. open orders could not be fetched — skip rather than act blind
+        print(f"  Protection step skipped: {e}")
+        protected_notes = [f"Protection skipped: {e}"]
     if not protected_notes:
         print(f"  All eligible positions protected")
 
