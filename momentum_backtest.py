@@ -233,6 +233,72 @@ def verdict(m: dict, rand_pct: float, wf: dict, doubled: dict) -> str:
     return "Fails: " + "; ".join(fails) + "."
 
 
+def robustness(u: Universe, costs: Costs, default: dict, folds: int = 4) -> dict:
+    """
+    RESEARCH.md #6b: every grid combo over one common window and its two
+    halves, against BTC buy-and-hold; plus the default settings on the
+    walk-forward's unseen periods.
+    """
+    combos = [dict(zip(GRID, vals)) for vals in itertools.product(*GRID.values())]
+    first = max(warmup(c) for c in combos)
+    mid = first + (len(u) - first) // 2
+    btc = {"full": buy_hold(u, [BTC], first, len(u)), "h1": buy_hold(u, [BTC], first, mid),
+           "h2": buy_hold(u, [BTC], mid, len(u))}
+    rows = []
+    for combo in combos:
+        r = {k: stats(simulate(u, combo, costs, start=a, end=b))
+             for k, (a, b) in {"full": (first, len(u)), "h1": (first, mid), "h2": (mid, len(u))}.items()}
+        rows.append({"params": combo, **r,
+                     "beats_sharpe": r["full"]["sharpe"] > btc["full"]["sharpe"],
+                     "beats_both_halves": (r["h1"]["total_return"] > btc["h1"]["total_return"]
+                                           and r["h2"]["total_return"] > btc["h2"]["total_return"])})
+    rows.sort(key=lambda r: r["full"]["sharpe"], reverse=True)
+
+    bounds_first = first + int((len(u) - first) / folds)
+    d = {**strategies.MOMENTUM_DEFAULTS, **default}
+    default_unseen = stats(simulate(u, d, costs, start=bounds_first))["total_return"]
+    btc_unseen = buy_hold(u, [BTC], bounds_first, len(u))["total_return"]
+
+    n = len(rows)
+    sharpe_count = sum(r["beats_sharpe"] for r in rows)
+    halves_count = sum(r["beats_both_halves"] for r in rows)
+    checks = {
+        "two_thirds_beat_btc_sharpe": sharpe_count >= 2 * n / 3,
+        "half_beat_btc_both_halves": halves_count >= n / 2,
+        "default_beats_btc_unseen": default_unseen > btc_unseen,
+    }
+    return {"combos": n, "window_days": len(u) - first, "btc": btc, "rows": rows,
+            "beats_sharpe": sharpe_count, "beats_both_halves": halves_count,
+            "default_unseen": default_unseen, "btc_unseen": btc_unseen,
+            "checks": checks, "robust": all(checks.values())}
+
+
+def print_robustness(r: dict, default: dict) -> None:
+    b = r["btc"]
+    print(f"\n  ══ MOMENTUM ROBUSTNESS · {r['combos']} setting combos · common window {r['window_days']} days ══")
+    print(f"  BTC buy & hold: whole {pct(b['full']['total_return'])} (Sharpe {b['full']['sharpe']:.2f}) | "
+          f"1st half {pct(b['h1']['total_return'])} | 2nd half {pct(b['h2']['total_return'])}")
+    print(f"\n  {'lookback':>8} {'top_k':>5} {'filter':>6} {'Whole':>9} {'Sharpe':>7} {'Max DD':>7} "
+          f"{'1st half':>9} {'2nd half':>9}  beats BTC")
+    for row in r["rows"]:
+        p = row["params"]
+        mark = " ◀ default" if all(p[k] == default.get(k) for k in GRID) else ""
+        tags = ("Sharpe " if row["beats_sharpe"] else "") + ("both-halves" if row["beats_both_halves"] else "")
+        print(f"  {p['lookback']:>8} {p['top_k']:>5} {p['filter_sma']:>6} {pct(row['full']['total_return']):>9} "
+              f"{row['full']['sharpe']:>7.2f} {row['full']['max_drawdown']*100:>6.1f}% "
+              f"{pct(row['h1']['total_return']):>9} {pct(row['h2']['total_return']):>9}  {tags}{mark}")
+    c = r["checks"]
+    ok = lambda x: "PASS" if x else "fail"  # noqa: E731
+    print(f"\n  1. Beat BTC on Sharpe (need ≥ {2*r['combos']/3:.0f}): {r['beats_sharpe']}/{r['combos']} "
+          f"→ {ok(c['two_thirds_beat_btc_sharpe'])}")
+    print(f"  2. Beat BTC in both halves (need ≥ {r['combos']/2:.0f}): {r['beats_both_halves']}/{r['combos']} "
+          f"→ {ok(c['half_beat_btc_both_halves'])}")
+    print(f"  3. Default settings on the walk-forward's unseen periods: {pct(r['default_unseen'])} vs BTC "
+          f"{pct(r['btc_unseen'])} → {ok(c['default_beats_btc_unseen'])}")
+    print("  ➜ " + ("Robust enough to paper-trade (not to trade real money)." if r["robust"] else
+                    "Not robust: stop testing momentum; fall back to DCA + trend filter."))
+
+
 # ─────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────
@@ -246,6 +312,8 @@ def main():
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     ap.add_argument("--random-runs", type=int, default=200)
     ap.add_argument("--folds", type=int, default=4)
+    ap.add_argument("--robustness", action="store_true",
+                    help="run every settings combo over a common window and both halves (RESEARCH.md #6b)")
     args = ap.parse_args()
 
     costs = COST_PRESETS[args.costs]
@@ -270,6 +338,15 @@ def main():
         raise SystemExit("BTC data is required for the market filter.")
     u = Universe(candles)
     start = warmup(params)
+
+    if args.robustness:
+        r = robustness(u, costs, params, args.folds)
+        print_robustness(r, params)
+        REPORT_DIR.mkdir(parents=True, exist_ok=True)
+        out = REPORT_DIR / f"robustness_momentum_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        out.write_text(json.dumps({**r, "costs": asdict(costs), "default": params}, indent=2, default=str))
+        print(f"\n  Report saved: {out}")
+        return
 
     sim = simulate(u, params, costs)
     m = stats(sim)

@@ -80,3 +80,19 @@ period are missing, which flatters any long-only test.
 - Not yet done: how many of the 36 setting combos beat BTC over the whole
   period (robustness), and how the default settings did on the walk-forward's
   unseen periods.
+
+### #6b Robustness check — criteria (written before running)
+
+Same data and costs as #6, no new strategy idea. Every one of the 36 setting
+combos is run over one common window (after the longest warm-up), and the
+window is also split into two halves.
+
+Momentum counts as **robust enough to paper-trade** only if all hold:
+1. At least 2/3 of the 36 combos beat BTC buy-and-hold on Sharpe over the
+   whole window.
+2. At least half of the combos beat BTC buy-and-hold on return in **both**
+   halves separately.
+3. The default settings (28 / 3 / 100) beat BTC buy-and-hold over the
+   walk-forward's unseen periods.
+
+Otherwise: stop testing momentum and fall back to plain DCA + trend filter.

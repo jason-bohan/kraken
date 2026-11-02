@@ -119,5 +119,19 @@ class SimulationTests(unittest.TestCase):
         self.assertAlmostEqual(bh["total_return"], 1.01 ** 49 - 1, places=6)
 
 
+class RobustnessTests(unittest.TestCase):
+    def test_reports_every_combo_and_the_three_checks(self):
+        u = universe(n=700, UPUSD=0.004, FLATUSD=0.0, DOWNUSD=-0.003)
+        r = mb.robustness(u, NO_COST, dict(strategies.MOMENTUM_DEFAULTS))
+        self.assertEqual(r["combos"], 36)
+        self.assertEqual(len(r["rows"]), 36)
+        self.assertEqual(set(r["checks"]), {"two_thirds_beat_btc_sharpe", "half_beat_btc_both_halves",
+                                            "default_beats_btc_unseen"})
+        # UPUSD (+0.4%/day) beats BTC (+0.2%/day); combos that hold it should beat BTC in both halves
+        self.assertGreater(r["beats_both_halves"], 0)
+        sharpes = [row["full"]["sharpe"] for row in r["rows"]]
+        self.assertEqual(sharpes, sorted(sharpes, reverse=True))
+
+
 if __name__ == "__main__":
     unittest.main()
