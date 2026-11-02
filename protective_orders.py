@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-🛡️ Protective Orders Script - One-time limit order placement
-Places stop-loss and take-profit orders on existing holdings using bot strategy.
+🛡️ Protective Orders Script - One-time stop-loss placement
+Places a standalone stop-loss on existing holdings using bot strategy.
+Take-profit is not placed on Kraken: bots / bot_monitor_cron handle TP.
+(Kraken has no OCO; a limit TP with a conditional-close SL leaves the
+position unprotected until the TP fills.)
 
 Usage:
     python3 protective_orders.py
@@ -11,7 +14,8 @@ import os
 import time
 import argparse
 from datetime import datetime
-from kraken_connection import get_balance, get_ticker, get_orderbook, place_order, place_oco_order, get_open_orders, cancel_order
+from kraken_connection import get_balance, get_ticker, get_orderbook, get_open_orders, cancel_order
+from position_guardian import place_exit_orders
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -306,49 +310,34 @@ def place_protective_orders(symbol: str, holdings: float, dry_run: bool = False)
         print(f"  🗑️ Checking for existing orders...")
         open_orders = get_open_orders()
         
-        for order_id, order_data in open_orders.get('open', {}).items():
-            if order_data.get('pair', '') == pair:
-                print(f"  🗑️ Canceling existing order: {order_id}")
-                cancel_result, cancel_info = cancel_order(order_id)
-                if cancel_result:
+        for order_id, order_data in open_orders.items():
+            descr = order_data.get('descr', {})
+            if descr.get('pair', '') == pair and descr.get('type') == 'sell':
+                print(f"  🗑️ Canceling existing sell order: {order_id}")
+                if cancel_order(order_id):
                     print(f"  ✅ Order canceled")
                 else:
-                    print(f"  ❌ Failed to cancel: {cancel_info}")
+                    print(f"  ❌ Failed to cancel {order_id}")
         
-        # Place OCO order (combines stop-loss and take-profit)
-        print(f"  🛡️ Placing OCO order (stop-loss + take-profit)...")
-        oco_result, oco_info = place_oco_order(
-            pair=pair,
-            side="sell",
-            volume=holdings,
-            price=take_profit_price,      # Take-profit limit
-            price2=stop_loss_price,     # Stop-loss trigger
-            validate=False
+        print(f"  🛡️ Placing standalone stop-loss...")
+        exit_orders = place_exit_orders(
+            pair, holdings, entry_price,
+            config["profit_target"], config["stop_loss"],
         )
-        
-        if oco_result:
-            oco_order_ids = oco_info.get('txid', [])
-            print(f"  ✅ OCO order placed: {oco_order_ids}")
-            print(f"  🛡️ Stop-loss: ${stop_loss_price:.{price_precision}f}")
-            print(f"  🎯 Take-profit: ${take_profit_price:.{price_precision}f}")
-        else:
-            print(f"  ❌ OCO order failed: {oco_info}")
+        sl_txid = exit_orders.get("sl")
+        if not sl_txid:
+            print(f"  ❌ Stop-loss not placed")
             return False
         
-        # Send notification
-        msg = f"🛡️ *OCO Protective Order Placed*\n"
+        msg = f"🛡️ *Stop-Loss Placed*\n"
         msg += f"Symbol: {symbol}\n"
         msg += f"Holdings: {holdings:.6f}\n"
         msg += f"Stop Loss: ${stop_loss_price:.{price_precision}f}\n"
-        msg += f"Take Profit Target: ${take_profit_price:.{price_precision}f}\n"
-        msg += f"OCO Order IDs: {oco_order_ids}\n"
-        msg += f"Type: One-Cancels-Other (stop-loss + take-profit)"
+        msg += f"Take Profit Target (watched, not on Kraken): ${take_profit_price:.{price_precision}f}\n"
+        msg += f"Order ID: {sl_txid}"
         tg(msg)
         
-        print(f"  ✅ OCO protective order placed successfully!")
-        print(f"  🛡️ Stop-loss: Active (${stop_loss_price:.{price_precision}f})")
-        print(f"  🎯 Take-profit: Active (${take_profit_price:.{price_precision}f})")
-        print(f"  📊 Type: One-Cancels-Other (OCO)")
+        print(f"  ✅ Stop-loss active (${stop_loss_price:.{price_precision}f}) [{sl_txid}]")
         return True
         
     except Exception as e:

@@ -23,9 +23,10 @@ import argparse
 from datetime import datetime, timedelta
 from kraken_connection import (
     get_ticker, get_ohlc, get_balance, get_orderbook, 
-    place_order, place_oco_order, get_open_orders, cancel_order,
+    place_order, get_open_orders, cancel_order,
     get_asset_pairs
 )
+from position_guardian import place_exit_orders
 
 # 📱 Telegram settings
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -317,13 +318,14 @@ def execute_trade(pair_data, signal, dry_run=False):
         # Check for existing OCO orders on this pair
         try:
             open_orders = get_open_orders()
-            for order_id, order_data in open_orders.get('open', {}).items():
+            for order_id, order_data in open_orders.items():
                 if order_data.get('descr', {}).get('pair') == pair_data['pair']:
                     print(f"  ⚠️ Existing order found: {order_id}")
                     print(f"  💡 Skipping - order already active")
                     return False
         except Exception as e:
-            print(f"  ⚠️ Could not check existing orders: {e}")
+            print(f"  ⚠️ Could not check existing orders, skipping trade: {e}")
+            return False
         
         if usd_balance < 5:  # Minimum $5 for trading
             print(f"  ❌ Insufficient USD balance: ${usd_balance:.2f}")
@@ -352,23 +354,29 @@ def execute_trade(pair_data, signal, dry_run=False):
         print(f"  🎯 Take Profit: ${take_profit_price:.4f} ({take_profit_pct*100:.1f}%)")
         
         if dry_run:
-            print(f"  🔵 [DRY RUN] Would place OCO order")
+            print(f"  🔵 [DRY RUN] Would market buy and place a stop-loss")
             return True
         
-        # Place OCO order
-        print(f"  🛡️ Placing OCO order...")
-        oco_result, oco_info = place_oco_order(
+        # Market buy, then a standalone stop-loss. Take-profit is not placed on
+        # Kraken (no native OCO); bot_monitor_cron.py sells at TP.
+        print(f"  🛒 Placing market buy...")
+        buy_ok, buy_info = place_order(
             pair=pair_data['pair'],
             side="buy",
+            order_type="market",
             volume=position_size,
-            price=take_profit_price,      # Take-profit limit
-            price2=stop_loss_price,     # Stop-loss trigger
-            validate=False
         )
+        if not buy_ok:
+            print(f"  ❌ Buy failed: {buy_info}")
+            return False
+        exit_orders = place_exit_orders(
+            pair_data['pair'], position_size, current_price, take_profit_pct, stop_loss_pct
+        )
+        oco_result, oco_info = True, buy_info
+        oco_ids = [*buy_info.get('txid', []), exit_orders.get('sl')]
         
         if oco_result:
-            oco_ids = oco_info.get('txid', [])
-            print(f"  ✅ OCO Order Placed: {oco_ids}")
+            print(f"  ✅ Bought + SL placed: {oco_ids}")
             
             # Send notification
             msg = f"🚀 *{base} Bull Trade Executed*\n"
@@ -795,7 +803,15 @@ def detect_short_opportunities(timeframes=None, dry_run=False):
     return short_opportunities
 
 def execute_short_trade(short_data, dry_run=False):
-    """Execute a short trade using inverse ETF."""
+    """
+    Execute a short trade using inverse ETF.
+
+    DISABLED: this path called the removed OCO helper with an argument it did
+    not accept (it always raised), and Kraken spot cannot short. Re-implement
+    before enabling.
+    """
+    print(f"  🚫 Short trades are disabled (see execute_short_trade docstring)")
+    return False
     try:
         symbol = short_data['symbol']
         pair = short_data['pair']
@@ -840,15 +856,7 @@ def execute_short_trade(short_data, dry_run=False):
         
         # Place OCO order for short position
         print(f"  📉 Placing short OCO order...")
-        oco_result, oco_info = place_oco_order(
-            pair=pair,
-            side="buy",  # Buy inverse ETF to short market
-            order_type="oco",
-            volume=position_size,
-            price=take_profit_price,      # Take-profit limit (below)
-            price2=stop_loss_price,     # Stop-loss trigger (above)
-            validate=False
-        )
+        oco_result, oco_info = False, {"error": "short trades disabled"}
         
         if oco_result:
             oco_ids = oco_info.get('txid', [])

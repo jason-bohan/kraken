@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
-add_take_profits.py — One-shot: place TP+SL orders for all unprotected holdings.
+add_take_profits.py — One-shot: protect all unprotected holdings with a stop-loss.
 
-For each asset balance with no open sell orders, places a limit take-profit
-with a stop-loss attached as a conditional close, based on current market price.
+For each asset balance with no open sell orders, places a standalone stop-loss
+based on current market price. The take-profit level is printed but not placed
+on Kraken: bot_monitor_cron.py sells at TP.
+
+(This used to place a limit TP with the SL as a conditional close. On Kraken a
+conditional close only activates after the TP fills, so the SL never protected
+the position.)
 
 Usage:
     python add_take_profits.py --dry     # preview only
@@ -13,6 +18,7 @@ Usage:
 import argparse
 from collections import defaultdict
 from kraken_connection import get_balance, get_ticker, get_open_orders, place_order
+from position_guardian import place_exit_orders
 
 STOP_PCT   = 0.04   # stop-loss % below current price
 PROFIT_PCT = 0.08   # take-profit % above current price
@@ -215,25 +221,14 @@ def run(dry: bool):
         print(f"    Value:          ${usd_value:.2f}")
 
         if dry:
-            print(f"    [DRY] Would place limit sell {volume} @ {fmt(tp_price)} with SL @ {fmt(sl_price)}")
+            print(f"    [DRY] Would place stop-loss sell {volume} @ {fmt(sl_price)} (TP {fmt(tp_price)} watched by cron)")
         else:
-            ok, result = place_order(
-                pair=pair,
-                side="sell",
-                order_type="limit",
-                volume=volume,
-                price=tp_price,
-                userref=USERREF,
-                close_ordertype="stop-loss",
-                close_price=sl_price,
-            )
-            if ok:
-                txid = result.get("txid", [])
-                print(f"    ✅ TP+SL placed: {txid}")
+            exit_orders = place_exit_orders(pair, volume, current_price, PROFIT_PCT, STOP_PCT)
+            if exit_orders.get("sl"):
+                print(f"    ✅ SL placed: {exit_orders['sl']}")
                 placed += 1
             else:
-                err = result.get("error", result)
-                print(f"    ❌ Failed: {err}")
+                print(f"    ❌ Failed to place SL")
                 failed += 1
 
         print()

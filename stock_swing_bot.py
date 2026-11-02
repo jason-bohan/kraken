@@ -16,10 +16,9 @@ import signal
 import sys
 import math
 from datetime import datetime, timedelta
-from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, place_bracket_order, get_open_orders, cancel_order
-from kraken_connection import calculate_order_size
+from kraken_connection import get_ticker, get_ohlc, get_balance, get_orderbook, place_order, get_open_orders, cancel_order
+from kraken_connection import calculate_order_size, get_order_status
 from learning_engine import LearningEngine
-from market_sentiment import should_buy as check_sentiment, format_sentiment
 from market_sentiment import should_buy as check_sentiment, format_sentiment
 
 # ─────────────────────────────────────────────
@@ -546,11 +545,10 @@ def cancel_all_limit_orders():
         if order_id:
             try:
                 print(f"  🗑️ Canceling {order_name.lower()} order: {order_id}")
-                cancel_result, cancel_info = cancel_order(order_id)
-                if cancel_result:
+                if cancel_order(order_id):
                     print(f"  ✅ {order_name} order canceled")
                 else:
-                    print(f"  ❌ Failed to cancel {order_name.lower()}: {cancel_info}")
+                    print(f"  ❌ Failed to cancel {order_name.lower()}")
             except Exception as e:
                 print(f"  ⚠️ Error canceling {order_name.lower()}: {e}")
     
@@ -568,15 +566,21 @@ def check_order_status():
         if not stop_loss_order_id and not trailing_stop_order_id:
             return False
 
-        # get_open_orders() returns {txid: order_data, ...}
-        open_orders = get_open_orders()
-        open_txids = set(open_orders.keys())
+        # Only a "closed" status means the order filled. A failed lookup
+        # (None) or a cancelled order must not be treated as an exit.
+        sl_status = get_order_status(stop_loss_order_id) if stop_loss_order_id else None
+        ts_status = get_order_status(trailing_stop_order_id) if trailing_stop_order_id else None
 
-        sl_open = stop_loss_order_id in open_txids if stop_loss_order_id else False
-        ts_open = trailing_stop_order_id in open_txids if trailing_stop_order_id else False
+        for name, status in (("Stop-loss", sl_status), ("Trailing stop", ts_status)):
+            if status in ("canceled", "expired"):
+                print(f"  ⚠️ {name} order was {status} without filling — position is unprotected")
+        if sl_status in ("canceled", "expired"):
+            stop_loss_order_id = None
+        if ts_status in ("canceled", "expired"):
+            trailing_stop_order_id = None
 
-        sl_fired = (stop_loss_order_id and not sl_open)
-        ts_fired = (trailing_stop_order_id and not ts_open)
+        sl_fired = sl_status == "closed"
+        ts_fired = ts_status == "closed"
 
         if sl_fired or ts_fired:
             ticker = get_ticker(PAIR)
@@ -601,7 +605,7 @@ def check_order_status():
 
 def update_trailing_stop_order(current_price: float):
     """Update trailing stop loss order."""
-    global trailing_stop_order_id
+    global trailing_stop_order_id, trailing_stop
     
     if not in_position or trailing_stop == 0:
         return
@@ -615,8 +619,7 @@ def update_trailing_stop_order(current_price: float):
         
         try:
             # Cancel old trailing stop
-            cancel_result, cancel_info = cancel_order(trailing_stop_order_id)
-            if cancel_result:
+            if cancel_order(trailing_stop_order_id):
                 print(f"  ✅ Old trailing stop canceled")
                 
                 # Place new trailing stop

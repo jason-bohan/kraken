@@ -396,7 +396,12 @@ def main():
 
     # 3. Protection
     print(f"\n  [Protection]")
-    protected_notes = protect_positions()
+    try:
+        protected_notes = protect_positions()
+    except Exception as e:
+        # e.g. open orders could not be fetched — skip rather than act blind
+        print(f"  Protection step skipped: {e}")
+        protected_notes = [f"Protection skipped: {e}"]
     if not protected_notes:
         print(f"  All eligible positions protected")
 
