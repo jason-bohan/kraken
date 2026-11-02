@@ -109,7 +109,10 @@ def run(now: int | None = None) -> dict:
         print(f"  Started paper record at {iso(now)} with ${START_CASH:,.0f}; BTC ${prices[BTC]:,.0f}")
 
     ledger["last_prices"].update({p: px for p, px in prices.items() if px})
-    due = ledger["last_rebalance"] is None or now - ledger["last_rebalance"] >= PARAMS["rebalance_days"] * DAY - 3600
+    # Weekly: rebalance once at least 6 days have passed. The scheduled run is
+    # always 7 days after the previous one, while extra runs in between (or a
+    # first run at a different time of day) only mark to market.
+    due = ledger["last_rebalance"] is None or now - ledger["last_rebalance"] >= (PARAMS["rebalance_days"] - 1) * DAY
 
     decision = None
     if due:

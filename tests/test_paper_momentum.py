@@ -94,6 +94,14 @@ class PaperTests(unittest.TestCase):
         self.assertEqual(len(ledger["marks"]), 1)
         self.assertGreater(pm.summary(ledger)["value"], 1000)  # holdings grew
 
+    def test_first_scheduled_run_rebalances_even_if_started_late_in_the_day(self):
+        """Started Monday 23:23, schedule Mondays 01:17: the next run is only ~6.1 days later."""
+        self.run_at(NOW)
+        ledger = self.run_at(NOW + 6 * DAY + 2 * 3600)
+        self.assertEqual(len(ledger["weeks"]), 2)
+        ledger = self.run_at(NOW + 8 * DAY)  # an extra run two days later does not rebalance
+        self.assertEqual(len(ledger["weeks"]), 2)
+
     def test_btc_below_average_moves_to_cash(self):
         self.run_at(NOW)
         self.fake.rates["XBTUSD"] = -0.02  # BTC now in a steep downtrend over the whole history
