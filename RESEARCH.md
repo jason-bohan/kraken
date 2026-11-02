@@ -29,6 +29,7 @@ Passing means "worth a dry run", not "proven".
 | 5 | 2026-11-02 | **Swing** (`stock_swing_bot`): multi-timeframe RSI/MACD score, 1.5×ATR stop, +10% target | 180 days, 5m, 4 coins | **Fail.** 8.8% win rate, −1.08% per trade over 226 trades; walk-forward −23% per coin; worse than random timing. The ATR stop (~1–2%) is hit by noise long before the +10% target. |
 | 6 | 2026-11-02 | **Cross-coin momentum** (spec below) | 2.7 years, daily, 16 coins | **Fail (near miss).** Default settings: +86.8% vs BTC buy-and-hold +55.0% (Sharpe 0.68 vs 0.58), beats 92% of random picks, +40.5% with costs doubled, 304 trades. But walk-forward −41.9% vs BTC −17.1% on the same unseen periods: the best settings on past data (always top_k 2, weak/no market filter) did badly next. Max drawdown 58.5% vs 53.1% for BTC. |
 | 7 | from 2026-11-02 | **Momentum + BTC filter, forward paper trading** (spec below) | live Kraken prices, weekly, no money | _running_ |
+| 8 | 2026-11-02 | **Regular buying (DCA) with a trend safety switch** (spec below) | up to 10 years, daily, BTC / ETH / 50-50 | _pending_ |
 
 Note: the first trend runs reported "beats 100% of random". That was a bug in
 the random baseline (random entries reused the trend exit and churned to
@@ -141,3 +142,34 @@ quietly edited.
 - **Week 26 (decision):** consider small real money only if it is ahead of
   BTC buy-and-hold **and** above its starting value. Six months is still a
   small sample: a pass means "small, capped real test", not "proven".
+
+
+## #8 Regular buying with a trend safety switch — specification (written before running)
+
+**Goal.** Not to beat the market: to find out whether a simple trend switch
+makes regular buying meaningfully safer without giving up most of the gain.
+This is the plan for real money if nothing else passes.
+
+**Rules.** $25 is added every week (the amount doesn't change percentages).
+Three versions, each compared on the same weeks:
+- **Plain DCA:** buy with every contribution.
+- **Pause:** buy only while the coin's daily close is above its 100-day
+  average; otherwise keep the contribution in cash (never sell).
+- **Switch:** while above the average, invest all cash; when the close falls
+  below it, sell the whole position to cash.
+
+Decisions use completed daily closes and fill at the next day's open, with
+0.40% fee + 0.05% slippage per buy and sell. Coins: BTC, ETH, and a 50/50
+split (each half follows its own coin's average).
+
+**Measures.** Final value, money added, and max drawdown of a "unit price"
+(time-weighted, so new contributions don't hide losses).
+
+**Windows.** Start on 1 January of each year 2017–2023, run to the latest
+data: 7 windows.
+
+**Pass (for the switch, judged on BTC and on 50/50 separately):** in at
+least 5 of 7 windows, the switch cuts max drawdown by at least a third
+versus plain DCA **and** ends with at least 80% of plain DCA's final value.
+The 50- and 200-day averages are reported for information only; the
+decision uses 100.
