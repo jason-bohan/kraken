@@ -29,7 +29,7 @@ Passing means "worth a dry run", not "proven".
 | 5 | 2026-11-02 | **Swing** (`stock_swing_bot`): multi-timeframe RSI/MACD score, 1.5×ATR stop, +10% target | 180 days, 5m, 4 coins | **Fail.** 8.8% win rate, −1.08% per trade over 226 trades; walk-forward −23% per coin; worse than random timing. The ATR stop (~1–2%) is hit by noise long before the +10% target. |
 | 6 | 2026-11-02 | **Cross-coin momentum** (spec below) | 2.7 years, daily, 16 coins | **Fail (near miss).** Default settings: +86.8% vs BTC buy-and-hold +55.0% (Sharpe 0.68 vs 0.58), beats 92% of random picks, +40.5% with costs doubled, 304 trades. But walk-forward −41.9% vs BTC −17.1% on the same unseen periods: the best settings on past data (always top_k 2, weak/no market filter) did badly next. Max drawdown 58.5% vs 53.1% for BTC. |
 | 7 | from 2026-11-02 | **Momentum + BTC filter, forward paper trading** (spec below) | live Kraken prices, weekly, no money | _running_ |
-| 8 | 2026-11-02 | **Regular buying (DCA) with a trend safety switch** (spec below) | up to 10 years, daily, BTC / ETH / 50-50 | _pending_ |
+| 8 | 2026-11-02 | **Regular buying (DCA) with a trend safety switch** (spec below) | 2016-06 → 2026-11, daily, BTC / ETH / 50-50 | **Fail.** Switch passed in 1/7 windows for BTC, 0/7 for 50/50 (and ETH). It cut max drawdown in every window, but usually by 12–37%, not the required third, and its final value swung from 62% to 148% of plain DCA. Plain DCA itself grew a lot in every window but with 53–94% drawdowns. |
 
 Note: the first trend runs reported "beats 100% of random". That was a bug in
 the random baseline (random entries reused the trend exit and churned to
@@ -173,3 +173,26 @@ least 5 of 7 windows, the switch cuts max drawdown by at least a third
 versus plain DCA **and** ends with at least 80% of plain DCA's final value.
 The 50- and 200-day averages are reported for information only; the
 decision uses 100.
+
+
+### #8 result notes (2026-11-02)
+
+- **Plain DCA** ended above the money added in every window except ETH from
+  2023 ($5,000 → $4,820). BTC from 2017: $12,825 added → $105,513; from 2023:
+  $5,000 → $7,416. The cost was deep drops along the way (BTC 53–84%, ETH
+  68–94%, 50/50 59–91% max drawdown).
+- **Pause** (stop buying below the average) made almost no difference to
+  plain DCA.
+- **Switch** always reduced the worst drop, but only by 12–54% (BTC) and
+  19–32% (50/50), and its final value was unpredictable: sometimes far
+  better than plain DCA (2018, 2020), sometimes far worse (2017, 2021–2023).
+  It changes *which* outcome you get more than it reliably protects you.
+- Per the rule: fail. For real money, plain DCA sized so that a 75%+ drop is
+  survivable is the evidence-backed default.
+
+## Where things stand (2026-11-02)
+
+8 ideas tested, 0 passed. Momentum + BTC filter (#7) is the only idea still
+alive, and only in forward paper trading. Testing more ideas on the same
+history raises the chance of a lucky "pass", so new ideas should wait until
+#7 has run for at least 13 weeks.
