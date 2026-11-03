@@ -16,22 +16,22 @@
   "cash": 1000.0,
   "holdings": {},
   "last_prices": {
-    "XBTUSD": 76700.2,
-    "ETHUSD": 2249.2,
-    "SOLUSD": 91.74,
-    "ADAUSD": 0.188503,
-    "XDGUSD": 0.074074,
-    "LINKUSD": 11.11835,
-    "AVAXUSD": 8.39,
-    "XRPUSD": 1.24823,
-    "DOTUSD": 0.937,
-    "LTCUSD": 53.7,
-    "BCHUSD": 276.07,
-    "UNIUSD": 7.1243,
-    "AAVEUSD": 126.75,
-    "XLMUSD": 0.162856,
-    "ATOMUSD": 1.4309,
-    "NEARUSD": 3.8651
+    "XBTUSD": 77317.7,
+    "ETHUSD": 2286.81,
+    "SOLUSD": 93.39,
+    "ADAUSD": 0.190708,
+    "XDGUSD": 0.0750914,
+    "LINKUSD": 11.20088,
+    "AVAXUSD": 8.577,
+    "XRPUSD": 1.27754,
+    "DOTUSD": 0.9389,
+    "LTCUSD": 54.52,
+    "BCHUSD": 277.29,
+    "UNIUSD": 7.3518,
+    "AAVEUSD": 128.61,
+    "XLMUSD": 0.164717,
+    "ATOMUSD": 1.4308,
+    "NEARUSD": 3.872
   },
   "last_rebalance": 1793661812,
   "trades": [],
@@ -75,6 +75,16 @@
           ]
         ]
       }
+    }
+  ],
+  "marks": [
+    {
+      "time": 1793717554,
+      "date": "2026-11-03 14:52 UTC",
+      "value": 1000.0,
+      "btc_buy_hold": 1008.05,
+      "holdings": [],
+      "rebalanced": false
     }
   ]
 }
