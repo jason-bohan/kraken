@@ -938,9 +938,23 @@ def analyze_portfolio(show_chart=False, period_days=None, export_format=None):
     print("📊 Portfolio Analyzer — Kraken")
     print("=" * 60)
 
+    # Without API keys every account request fails, and the report would show
+    # a misleading "$0.00 deposited, $0.00 value, +0.0%". Stop clearly instead.
+    from kraken_connection import _api_credentials
+    try:
+        key, secret = _api_credentials()
+    except RuntimeError as e:
+        raise SystemExit(f"  ❌ {e}")
+    if not key or not secret:
+        raise SystemExit("  ❌ No Kraken API key found. Set KRAKEN_API_KEY and KRAKEN_API_SECRET as "
+                         "Codespaces secrets or in .env (see .env.example), then run this again.")
+
     # ── 1. REAL PORTFOLIO VALUE ──────────────────
     print("  Fetching live balances...")
     cash, total_value, holdings = get_live_portfolio()
+    if not get_balance():
+        raise SystemExit("  ❌ Could not read balances from Kraken (key wrong, missing 'Query Funds' "
+                         "permission, or network). Nothing to report.")
     holdings_value = total_value - cash
 
     print(f"\n  💰 PORTFOLIO VALUE: ${total_value:.2f}")
