@@ -20,6 +20,7 @@ from kraken_connection import (
     get_order_status, get_fill, get_pair_base_balance, below_minimum,
 )
 import strategies
+from notify import notify
 from learning_engine import LearningEngine
 from position_store import PositionStore
 from market_sentiment import should_buy as check_sentiment, format_sentiment
@@ -127,10 +128,6 @@ RISK_PER_TRADE = 0.02    # 2% max risk
 MIN_RISK_REWARD = 2.0     # 1:2 minimum risk/reward
 
 
-# 📱 Telegram settings
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
-
 # 📈 Trading state (set in run())
 position = None          # open position dict, or None when flat (see POSITION MANAGEMENT)
 trade_history = []
@@ -145,22 +142,12 @@ SL_RETRY_SECS = 300      # retry a missing stop-loss at most this often
 active_trade_id = None
 
 # ─────────────────────────────────────────────
-# TELEGRAM NOTIFICATIONS
+# NOTIFICATIONS (Discord / Telegram — see notify.py)
 # ─────────────────────────────────────────────
 
 def tg(msg: str):
-    """Send Telegram notification if configured."""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
-        return
-    try:
-        import requests as req
-        req.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT, "text": msg, "parse_mode": "Markdown"},
-            timeout=8
-        )
-    except:
-        pass
+    """Send a notification to every configured channel."""
+    notify(msg)
 
 
 def extract_learning_features(signal_info: dict, current_price: float) -> dict:

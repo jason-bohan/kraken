@@ -35,6 +35,7 @@ from kraken_connection import (
 )
 from position_store import all_bot_positions
 from bot_registry import BOTS
+from notify import notify
 from position_guardian import _fmt_price
 from learning_engine import LearningEngine
 from market_sentiment import get_market_sentiment, format_sentiment, should_buy as check_sentiment
@@ -97,26 +98,13 @@ PROFIT_PCT = 0.10            # 10% profit target — backtested optimal
 STOP_PCT = 0.08              # 8% stop loss — wider avoids noise stopouts
 MIN_USD_VALUE = 0.50
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
-
 
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
 
 def tg(msg: str):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
-        return
-    try:
-        import requests
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT, "text": msg, "parse_mode": "Markdown"},
-            timeout=8,
-        )
-    except Exception:
-        pass
+    notify(msg)
 
 
 def get_running_screens() -> set[str]:

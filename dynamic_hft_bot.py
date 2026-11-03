@@ -41,6 +41,7 @@ import strategies
 from learning_engine import LearningEngine
 from market_sentiment import should_buy as check_sentiment
 import requests as req
+from notify import notify
 
 BOT_NAME = "dynamic_hft_bot"
 LEARNER  = LearningEngine()
@@ -84,8 +85,6 @@ STRATEGY_PARAMS = {
     "profit_pct": PROFIT_PCT, "stop_pct": STOP_PCT,
     "trend_period": TREND_PERIOD, "max_hold_minutes": MAX_HOLD_MINUTES,
 }
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT    = os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 # ─────────────────────────────────────────────
@@ -110,19 +109,10 @@ market_regime_lock = threading.Lock()
 
 
 # ─────────────────────────────────────────────
-# TELEGRAM
+# NOTIFICATIONS (Discord / Telegram — see notify.py)
 # ─────────────────────────────────────────────
 def tg(msg: str):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
-        return
-    try:
-        req.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT, "text": msg, "parse_mode": "Markdown"},
-            timeout=8
-        )
-    except:
-        pass
+    notify(msg)
 
 
 # ─────────────────────────────────────────────

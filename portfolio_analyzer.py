@@ -27,9 +27,7 @@ from collections import defaultdict, Counter
 from kraken_connection import get_balance, get_ticker, get_trade_history, get_closed_orders, query_orders
 from market_sentiment import get_market_sentiment, should_buy as check_sentiment, classify_sentiment
 
-# 📱 Telegram settings
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
+from notify import notify
 
 # 📊 Chart settings
 CHART_WIDTH = 60
@@ -781,17 +779,12 @@ def display_period_breakdown(period_stats, period_type='monthly'):
         print(f"  {emoji} {period} | ${pnl:+8.2f} | {trades:3} trades")
 
 # ─────────────────────────────────────────────
-# 📱 TELEGRAM NOTIFICATIONS
+# 📱 NOTIFICATIONS (Discord / Telegram — see notify.py)
 # ─────────────────────────────────────────────
 
 def send_telegram_summary(performance, symbol_stats, period_stats):
-    """Send summary to Telegram."""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
-        return
-    
+    """Send summary to every configured notification channel."""
     try:
-        import requests
-        
         msg = f"📊 *Portfolio Analysis Summary*\n\n"
         msg += f"📈 Total Trades: {performance['total_trades']}\n"
         msg += f"🎯 Win Rate: {performance['win_rate']:.1f}%\n"
@@ -804,14 +797,10 @@ def send_telegram_summary(performance, symbol_stats, period_stats):
             best_symbol = max(symbol_stats.items(), key=lambda x: x[1]['total_pnl'])
             msg += f"🏆 Best: {best_symbol[0]} (${best_symbol[1]['total_pnl']:+.2f})\n"
         
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT, "text": msg, "parse_mode": "Markdown"},
-            timeout=8
-        )
-        
+        notify(msg)
+
     except Exception as e:
-        print(f"  ⚠️ Telegram error: {e}")
+        print(f"  ⚠️ Notification error: {e}")
 
 # ─────────────────────────────────────────────
 # 📊 EXPORT FUNCTIONS
